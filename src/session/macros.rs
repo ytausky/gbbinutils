@@ -6,12 +6,10 @@ use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
 use crate::session::diagnostics::EmitDiag;
 use crate::session::lex::LexItem;
-use crate::session::resolve::Ident;
 use crate::session::resolve::{NameTable, StartScope};
 use crate::session::{Interner, TokenStream};
 use crate::span::*;
 use crate::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
-use crate::syntax::IdentSource;
 use crate::syntax::LexError;
 use crate::syntax::Token;
 use crate::CompositeSession;
@@ -34,47 +32,33 @@ pub(crate) trait MacroTable<I, L, S: Clone>: MacroSource {
     fn expand_macro(&mut self, name: (Self::MacroId, S), args: MacroArgs<Token<I, L>, S>);
 }
 
-pub(crate) type VecMacroTable<I, R, S> = Vec<Rc<MacroDef<I, R, S>>>;
+pub(crate) type VecMacroTable<R, S> = Vec<Rc<MacroDef<R, S>>>;
 
 pub type MacroArgs<T, S> = Box<[Box<[(T, S)]>]>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
 
-impl<'a, C, R: SpanSource, II: StringSource, N, B, D, I, L, H> MacroSource
-    for CompositeSession<C, R, II, VecMacroTable<I, L, H>, N, B, D>
+impl<'a, C, R: SpanSource, II: StringSource, N, B, D, RR, S> MacroSource
+    for CompositeSession<C, R, II, VecMacroTable<RR, S>, N, B, D>
 {
     type MacroId = MacroId;
 }
 
-impl<'a, C, RR, II, N, B, D, I>
-    MacroTable<
-        <Self as IdentSource>::Ident,
-        Literal<<Self as StringSource>::StringRef>,
-        <Self as SpanSource>::Span,
-    >
-    for CompositeSession<
-        C,
-        RR,
-        II,
-        VecMacroTable<I, II::StringRef, <RR as SpanSource>::Span>,
-        N,
-        B,
-        D,
-    >
+impl<'a, C, RR, II, N, B, D>
+    MacroTable<II::StringRef, Literal<II::StringRef>, <Self as SpanSource>::Span>
+    for CompositeSession<C, RR, II, VecMacroTable<II::StringRef, <RR as SpanSource>::Span>, N, B, D>
 where
-    I: AsRef<str> + Debug + Clone + Eq,
-    Self: Lex<RR, II, Span = RR::Span, Ident = I, StringRef = II::StringRef>,
+    Self: Lex<RR, II, Span = RR::Span, StringRef = II::StringRef>,
     C: Codebase,
-    RR: SpanSystem<<Self as IdentSource>::Ident, II::StringRef>,
+    RR: SpanSystem<II::StringRef>,
     II: Interner,
     Self: NextToken,
     Self: Interner,
     Self: EmitDiag<RR::Span, RR::Stripped>,
-    Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
+    Self: StartScope<II::StringRef> + NameTable<II::StringRef>,
     Self: Backend<RR::Span>,
     Self: MacroSource<MacroId = MacroId>,
-    <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<RR, II>>::TokenIter: 'static,
@@ -82,13 +66,8 @@ where
     fn define_macro(
         &mut self,
         name_span: RR::Span,
-        params: Box<[(<Self as IdentSource>::Ident, RR::Span)]>,
-        body: Box<
-            [(
-                Token<<Self as IdentSource>::Ident, Literal<<Self as StringSource>::StringRef>>,
-                RR::Span,
-            )],
-        >,
+        params: Box<[(II::StringRef, RR::Span)]>,
+        body: Box<[(Token<II::StringRef, Literal<II::StringRef>>, RR::Span)]>,
     ) -> Self::MacroId {
         let id = MacroId(self.macros.len());
         self.macros.push(Rc::new(MacroDef {
@@ -102,17 +81,14 @@ where
     fn expand_macro(
         &mut self,
         (MacroId(id), name_span): (Self::MacroId, RR::Span),
-        args: MacroArgs<
-            Token<<Self as IdentSource>::Ident, Literal<<Self as StringSource>::StringRef>>,
-            RR::Span,
-        >,
+        args: MacroArgs<Token<II::StringRef, Literal<II::StringRef>>, RR::Span>,
     ) {
         let def = &self.macros[id];
         let expansion = MacroExpansionIter::new(name_span, Rc::clone(def), args);
         self.tokens.push(Box::new(expansion));
         let mut parser = <DefaultParserFactory as ParserFactory<
-            Ident<String>,
-            Literal<String>,
+            II::StringRef,
+            Literal<II::StringRef>,
             LexError,
             RR::Span,
         >>::mk_parser(&mut DefaultParserFactory);
@@ -124,16 +100,12 @@ where
     }
 }
 
-pub struct MacroExpansionIter<I, R, S> {
-    expansion: Rc<MacroExpansion<I, R, S>>,
+pub struct MacroExpansionIter<R, S> {
+    expansion: Rc<MacroExpansion<R, S>>,
     pos: Option<MacroExpansionPos>,
 }
 
-impl<I: PartialEq, R, S> MacroExpansion<I, R, S>
-where
-    I: Clone,
-    R: Clone,
-{
+impl<R: Clone + PartialEq, S> MacroExpansion<R, S> {
     fn mk_macro_expansion_pos(&self, token: usize) -> Option<MacroExpansionPos> {
         if token >= self.def.body.len() {
             return None;
@@ -151,7 +123,7 @@ where
         })
     }
 
-    fn param_position(&self, name: &I) -> Option<usize> {
+    fn param_position(&self, name: &R) -> Option<usize> {
         self.def
             .params
             .iter()
@@ -185,9 +157,8 @@ where
     }
 }
 
-impl<I: PartialEq, R, S> MacroExpansionIter<I, R, S>
+impl<R, S> MacroExpansionIter<R, S>
 where
-    I: Clone,
     R: Clone,
     S: Clone,
 {
@@ -195,10 +166,9 @@ where
         &self,
         pos: MacroExpansionPos,
         registry: &mut RR,
-    ) -> (Token<I, Literal<R>>, RR::Span)
+    ) -> (Token<R, Literal<R>>, RR::Span)
     where
-        I: Clone,
-        RR: SpanSystem<I, R, Span = S>,
+        RR: SpanSystem<R, Span = S>,
     {
         (
             self.token(&pos),
@@ -209,10 +179,7 @@ where
         )
     }
 
-    fn token(&self, pos: &MacroExpansionPos) -> Token<I, Literal<R>>
-    where
-        I: Clone,
-    {
+    fn token(&self, pos: &MacroExpansionPos) -> Token<R, Literal<R>> {
         let body_token = &self.expansion.def.body[pos.token].0;
         pos.param_expansion.as_ref().map_or_else(
             || body_token.clone(),
@@ -238,15 +205,11 @@ impl<I, L> Token<I, L> {
     }
 }
 
-impl<I, R, S> MacroExpansionIter<I, R, S>
-where
-    I: Clone + PartialEq,
-    R: Clone,
-{
+impl<R: Clone + PartialEq, S> MacroExpansionIter<R, S> {
     fn new(
         name_span: S,
-        def: Rc<MacroDef<I, R, S>>,
-        args: Box<[Box<[(Token<I, Literal<R>>, S)]>]>,
+        def: Rc<MacroDef<R, S>>,
+        args: Box<[Box<[(Token<R, Literal<R>>, S)]>]>,
     ) -> Self {
         let expansion = Rc::new(MacroExpansion {
             name_span,
@@ -260,26 +223,17 @@ where
     }
 }
 
-impl<I, R, S> IdentSource for MacroExpansionIter<I, R, S>
+impl<RR, II, S> TokenStream<RR, II> for MacroExpansionIter<II::StringRef, S>
 where
-    I: AsRef<str> + Clone + Debug + Eq,
-{
-    type Ident = I;
-}
-
-impl<RR, II, I, R, S> TokenStream<RR, II> for MacroExpansionIter<I, R, S>
-where
-    RR: SpanSystem<I, R, Span = S>,
-    II: StringSource<StringRef = R>,
-    I: AsRef<str> + Clone + Debug + Eq,
-    R: Clone + Debug + Eq,
+    RR: SpanSystem<II::StringRef, Span = S>,
+    II: StringSource,
     S: Clone,
 {
     fn next_token(
         &mut self,
         registry: &mut RR,
         _interner: &mut II,
-    ) -> Option<LexItem<Self::Ident, II::StringRef, RR::Span>> {
+    ) -> Option<LexItem<II::StringRef, RR::Span>> {
         self.pos.take().map(|pos| {
             self.pos = self.expansion.next_pos(&pos);
             let (token, span) = self.token_and_span(pos, registry);
@@ -298,14 +252,8 @@ pub mod mock {
 
     #[derive(Debug, PartialEq)]
     pub enum MacroTableEvent {
-        DefineMacro(
-            Box<[Ident<String>]>,
-            Box<[Token<Ident<String>, Literal<String>>]>,
-        ),
-        ExpandMacro(
-            MockMacroId,
-            Box<[Box<[Token<Ident<String>, Literal<String>>]>]>,
-        ),
+        DefineMacro(Box<[String]>, Box<[Token<String, Literal<String>>]>),
+        ExpandMacro(MockMacroId, Box<[Box<[Token<String, Literal<String>>]>]>),
     }
 
     pub struct MockMacroTable<T> {
@@ -331,7 +279,7 @@ pub mod mock {
         type MacroId = MockMacroId;
     }
 
-    impl<C, R, I: StringSource, N, B, D, T> MacroTable<Ident<String>, Literal<String>, D::Span>
+    impl<C, R, I: StringSource, N, B, D, T> MacroTable<String, Literal<String>, D::Span>
         for CompositeSession<C, R, I, MockMacroTable<T>, N, B, D>
     where
         R: SpanSource,
@@ -341,8 +289,8 @@ pub mod mock {
         fn define_macro(
             &mut self,
             _name_span: D::Span,
-            params: Box<[(Ident<String>, D::Span)]>,
-            body: Box<[(Token<Ident<String>, Literal<String>>, D::Span)]>,
+            params: Box<[(String, D::Span)]>,
+            body: Box<[(Token<String, Literal<String>>, D::Span)]>,
         ) -> Self::MacroId {
             self.macros.log.push(MacroTableEvent::DefineMacro(
                 Vec::from(params)
@@ -362,7 +310,7 @@ pub mod mock {
         fn expand_macro(
             &mut self,
             name: (Self::MacroId, D::Span),
-            args: MacroArgs<Token<Ident<String>, Literal<String>>, D::Span>,
+            args: MacroArgs<Token<String, Literal<String>>, D::Span>,
         ) {
             let args = Vec::from(args)
                 .into_iter()

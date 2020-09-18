@@ -11,7 +11,6 @@ use super::CompositeSession;
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
 use crate::session::lex::StringSource;
-use crate::session::resolve::Ident;
 use crate::span::*;
 
 #[cfg(test)]
@@ -54,23 +53,17 @@ pub(crate) struct OutputForwarder<'a> {
     pub output: &'a mut dyn FnMut(Diagnostic),
 }
 
-impl<'a, F, R, I, M, N, B>
-    EmitDiag<Span<BufId, Ident<String>, I::StringRef>, StrippedBufSpan<BufId, BufRange>>
+impl<'a, F, R, I, M, N, B> EmitDiag<Span<BufId, I::StringRef>, StrippedBufSpan<BufId, BufRange>>
     for CompositeSession<FileCodebase<'a, F>, R, I, M, N, B, OutputForwarder<'a>>
 where
     F: FileSystem + ?Sized,
     R: SpanSource
-        + StripSpan<
-            Span<BufId, Ident<String>, I::StringRef>,
-            Stripped = StrippedBufSpan<BufId, BufRange>,
-        >,
+        + StripSpan<Span<BufId, I::StringRef>, Stripped = StrippedBufSpan<BufId, BufRange>>,
     I: StringSource,
 {
     fn emit_diag(
         &mut self,
-        diag: impl Into<
-            CompactDiag<Span<BufId, Ident<String>, I::StringRef>, StrippedBufSpan<BufId, BufRange>>,
-        >,
+        diag: impl Into<CompactDiag<Span<BufId, I::StringRef>, StrippedBufSpan<BufId, BufRange>>>,
     ) {
         (self.diagnostics.output)(
             diag.into()
@@ -107,14 +100,14 @@ where
 }
 
 impl<'a, 'b, F: FileSystem + ?Sized, R, RR>
-    EmitDiag<Span<BufId, Ident<String>, RR>, StrippedBufSpan<BufId, BufRange>>
+    EmitDiag<Span<BufId, RR>, StrippedBufSpan<BufId, BufRange>>
     for DiagnosticsView<'b, FileCodebase<'a, F>, R, OutputForwarder<'a>>
 where
-    R: StripSpan<Span<BufId, Ident<String>, RR>, Stripped = StrippedBufSpan<BufId, BufRange>>,
+    R: StripSpan<Span<BufId, RR>, Stripped = StrippedBufSpan<BufId, BufRange>>,
 {
     fn emit_diag(
         &mut self,
-        diag: impl Into<CompactDiag<Span<BufId, Ident<String>, RR>, StrippedBufSpan<BufId, BufRange>>>,
+        diag: impl Into<CompactDiag<Span<BufId, RR>, StrippedBufSpan<BufId, BufRange>>>,
     ) {
         (self.diagnostics.output)(
             diag.into()
@@ -228,13 +221,13 @@ struct ExpandedDiagnosticClause<S, B, R> {
     location: Option<R>,
 }
 
-impl<F: Clone, I, R, T: Clone> CompactDiag<Span<F, I, R>, StrippedBufSpan<F, Range<T>>> {
+impl<F: Clone, R, T: Clone> CompactDiag<Span<F, R>, StrippedBufSpan<F, Range<T>>> {
     fn expand<RR>(
         self,
         registry: &mut RR,
     ) -> ExpandedDiagnostic<StrippedBufSpan<F, Range<T>>, F, Range<T>>
     where
-        RR: StripSpan<Span<F, I, R>, Stripped = StrippedBufSpan<F, Range<T>>>,
+        RR: StripSpan<Span<F, R>, Stripped = StrippedBufSpan<F, Range<T>>>,
     {
         let StrippedBufSpan { buf_id, range } = registry.strip_span(&self.main.highlight);
         let main_clause = ExpandedDiagnosticClause {
@@ -253,12 +246,12 @@ impl<F: Clone, I, R, T: Clone> CompactDiag<Span<F, I, R>, StrippedBufSpan<F, Ran
 
 type BufSnippetClause<B, T> = ExpandedDiagnosticClause<StrippedBufSpan<B, Range<T>>, B, Range<T>>;
 
-fn mk_called_here_clause<F: Clone, I, R, RR, T: Clone>(
-    span: &Span<F, I, R>,
+fn mk_called_here_clause<F: Clone, R, RR, T: Clone>(
+    span: &Span<F, R>,
     registry: &mut RR,
 ) -> Option<BufSnippetClause<F, T>>
 where
-    RR: StripSpan<Span<F, I, R>, Stripped = StrippedBufSpan<F, Range<T>>>,
+    RR: StripSpan<Span<F, R>, Stripped = StrippedBufSpan<F, Range<T>>>,
 {
     let call = if let Span::MacroExpansion(expansion, _) = span {
         expansion.name_span.clone()
@@ -495,7 +488,7 @@ mod tests {
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
         let range = 12..20;
-        let token_ref = Span::<_, (), ()>::File(
+        let token_ref = Span::<_, ()>::File(
             Rc::new(FileInclusion {
                 file: buf_id,
                 from: None,
@@ -545,7 +538,7 @@ mod tests {
             file: (),
             from: None,
         });
-        let macro_def = Rc::new(MacroDef::<_, (), _> {
+        let macro_def = Rc::new(MacroDef::<_, _> {
             name_span: Span::File(Rc::clone(buf_context), 0..1),
             params: Box::new([]),
             body: Box::new([(Token::Ident(()), Span::File(Rc::clone(buf_context), 2..3))]),

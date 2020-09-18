@@ -16,14 +16,13 @@ mod macro_instr;
 
 impl<'a, S: Analysis> InstrLineContext for InstrLineSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
     type LabelContext = LabelSemantics<'a, S>;
     type InstrContext = Self;
 
-    fn will_parse_label(mut self, label: (S::Ident, S::Span)) -> Self::LabelContext {
+    fn will_parse_label(mut self, label: (S::StringRef, S::Span)) -> Self::LabelContext {
         self = self.flush_label();
         self.map_state(|line| LabelState::new(line, label))
     }
@@ -31,7 +30,6 @@ where
 
 impl<'a, S: Analysis> InstrContext for InstrLineSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -42,7 +40,7 @@ where
 
     fn will_parse_instr(
         mut self,
-        ident: S::Ident,
+        ident: S::StringRef,
         span: S::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
         match self.session.resolve_name(&ident) {
@@ -97,7 +95,7 @@ impl<'a, S, T> Semantics<'a, S, T>
 where
     S: Analysis,
 {
-    fn reloc_lookup(&mut self, name: S::Ident, span: S::Span) -> S::SymbolId {
+    fn reloc_lookup(&mut self, name: S::StringRef, span: S::Span) -> S::SymbolId {
         match self.session.resolve_name(&name) {
             Some(ResolvedName::Keyword(_)) => unimplemented!(),
             Some(ResolvedName::Symbol(id)) => id,

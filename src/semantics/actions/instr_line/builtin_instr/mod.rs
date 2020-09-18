@@ -12,11 +12,7 @@ mod cpu_instr;
 mod directive;
 
 impl<S: Analysis> From<BuiltinInstrState<S>>
-    for TokenStreamState<
-        <S as IdentSource>::Ident,
-        <S as StringSource>::StringRef,
-        <S as SpanSource>::Span,
-    >
+    for TokenStreamState<<S as StringSource>::StringRef, <S as SpanSource>::Span>
 {
     fn from(_: BuiltinInstrState<S>) -> Self {
         InstrLineState::new().into()
@@ -25,7 +21,6 @@ impl<S: Analysis> From<BuiltinInstrState<S>>
 
 impl<'a, S: Analysis> BuiltinInstrContext for BuiltinInstrSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -41,7 +36,6 @@ where
 
 impl<'a, S: Analysis> InstrFinalizer for BuiltinInstrSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -72,7 +66,7 @@ where
 impl<'a, S: Analysis, T> Semantics<'a, S, T> {
     fn expect_const(
         &mut self,
-        arg: ParsedArg<S::Ident, S::StringRef, S::Span>,
+        arg: ParsedArg<S::StringRef, S::Span>,
     ) -> Result<Expr<S::SymbolId, S::Span>, ()> {
         match self.session.resolve_names(arg)? {
             Arg::Bare(BareArg::Const(value)) => Ok(value),
@@ -89,8 +83,8 @@ impl<'a, S: Analysis, T> Semantics<'a, S, T> {
 
     fn define_symbol_with_params(
         &mut self,
-        (name, span): (S::Ident, S::Span),
-        expr: ParsedArg<S::Ident, S::StringRef, S::Span>,
+        (name, span): (S::StringRef, S::Span),
+        expr: ParsedArg<S::StringRef, S::Span>,
     ) {
         if let Ok(expr) = self.expect_const(expr) {
             let id = self.reloc_lookup(name, span.clone());
@@ -113,7 +107,7 @@ impl From<Mnemonic> for BuiltinMnemonic {
 
 fn analyze_mnemonic<S: Analysis>(
     name: (&Mnemonic, S::Span),
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::StringRef, S::Span>,
     session: &mut S,
 ) {
     let mut operands = Vec::new();
@@ -131,20 +125,20 @@ fn analyze_mnemonic<S: Analysis>(
     }
 }
 
-trait Resolve<I, R, S>: SymbolSource {
-    fn resolve_names(&mut self, arg: ParsedArg<I, R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()>;
+trait Resolve<R, S>: SymbolSource {
+    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()>;
 }
 
 trait ClassifyExpr<I, S>: SymbolSource {
     fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()>;
 }
 
-impl<T, I, R, S> Resolve<I, R, S> for T
+impl<T, R, S> Resolve<R, S> for T
 where
-    T: NameTable<I> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<R> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn resolve_names(&mut self, arg: ParsedArg<I, R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()> {
+    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
                 BareArg::Symbol(symbol, span) => Ok(Arg::Bare(BareArg::Symbol(symbol, span))),
@@ -162,12 +156,12 @@ where
     }
 }
 
-impl<T, I, S> ClassifyExpr<I, S> for T
+impl<T, R, S> ClassifyExpr<R, S> for T
 where
-    T: NameTable<I> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<R> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn classify_expr(&mut self, mut expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()> {
+    fn classify_expr(&mut self, mut expr: Expr<R, S>) -> Result<BareArg<Self::SymbolId, S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {

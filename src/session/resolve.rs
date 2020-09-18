@@ -1,11 +1,9 @@
 use super::macros::MacroSource;
-use super::CompositeSession;
+use super::{CompositeSession, Interner};
 
 use crate::semantics::Keyword;
 use crate::session::builder::SymbolSource;
-use crate::session::lex::StringSource;
 use crate::span::SpanSource;
-use crate::syntax::{IdentFactory, IdentSource};
 
 use std::collections::HashMap;
 
@@ -65,13 +63,9 @@ enum Visibility {
 
 pub struct DefaultIdentFactory;
 
-impl IdentSource for DefaultIdentFactory {
-    type Ident = Ident<String>;
-}
-
-impl IdentFactory for DefaultIdentFactory {
-    fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
-        Self::Ident {
+impl DefaultIdentFactory {
+    pub fn mk_ident(&mut self, spelling: &str) -> Ident<String> {
+        Ident {
             name: spelling.to_string(),
             visibility: if spelling.starts_with('_') {
                 Visibility::Local
@@ -198,28 +192,42 @@ impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
     }
 }
 
-impl<C, R: SpanSource, II, M, N, B, D, I> NameTable<I> for CompositeSession<C, R, II, M, N, B, D>
+impl<C, R: SpanSource, II, M, N, B, D> NameTable<II::StringRef>
+    for CompositeSession<C, R, II, M, N, B, D>
 where
-    II: StringSource,
-    N: NameTable<I, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
+    II: Interner,
+    N: NameTable<Ident<String>, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
     Self: MacroSource + SymbolSource,
 {
-    fn resolve_name(&mut self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-        self.names.resolve_name(ident)
+    fn resolve_name(
+        &mut self,
+        ident: &II::StringRef,
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+        self.names
+            .resolve_name(&DefaultIdentFactory.mk_ident(self.interner.get_string(ident)))
     }
 
-    fn define_name(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
-        self.names.define_name(ident, entry)
+    fn define_name(
+        &mut self,
+        ident: II::StringRef,
+        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+    ) {
+        self.names.define_name(
+            DefaultIdentFactory.mk_ident(self.interner.get_string(&ident)),
+            entry,
+        )
     }
 }
 
-impl<C, R: SpanSource, II, M, N, B, D, I> StartScope<I> for CompositeSession<C, R, II, M, N, B, D>
+impl<C, R: SpanSource, II, M, N, B, D> StartScope<II::StringRef>
+    for CompositeSession<C, R, II, M, N, B, D>
 where
-    II: StringSource,
-    N: StartScope<I>,
+    II: Interner,
+    N: StartScope<Ident<String>>,
 {
-    fn start_scope(&mut self, ident: &I) {
-        self.names.start_scope(ident)
+    fn start_scope(&mut self, ident: &II::StringRef) {
+        self.names
+            .start_scope(&DefaultIdentFactory.mk_ident(self.interner.get_string(ident)))
     }
 }
 

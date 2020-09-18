@@ -13,16 +13,16 @@ use crate::syntax::LexError;
 mod instr_line;
 mod token_line;
 
-impl<I, R, S> From<InstrLineState<I, S>> for TokenStreamState<I, R, S> {
-    fn from(actions: InstrLineState<I, S>) -> Self {
+impl<R, S> From<InstrLineState<R, S>> for TokenStreamState<R, S> {
+    fn from(actions: InstrLineState<R, S>) -> Self {
         Self {
             mode: LineRule::InstrLine(actions),
         }
     }
 }
 
-impl<I, R, S> From<TokenLineState<I, R, S>> for TokenStreamState<I, R, S> {
-    fn from(actions: TokenLineState<I, R, S>) -> Self {
+impl<R, S> From<TokenLineState<R, S>> for TokenStreamState<R, S> {
+    fn from(actions: TokenLineState<R, S>) -> Self {
         Self {
             mode: LineRule::TokenLine(actions),
         }
@@ -33,7 +33,7 @@ impl<'a, S, T> ParsingContext for Semantics<'a, S, T>
 where
     S: NextToken + Diagnostics<<S as SpanSource>::Span>,
 {
-    type Ident = S::Ident;
+    type Ident = S::StringRef;
     type Literal = Literal<S::StringRef>;
     type Error = LexError;
     type Span = S::Span;
@@ -60,7 +60,6 @@ where
 
 impl<'a, S: Analysis> TokenStreamContext for TokenStreamSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -246,7 +245,7 @@ pub mod tests {
 
     #[test]
     fn emit_rst_f_of_1() {
-        let ident = Ident::from("f");
+        let name = "f";
         let actions = collect_semantic_actions(|actions| {
             let command = actions
                 .will_parse_line()
@@ -254,7 +253,7 @@ pub mod tests {
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
             let mut expr = command.will_parse_arg();
-            expr.act_on_atom(ExprAtom::Ident(ident.clone()), ());
+            expr.act_on_atom(ExprAtom::Ident(name.to_owned()), ());
             expr.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
             expr.act_on_operator(Operator::FnCall(1), ());
             expr.did_parse_arg()
@@ -265,7 +264,8 @@ pub mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(ident, ResolvedName::Symbol(MockSymbolId(0))).into(),
+                NameTableEvent::Insert(Ident::from(name), ResolvedName::Symbol(MockSymbolId(0)))
+                    .into(),
                 BackendEvent::EmitFragment(Fragment::Embedded(
                     0b11_000_111,
                     Expr::from_items(&[
@@ -397,7 +397,7 @@ pub mod tests {
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
-        body: impl Borrow<[SemanticToken<Ident<String>, String>]>,
+        body: impl Borrow<[SemanticToken<String>]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions

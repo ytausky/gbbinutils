@@ -22,7 +22,7 @@ impl<'a, S: Analysis> ArgFinalizer for ArgSemantics<'a, S> {
 }
 
 impl<'a, S: Analysis> ArgContext for ArgSemantics<'a, S> {
-    fn act_on_atom(&mut self, atom: ExprAtom<S::Ident, Literal<S::StringRef>>, span: S::Span) {
+    fn act_on_atom(&mut self, atom: ExprAtom<S::StringRef, Literal<S::StringRef>>, span: S::Span) {
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
@@ -51,7 +51,7 @@ impl<'a, S: Analysis> ArgContext for ArgSemantics<'a, S> {
 }
 
 impl<'a, S: Analysis> ArgSemantics<'a, S> {
-    fn act_on_expr_node(&mut self, node: ExprOp<S::Ident>, span: S::Span) {
+    fn act_on_expr_node(&mut self, node: ExprOp<S::StringRef>, span: S::Span) {
         self.state.arg = match self.state.arg.take() {
             None => Some(ParsedArg::Bare(Expr(vec![node.with_span(span)]))),
             Some(ParsedArg::Bare(mut expr)) | Some(ParsedArg::Parenthesized(mut expr, _)) => {
@@ -63,7 +63,7 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
         }
     }
 
-    fn act_on_ident(&mut self, ident: S::Ident, span: S::Span) {
+    fn act_on_ident(&mut self, ident: S::StringRef, span: S::Span) {
         let no_params = vec![];
         let params = match &self.state.parent.label {
             Some((_, params)) => &params,

@@ -43,11 +43,11 @@ pub enum Context {
     Other,
 }
 
-pub(in super::super) fn analyze_operand<D, V, R, S>(
-    expr: Arg<V, R, S>,
+pub(in super::super) fn analyze_operand<D, N, R, S>(
+    expr: Arg<N, R, S>,
     context: Context,
     diagnostics: &mut D,
-) -> Result<Operand<V, S>, ()>
+) -> Result<Operand<N, S>, ()>
 where
     D: Diagnostics<S>,
     R: Eq,

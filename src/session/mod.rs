@@ -9,7 +9,7 @@ use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::session::diagnostics::{Diagnostics, OutputForwarder};
 use crate::span::{MergeSpans, RcContextFactory, Span, SpanSource, StripSpan};
-use crate::syntax::{IdentFactory, IdentSource, Sigil, Token};
+use crate::syntax::{Sigil, Token};
 use crate::BuiltinSymbols;
 
 use std::collections::HashMap;
@@ -24,7 +24,6 @@ pub mod resolve;
 
 pub(crate) trait Analysis:
     SpanSource
-    + IdentSource
     + StringSource
     + MacroSource
     + NextToken
@@ -32,10 +31,10 @@ pub(crate) trait Analysis:
     + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
-    + StartScope<<Self as IdentSource>::Ident>
-    + NameTable<<Self as IdentSource>::Ident>
+    + StartScope<<Self as StringSource>::StringRef>
+    + NameTable<<Self as StringSource>::StringRef>
     + MacroTable<
-        <Self as IdentSource>::Ident,
+        <Self as StringSource>::StringRef,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >
@@ -44,7 +43,6 @@ pub(crate) trait Analysis:
 
 impl<T> Analysis for T where
     Self: SpanSource
-        + IdentSource
         + StringSource
         + MacroSource
         + NextToken
@@ -52,27 +50,27 @@ impl<T> Analysis for T where
         + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
-        + StartScope<<Self as IdentSource>::Ident>
-        + NameTable<<Self as IdentSource>::Ident>
+        + StartScope<<Self as StringSource>::StringRef>
+        + NameTable<<Self as StringSource>::StringRef>
         + MacroTable<
-            <Self as IdentSource>::Ident,
+            <Self as StringSource>::StringRef,
             Literal<<Self as StringSource>::StringRef>,
             <Self as SpanSource>::Span,
         >
 {
 }
 
-pub(crate) trait NextToken: IdentSource + StringSource + SpanSource {
-    fn next_token(&mut self) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>>;
+pub(crate) trait NextToken: StringSource + SpanSource {
+    fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>>;
 }
 
 pub(crate) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
-    RcContextFactory<BufId, Ident<String>, StringId>,
+    RcContextFactory<BufId, StringId>,
     HashInterner,
-    VecMacroTable<Ident<String>, StringId, Span<BufId, Ident<String>, StringId>>,
+    VecMacroTable<StringId, Span<BufId, StringId>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
-    ObjectBuilder<Span<BufId, Ident<String>, StringId>>,
+    ObjectBuilder<Span<BufId, StringId>>,
     OutputForwarder<'a>,
 >;
 
@@ -98,25 +96,26 @@ impl<'a> Session<'a> {
             )
         }
         for (ident, keyword) in KEYWORDS {
-            session.define_name((*ident).into(), ResolvedName::Keyword(keyword))
+            let string = session.interner.intern(ident);
+            session.define_name(string, ResolvedName::Keyword(keyword))
         }
         session
     }
 }
 
-pub(crate) trait TokenStream<R: SpanSource, I: StringSource>: IdentSource {
+pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
     fn next_token(
         &mut self,
         registry: &mut R,
         interner: &mut I,
-    ) -> Option<LexItem<Self::Ident, I::StringRef, R::Span>>;
+    ) -> Option<LexItem<I::StringRef, R::Span>>;
 }
 
 pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D> {
     pub codebase: C,
     pub registry: R,
     interner: I,
-    tokens: Vec<Box<dyn TokenStream<R, I, Ident = <Self as IdentSource>::Ident>>>,
+    tokens: Vec<Box<dyn TokenStream<R, I>>>,
     macros: M,
     names: N,
     pub builder: B,
@@ -127,12 +126,6 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D> SpanSource
     for CompositeSession<C, R, I, M, N, B, D>
 {
     type Span = R::Span;
-}
-
-impl<C, R: SpanSource, I: StringSource, M, N, B, D> IdentSource
-    for CompositeSession<C, R, I, M, N, B, D>
-{
-    type Ident = Ident<String>;
 }
 
 impl<C, R: SpanSource, I: StringSource, M, N, B, D> StringSource
@@ -150,7 +143,7 @@ impl<C, R: SpanSource, I: StringSource, M, N, B: SymbolSource, D> SymbolSource
 impl<C, R: SpanSource, I: StringSource, M, N, B, D> NextToken
     for CompositeSession<C, R, I, M, N, B, D>
 {
-    fn next_token(&mut self) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
+    fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>> {
         let token = self
             .tokens
             .last_mut()

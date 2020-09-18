@@ -9,7 +9,7 @@ use crate::session::builder::Backend;
 use crate::session::diagnostics::*;
 use crate::span::{SpanSource, SpanSystem};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
-use crate::syntax::{IdentSource, LexError, ParseTokenStream};
+use crate::syntax::{LexError, ParseTokenStream};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -28,16 +28,16 @@ where
     Self: Interner,
     Self: NextToken,
     Self: MacroTable<
-        <Self as IdentSource>::Ident,
+        <Self as StringSource>::StringRef,
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >,
-    R: SpanSystem<<Self as IdentSource>::Ident, <Self as StringSource>::StringRef>,
+    R: SpanSystem<<Self as StringSource>::StringRef>,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
-    Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
+    Self: StartScope<<Self as StringSource>::StringRef>
+        + NameTable<<Self as StringSource>::StringRef>,
     Self: Backend<R::Span>,
-    <Self as IdentSource>::Ident: 'static,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
@@ -50,7 +50,7 @@ where
         let tokens = self.lex_file(path, from)?;
         self.tokens.push(Box::new(tokens));
         let mut parser = <DefaultParserFactory as ParserFactory<
-            <Self as IdentSource>::Ident,
+            <Self as StringSource>::StringRef,
             Literal<<Self as StringSource>::StringRef>,
             LexError,
             <Self as SpanSource>::Span,
@@ -111,10 +111,6 @@ mod mock {
         pub fn with_log(log: Log<T>) -> Self {
             Self::with_name_table(log)
         }
-    }
-
-    impl<T, S> IdentSource for MockCodebase<T, S> {
-        type Ident = String;
     }
 
     impl<T, S> StringSource for MockCodebase<T, S> {

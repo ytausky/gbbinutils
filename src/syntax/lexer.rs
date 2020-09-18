@@ -1,5 +1,5 @@
 use super::Sigil::*;
-use super::{IdentFactory, Sigil, Token};
+use super::{Sigil, Token};
 
 use crate::session::lex::{LexItem, Literal};
 use crate::session::Interner;
@@ -183,52 +183,39 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub struct Lexer<B, F> {
+pub struct Lexer<B> {
     scanner: Scanner<B>,
-    factory: TokenFactory<F>,
 }
 
-struct TokenFactory<F> {
-    ident_factory: F,
-}
-
-impl<F: IdentFactory> TokenFactory<F> {
-    fn new(ident_factory: F) -> Self {
-        Self { ident_factory }
-    }
-
-    fn mk_token<I>(
-        &mut self,
-        kind: TokenKind,
-        lexeme: &str,
-        interner: &mut I,
-    ) -> Result<Token<F::Ident, Literal<I::StringRef>>, LexError>
-    where
-        I: Interner,
-    {
-        match kind {
-            TokenKind::Ident => Ok(Token::Ident(self.ident_factory.mk_ident(lexeme))),
-            TokenKind::Label => Ok(Token::Label(self.ident_factory.mk_ident(lexeme))),
-            TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
-                i32::from_str_radix(lexeme, 10).unwrap(),
-            ))),
-            TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
-                Ok(n) => Ok(Token::Literal(Literal::Number(n))),
-                Err(_) => Err(LexError::NoDigits),
-            },
-            TokenKind::Sigil(sigil) => Ok(Token::Sigil(sigil)),
-            TokenKind::String => Ok(Token::Literal(Literal::String(
-                interner.intern(&lexeme[1..(lexeme.len() - 1)]),
-            ))),
-        }
+fn mk_token<I>(
+    kind: TokenKind,
+    lexeme: &str,
+    interner: &mut I,
+) -> Result<Token<I::StringRef, Literal<I::StringRef>>, LexError>
+where
+    I: Interner,
+{
+    match kind {
+        TokenKind::Ident => Ok(Token::Ident(interner.intern(lexeme))),
+        TokenKind::Label => Ok(Token::Label(interner.intern(lexeme))),
+        TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
+            i32::from_str_radix(lexeme, 10).unwrap(),
+        ))),
+        TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
+            Ok(n) => Ok(Token::Literal(Literal::Number(n))),
+            Err(_) => Err(LexError::NoDigits),
+        },
+        TokenKind::Sigil(sigil) => Ok(Token::Sigil(sigil)),
+        TokenKind::String => Ok(Token::Literal(Literal::String(
+            interner.intern(&lexeme[1..(lexeme.len() - 1)]),
+        ))),
     }
 }
 
-impl<B: Borrow<str>, F: IdentFactory> Lexer<B, F> {
-    pub fn new(src: B, ident_factory: F) -> Lexer<B, F> {
+impl<B: Borrow<str>> Lexer<B> {
+    pub fn new(src: B) -> Self {
         Lexer {
             scanner: Scanner::new(src),
-            factory: TokenFactory::new(ident_factory),
         }
     }
 
@@ -236,15 +223,14 @@ impl<B: Borrow<str>, F: IdentFactory> Lexer<B, F> {
         &mut self,
         _registry: &mut R,
         interner: &mut I,
-    ) -> Option<LexItem<F::Ident, I::StringRef, Range<usize>>>
+    ) -> Option<LexItem<I::StringRef, Range<usize>>>
     where
         I: Interner,
     {
         self.scanner.next().map(|(result, range)| {
             (
                 result.and_then(|kind| {
-                    self.factory
-                        .mk_token(kind, &self.scanner.src.borrow()[range.clone()], interner)
+                    mk_token(kind, &self.scanner.src.borrow()[range.clone()], interner)
                 }),
                 range,
             )
@@ -265,8 +251,8 @@ mod tests {
 
     type LexResult<I> = Result<Token<I, super::Literal<String>>, LexError>;
 
-    impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
-        type Item = (LexResult<F::Ident>, Range<usize>);
+    impl<B: Borrow<str>> Iterator for Lexer<B> {
+        type Item = (LexResult<String>, Range<usize>);
 
         fn next(&mut self) -> Option<Self::Item> {
             self.next_token(&mut (), &mut MockInterner)
@@ -301,10 +287,7 @@ mod tests {
             .cloned()
             .map(|(t, r)| (Ok(t), r))
             .collect();
-        assert_eq!(
-            Lexer::new(src, ToString::to_string).collect::<Vec<_>>(),
-            expected
-        )
+        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), expected)
     }
 
     fn assert_eq_tokens(src: &str, expected_without_eos: impl Borrow<[TestToken]>) {
@@ -318,9 +301,7 @@ mod tests {
         let mut expected: Vec<_> = expected_without_eos.into_iter().collect();
         expected.push(Ok(Eos.into()));
         assert_eq!(
-            Lexer::new(src, ToString::to_string)
-                .map(|(t, _)| t)
-                .collect::<Vec<_>>(),
+            Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
             expected
         )
     }

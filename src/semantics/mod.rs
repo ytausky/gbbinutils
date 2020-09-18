@@ -8,7 +8,6 @@ use crate::session::reentrancy::Params;
 use crate::session::Analysis;
 use crate::span::{SpanSource, Spanned};
 use crate::syntax::actions::{LexerOutput, LineRule};
-use crate::syntax::IdentSource;
 
 macro_rules! set_state {
     ($session:expr, $state:expr) => {
@@ -43,22 +42,15 @@ impl<'a, 'b, S: Analysis, T> Semantics<'a, S, T> {
     }
 }
 
-type TokenStreamSemantics<'a, S> = Semantics<
-    'a,
-    S,
-    TokenStreamState<
-        <S as IdentSource>::Ident,
-        <S as StringSource>::StringRef,
-        <S as SpanSource>::Span,
-    >,
->;
+type TokenStreamSemantics<'a, S> =
+    Semantics<'a, S, TokenStreamState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct TokenStreamState<I, R, S> {
-    mode: LineRule<InstrLineState<I, S>, TokenLineState<I, R, S>>,
+pub struct TokenStreamState<R, S> {
+    mode: LineRule<InstrLineState<R, S>, TokenLineState<R, S>>,
 }
 
-impl<I, R, S> TokenStreamState<I, R, S> {
+impl<R, S> TokenStreamState<R, S> {
     pub fn new() -> Self {
         Self {
             mode: LineRule::InstrLine(InstrLineState::new()),
@@ -67,50 +59,43 @@ impl<I, R, S> TokenStreamState<I, R, S> {
 }
 
 type InstrLineSemantics<'a, S> =
-    Semantics<'a, S, InstrLineState<<S as IdentSource>::Ident, <S as SpanSource>::Span>>;
+    Semantics<'a, S, InstrLineState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct InstrLineState<I, S> {
-    label: Option<Label<I, S>>,
+pub struct InstrLineState<R, S> {
+    label: Option<Label<R, S>>,
 }
 
-impl<I, S> InstrLineState<I, S> {
+impl<R, S> InstrLineState<R, S> {
     fn new() -> Self {
         Self { label: None }
     }
 }
 
-type Label<I, S> = ((I, S), Params<I, S>);
+type Label<R, S> = ((R, S), Params<R, S>);
 
-type TokenLineSemantics<'a, S> = Semantics<
-    'a,
-    S,
-    TokenLineState<
-        <S as IdentSource>::Ident,
-        <S as StringSource>::StringRef,
-        <S as SpanSource>::Span,
-    >,
->;
+type TokenLineSemantics<'a, S> =
+    Semantics<'a, S, TokenLineState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct TokenLineState<I, R, S> {
-    context: TokenContext<I, R, S>,
+pub struct TokenLineState<R, S> {
+    context: TokenContext<R, S>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TokenContext<I, R, S> {
+pub enum TokenContext<R, S> {
     FalseIf,
-    MacroDef(MacroDefState<I, R, S>),
+    MacroDef(MacroDefState<R, S>),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MacroDefState<I, R, S> {
-    label: Option<Label<I, S>>,
-    tokens: TokenSeq<I, R, S>,
+pub struct MacroDefState<R, S> {
+    label: Option<Label<R, S>>,
+    tokens: TokenSeq<R, S>,
 }
 
-impl<I, R, S> MacroDefState<I, R, S> {
-    fn new(label: Option<Label<I, S>>) -> Self {
+impl<R, S> MacroDefState<R, S> {
+    fn new(label: Option<Label<R, S>>) -> Self {
         Self {
             label,
             tokens: Vec::new(),
@@ -121,14 +106,14 @@ impl<I, R, S> MacroDefState<I, R, S> {
 type BuiltinInstrSemantics<'a, S> = Semantics<'a, S, BuiltinInstrState<S>>;
 
 pub(crate) struct BuiltinInstrState<S: Analysis> {
-    label: Option<Label<S::Ident, S::Span>>,
+    label: Option<Label<S::StringRef, S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::StringRef, S::Span>,
 }
 
 impl<S: Analysis> BuiltinInstrState<S> {
     fn new(
-        label: Option<Label<S::Ident, S::Span>>,
+        label: Option<Label<S::StringRef, S::Span>>,
         mnemonic: Spanned<BuiltinMnemonic, S::Span>,
     ) -> Self {
         Self {
@@ -139,25 +124,20 @@ impl<S: Analysis> BuiltinInstrState<S> {
     }
 }
 
-type BuiltinInstrArgs<N, R, S> = Vec<ParsedArg<N, R, S>>;
+type BuiltinInstrArgs<R, S> = Vec<ParsedArg<R, S>>;
 
 pub(crate) type ArgSemantics<'a, S> = Semantics<
     'a,
     S,
-    ExprBuilder<
-        <S as IdentSource>::Ident,
-        <S as StringSource>::StringRef,
-        <S as SpanSource>::Span,
-        BuiltinInstrState<S>,
-    >,
+    ExprBuilder<<S as StringSource>::StringRef, <S as SpanSource>::Span, BuiltinInstrState<S>>,
 >;
 
-pub(crate) struct ExprBuilder<I, R, S, P> {
-    arg: Option<ParsedArg<I, R, S>>,
+pub(crate) struct ExprBuilder<R, S, P> {
+    arg: Option<ParsedArg<R, S>>,
     parent: P,
 }
 
-impl<I, R, S, P> ExprBuilder<I, R, S, P> {
+impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }

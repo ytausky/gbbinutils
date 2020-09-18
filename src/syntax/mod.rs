@@ -36,23 +36,3 @@ impl<I, L> From<Sigil> for Token<I, L> {
         Token::Sigil(sigil)
     }
 }
-
-pub trait IdentSource {
-    type Ident: Clone + Debug + Eq + AsRef<str>;
-}
-
-pub trait IdentFactory: IdentSource {
-    fn mk_ident(&mut self, spelling: &str) -> Self::Ident;
-}
-
-#[cfg(test)]
-impl<I: Clone + Debug + Eq + AsRef<str>, F: for<'a> Fn(&'a str) -> I> IdentSource for F {
-    type Ident = I;
-}
-
-#[cfg(test)]
-impl<I: Clone + Debug + Eq + AsRef<str>, F: for<'a> Fn(&'a str) -> I> IdentFactory for F {
-    fn mk_ident(&mut self, spelling: &str) -> Self::Ident {
-        self(spelling)
-    }
-}

@@ -1,8 +1,8 @@
 use crate::expr::Expr;
 
-pub(super) enum ParsedArg<N, R, S> {
-    Bare(Expr<N, S>),
-    Parenthesized(Expr<N, S>, S),
+pub(super) enum ParsedArg<R, S> {
+    Bare(Expr<R, S>),
+    Parenthesized(Expr<R, S>, S),
     String(R, S),
     Error,
 }

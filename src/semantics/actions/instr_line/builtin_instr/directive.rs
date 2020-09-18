@@ -9,12 +9,11 @@ use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Analysis>(
     directive: (Directive, S::Span),
-    label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+    label: Option<Label<S::StringRef, S::Span>>,
+    args: BuiltinInstrArgs<S::StringRef, S::Span>,
     session: TokenStreamSemantics<'a, S>,
 ) -> TokenStreamSemantics<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -29,14 +28,13 @@ where
 
 struct DirectiveContext<'a, S: Analysis> {
     span: S::Span,
-    label: Option<Label<S::Ident, S::Span>>,
-    args: BuiltinInstrArgs<S::Ident, S::StringRef, S::Span>,
+    label: Option<Label<S::StringRef, S::Span>>,
+    args: BuiltinInstrArgs<S::StringRef, S::Span>,
     session: TokenStreamSemantics<'a, S>,
 }
 
 impl<'a, S: Analysis> DirectiveContext<'a, S>
 where
-    S::Ident: 'static,
     S::StringRef: 'static,
     S::Span: 'static,
 {
@@ -161,9 +159,9 @@ where
     }
 }
 
-fn reduce_include<N, R, D: Diagnostics<S>, S: Clone>(
+fn reduce_include<R, D: Diagnostics<S>, S: Clone>(
     span: S,
-    args: Vec<ParsedArg<N, R, S>>,
+    args: Vec<ParsedArg<R, S>>,
     diagnostics: &mut D,
 ) -> Option<(R, S)> {
     let arg = match single_arg(span, args, diagnostics) {
@@ -218,7 +216,7 @@ mod tests {
     use crate::session::lex::Literal;
     use crate::session::mock::MockSession;
     use crate::session::reentrancy::ReentrancyEvent;
-    use crate::session::resolve::{Ident, NameTableEvent, ResolvedName};
+    use crate::session::resolve::{NameTableEvent, ResolvedName};
     use crate::syntax::actions::*;
 
     use std::borrow::Borrow;
@@ -295,7 +293,7 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> ExprAtom<Ident<String>, Literal<String>> {
+    fn mk_literal(n: i32) -> ExprAtom<String, Literal<String>> {
         ExprAtom::Literal(Literal::Number(n))
     }
 

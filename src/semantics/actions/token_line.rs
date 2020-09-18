@@ -12,7 +12,7 @@ use crate::syntax::{LexError, Sigil, Token};
 impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
-    fn act_on_token(&mut self, token: SemanticToken<S::Ident, S::StringRef>, span: S::Span) {
+    fn act_on_token(&mut self, token: SemanticToken<S::StringRef>, span: S::Span) {
         match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
@@ -21,7 +21,7 @@ impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
 
     fn act_on_mnemonic(
         mut self,
-        ident: S::Ident,
+        ident: S::StringRef,
         span: S::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
         if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
@@ -42,9 +42,9 @@ pub(crate) trait ActOnMnemonic<M, S> {
     fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
 }
 
-impl<I, R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenContext<I, R, S>
+impl<R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenContext<R, S>
 where
-    Self: ActOnToken<SemanticToken<I, R>, S>,
+    Self: ActOnToken<SemanticToken<R>, S>,
 {
     fn act_on_mnemonic(
         &mut self,
@@ -68,8 +68,8 @@ pub trait ActOnToken<T, S> {
     fn act_on_token(&mut self, token: T, span: S);
 }
 
-impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenContext<I, R, S> {
-    fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
+impl<R, S> ActOnToken<SemanticToken<R>, S> for TokenContext<R, S> {
+    fn act_on_token(&mut self, token: SemanticToken<R>, span: S) {
         match self {
             TokenContext::FalseIf => drop((token, span)),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
@@ -77,8 +77,8 @@ impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenContext<I, R, S> {
     }
 }
 
-impl<I, R, S> MacroDefState<I, R, S> {
-    fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
+impl<R, S> MacroDefState<R, S> {
+    fn act_on_token(&mut self, token: SemanticToken<R>, span: S) {
         self.tokens.push((token, span));
     }
 }
@@ -97,7 +97,7 @@ pub(crate) struct TokenContextFinalizationSemantics<'a, S: Analysis> {
 }
 
 impl<'a, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'a, S> {
-    type Ident = S::Ident;
+    type Ident = S::StringRef;
     type Literal = Literal<S::StringRef>;
     type Error = LexError;
     type Span = S::Span;
