@@ -69,6 +69,7 @@ where
     RR: SpanSystem<<Self as IdentSource>::Ident, II::StringRef>,
     II: Interner,
     Self: NextToken,
+    Self: Interner,
     Self: EmitDiag<RR::Span, RR::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<RR::Span>,

@@ -25,6 +25,7 @@ impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef, R
 where
     C: Codebase,
     Self: Lex<R, I, Span = R::Span>,
+    Self: Interner,
     Self: NextToken,
     Self: MacroTable<
         <Self as IdentSource>::Ident,

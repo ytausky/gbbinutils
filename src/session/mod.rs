@@ -12,6 +12,8 @@ use crate::span::{MergeSpans, RcContextFactory, Span, SpanSource, StripSpan};
 use crate::syntax::{IdentFactory, IdentSource, Sigil, Token};
 use crate::BuiltinSymbols;
 
+use std::collections::HashMap;
+
 pub mod builder;
 #[macro_use]
 pub mod diagnostics;
@@ -26,6 +28,7 @@ pub(crate) trait Analysis:
     + StringSource
     + MacroSource
     + NextToken
+    + Interner
     + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
@@ -45,6 +48,7 @@ impl<T> Analysis for T where
         + StringSource
         + MacroSource
         + NextToken
+        + Interner
         + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
@@ -64,11 +68,11 @@ pub(crate) trait NextToken: IdentSource + StringSource + SpanSource {
 
 pub(crate) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
-    RcContextFactory<BufId, Ident<String>, String>,
-    MockInterner,
-    VecMacroTable<Ident<String>, String, Span<BufId, Ident<String>, String>>,
+    RcContextFactory<BufId, Ident<String>, StringId>,
+    HashInterner,
+    VecMacroTable<Ident<String>, StringId, Span<BufId, Ident<String>, StringId>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
-    ObjectBuilder<Span<BufId, Ident<String>, String>>,
+    ObjectBuilder<Span<BufId, Ident<String>, StringId>>,
     OutputForwarder<'a>,
 >;
 
@@ -80,7 +84,7 @@ impl<'a> Session<'a> {
         let mut session = Self {
             codebase,
             registry: RcContextFactory::new(),
-            interner: MockInterner,
+            interner: HashInterner::new(),
             tokens: Vec::new(),
             macros: VecMacroTable::new(),
             names: BiLevelNameTable::new(),
@@ -184,8 +188,19 @@ where
     }
 }
 
+impl<C, R: SpanSource, I: Interner, M, N, B, D> Interner for CompositeSession<C, R, I, M, N, B, D> {
+    fn intern(&mut self, string: &str) -> Self::StringRef {
+        self.interner.intern(string)
+    }
+
+    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
+        self.interner.get_string(id)
+    }
+}
+
 pub(crate) trait Interner: StringSource {
     fn intern(&mut self, string: &str) -> Self::StringRef;
+    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str;
 }
 
 pub struct MockInterner;
@@ -197,6 +212,48 @@ impl StringSource for MockInterner {
 impl Interner for MockInterner {
     fn intern(&mut self, string: &str) -> Self::StringRef {
         string.to_owned()
+    }
+
+    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
+        id
+    }
+}
+
+pub(crate) struct HashInterner {
+    map: HashMap<String, StringId>,
+    strings: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct StringId(usize);
+
+impl HashInterner {
+    fn new() -> Self {
+        HashInterner {
+            map: HashMap::new(),
+            strings: Vec::new(),
+        }
+    }
+}
+
+impl StringSource for HashInterner {
+    type StringRef = StringId;
+}
+
+impl Interner for HashInterner {
+    fn intern(&mut self, string: &str) -> Self::StringRef {
+        let id = self
+            .map
+            .entry(string.to_owned())
+            .or_insert(StringId(self.strings.len()));
+        if id.0 == self.strings.len() {
+            self.strings.push(string.to_owned())
+        }
+        *id
+    }
+
+    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
+        &self.strings[id.0]
     }
 }
 

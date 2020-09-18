@@ -11,7 +11,7 @@ pub use crate::link::{Program, Rom};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::session::diagnostics::*;
 use crate::session::reentrancy::ReentrancyActions;
-use crate::session::{CompositeSession, Session};
+use crate::session::{CompositeSession, Interner, Session};
 
 pub use crate::session::diagnostics;
 
@@ -85,7 +85,8 @@ fn try_assemble<'a>(
     let diagnostics = session::diagnostics::OutputForwarder { output };
     let mut session = Session::new(codebase, diagnostics);
     // session.analyze_file(name.into())?;
-    ReentrancyActions::analyze_file(&mut session, name.into(), None)?;
+    let name = session.intern(name);
+    ReentrancyActions::analyze_file(&mut session, name, None)?;
 
     let mut diagnostics = DiagnosticsView {
         codebase: &mut session.codebase,

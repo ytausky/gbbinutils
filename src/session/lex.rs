@@ -35,7 +35,7 @@ pub type TokenSeq<I, R, S> = Vec<(SemanticToken<I, R>, S)>;
 impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
-    I: Interner<StringRef = String>,
+    I: Interner,
     R: SpanSystem<Ident<String>, I::StringRef>,
 {
     type TokenIter = TokenizedSrc<DefaultIdentFactory, R::Span>;
@@ -45,7 +45,7 @@ where
         path: Self::StringRef,
         from: Option<R::Span>,
     ) -> Result<Self::TokenIter, CodebaseError> {
-        let buf_id = self.codebase.open(&path)?;
+        let buf_id = self.codebase.open(&self.interner.get_string(&path))?;
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,

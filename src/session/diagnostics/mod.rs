@@ -55,18 +55,21 @@ pub(crate) struct OutputForwarder<'a> {
 }
 
 impl<'a, F, R, I, M, N, B>
-    EmitDiag<Span<BufId, Ident<String>, String>, StrippedBufSpan<BufId, BufRange>>
+    EmitDiag<Span<BufId, Ident<String>, I::StringRef>, StrippedBufSpan<BufId, BufRange>>
     for CompositeSession<FileCodebase<'a, F>, R, I, M, N, B, OutputForwarder<'a>>
 where
     F: FileSystem + ?Sized,
     R: SpanSource
-        + StripSpan<Span<BufId, Ident<String>, String>, Stripped = StrippedBufSpan<BufId, BufRange>>,
+        + StripSpan<
+            Span<BufId, Ident<String>, I::StringRef>,
+            Stripped = StrippedBufSpan<BufId, BufRange>,
+        >,
     I: StringSource,
 {
     fn emit_diag(
         &mut self,
         diag: impl Into<
-            CompactDiag<Span<BufId, Ident<String>, String>, StrippedBufSpan<BufId, BufRange>>,
+            CompactDiag<Span<BufId, Ident<String>, I::StringRef>, StrippedBufSpan<BufId, BufRange>>,
         >,
     ) {
         (self.diagnostics.output)(
@@ -103,17 +106,15 @@ where
     }
 }
 
-impl<'a, 'b, F: FileSystem + ?Sized, R>
-    EmitDiag<Span<BufId, Ident<String>, String>, StrippedBufSpan<BufId, BufRange>>
+impl<'a, 'b, F: FileSystem + ?Sized, R, RR>
+    EmitDiag<Span<BufId, Ident<String>, RR>, StrippedBufSpan<BufId, BufRange>>
     for DiagnosticsView<'b, FileCodebase<'a, F>, R, OutputForwarder<'a>>
 where
-    R: StripSpan<Span<BufId, Ident<String>, String>, Stripped = StrippedBufSpan<BufId, BufRange>>,
+    R: StripSpan<Span<BufId, Ident<String>, RR>, Stripped = StrippedBufSpan<BufId, BufRange>>,
 {
     fn emit_diag(
         &mut self,
-        diag: impl Into<
-            CompactDiag<Span<BufId, Ident<String>, String>, StrippedBufSpan<BufId, BufRange>>,
-        >,
+        diag: impl Into<CompactDiag<Span<BufId, Ident<String>, RR>, StrippedBufSpan<BufId, BufRange>>>,
     ) {
         (self.diagnostics.output)(
             diag.into()
