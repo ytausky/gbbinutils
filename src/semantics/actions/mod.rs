@@ -431,7 +431,7 @@ pub mod tests {
             [
                 MacroTableEvent::DefineMacro(
                     params.borrow().iter().cloned().map(Into::into).collect(),
-                    body
+                    body.into_boxed_slice(),
                 )
                 .into(),
                 NameTableEvent::Insert(name.into(), ResolvedName::Macro(MockMacroId(0))).into(),

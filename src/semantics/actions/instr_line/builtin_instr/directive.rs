@@ -124,7 +124,7 @@ where
             Some(result) => result,
             None => return self.session,
         };
-        let result = self.session.session.analyze_file(path);
+        let result = self.session.session.analyze_file(path, Some(span.clone()));
         if let Err(err) = result {
             self.session.session.emit_diag(Message::from(err).at(span))
         }

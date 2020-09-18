@@ -2,7 +2,6 @@ use super::*;
 
 use crate::semantics::actions::TokenStreamState;
 use crate::session::lex::{SemanticToken, TokenSeq};
-use crate::session::reentrancy::MacroArgs;
 use crate::syntax::actions::{InstrFinalizer, MacroArgContext, MacroInstrContext};
 
 pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>>;
@@ -10,7 +9,7 @@ pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>
 pub(crate) struct MacroInstrState<S: Analysis> {
     parent: InstrLineState<S::Ident, S::Span>,
     name: (S::MacroId, S::Span),
-    args: MacroArgs<S::Ident, S::StringRef, S::Span>,
+    args: Vec<Vec<(SemanticToken<S::Ident, S::StringRef>, S::Span)>>,
 }
 
 impl<S: Analysis> MacroInstrState<S> {
@@ -18,14 +17,13 @@ impl<S: Analysis> MacroInstrState<S> {
         Self {
             parent,
             name,
-            args: (Vec::new(), Vec::new()),
+            args: Vec::new(),
         }
     }
 
     fn push_arg(&mut self, arg: TokenSeq<S::Ident, S::StringRef, S::Span>) {
         let args = &mut self.args;
-        args.0.push(arg.0);
-        args.1.push(arg.1);
+        args.push(arg);
     }
 }
 
@@ -51,7 +49,15 @@ where
     type Next = TokenStreamSemantics<'a, S>;
 
     fn did_parse_instr(self) -> Self::Next {
-        self.session.expand_macro(self.state.name, self.state.args);
+        self.session.expand_macro(
+            self.state.name,
+            self.state
+                .args
+                .into_iter()
+                .map(|arg| arg.into_boxed_slice())
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        );
         Semantics {
             session: self.session,
             state: TokenStreamState::from(self.state.parent),
@@ -69,7 +75,7 @@ pub(crate) struct MacroArgState<S: Analysis> {
 impl<S: Analysis> MacroArgState<S> {
     fn new(parent: MacroInstrState<S>) -> Self {
         Self {
-            tokens: (Vec::new(), Vec::new()),
+            tokens: Vec::new(),
             parent,
         }
     }
@@ -80,8 +86,7 @@ impl<'a, S: Analysis> MacroArgContext for MacroArgSemantics<'a, S> {
 
     fn act_on_token(&mut self, token: (SemanticToken<S::Ident, S::StringRef>, S::Span)) {
         let tokens = &mut self.state.tokens;
-        tokens.0.push(token.0);
-        tokens.1.push(token.1);
+        tokens.push(token);
     }
 
     fn did_parse_macro_arg(mut self) -> Self::Next {
@@ -119,7 +124,7 @@ mod tests {
         );
         assert_eq!(
             log,
-            [MacroTableEvent::ExpandMacro(macro_id, Vec::new()).into()]
+            [MacroTableEvent::ExpandMacro(macro_id, Box::new([])).into()]
         )
     }
 
@@ -146,7 +151,11 @@ mod tests {
         );
         assert_eq!(
             log,
-            [MacroTableEvent::ExpandMacro(macro_id, vec![vec![arg_token]]).into()]
+            [MacroTableEvent::ExpandMacro(
+                macro_id,
+                vec![vec![arg_token].into_boxed_slice()].into_boxed_slice()
+            )
+            .into()]
         )
     }
 }

@@ -16,7 +16,7 @@ impl<S: Analysis> LabelState<S> {
         Self {
             parent,
             label,
-            params: (Vec::new(), Vec::new()),
+            params: Vec::new(),
         }
     }
 }
@@ -26,8 +26,7 @@ impl<'a, S: Analysis> LabelContext for LabelSemantics<'a, S> {
 
     fn act_on_param(&mut self, ident: S::Ident, span: S::Span) {
         let params = &mut self.state.params;
-        params.0.push(ident);
-        params.1.push(span)
+        params.push((ident, span))
     }
 
     fn did_parse_label(mut self) -> Self::Next {

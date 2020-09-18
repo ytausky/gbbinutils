@@ -1,7 +1,7 @@
-use crate::codebase::{Codebase, CodebaseError};
+use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::session::resolve::*;
 use crate::session::{CompositeSession, Interner, TokenStream};
-use crate::span::{BufContext, BufContextFactory, SpanSource};
+use crate::span::{FileInclusion, SpanDraft, SpanSource, SpanSystem};
 use crate::syntax::*;
 
 use std::fmt::Debug;
@@ -23,25 +23,33 @@ where
 {
     type TokenIter: TokenStream<R, I, Ident = Self::Ident>;
 
-    fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError>;
+    fn lex_file(
+        &mut self,
+        path: Self::StringRef,
+        from: Option<R::Span>,
+    ) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
+pub type TokenSeq<I, R, S> = Vec<(SemanticToken<I, R>, S)>;
 
 impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
     I: Interner<StringRef = String>,
-    R: BufContextFactory,
+    R: SpanSystem<Ident<String>, I::StringRef>,
 {
-    type TokenIter = TokenizedSrc<DefaultIdentFactory, R::BufContext>;
+    type TokenIter = TokenizedSrc<DefaultIdentFactory, R::Span>;
 
-    fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError> {
+    fn lex_file(
+        &mut self,
+        path: Self::StringRef,
+        from: Option<R::Span>,
+    ) -> Result<Self::TokenIter, CodebaseError> {
         let buf_id = self.codebase.open(&path)?;
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,
-            self.registry.mk_buf_context(buf_id, None),
+            Rc::new(FileInclusion { file: buf_id, from }),
         ))
     }
 }
@@ -50,38 +58,41 @@ pub trait StringSource {
     type StringRef: Clone + Debug + Eq;
 }
 
-pub struct TokenizedSrc<F, C> {
+pub struct TokenizedSrc<F, S> {
     tokens: Lexer<Rc<str>, F>,
-    context: C,
+    inclusion: Rc<FileInclusion<BufId, S>>,
 }
 
-impl<C: BufContext> TokenizedSrc<DefaultIdentFactory, C> {
-    fn new(src: Rc<str>, context: C) -> Self {
+impl<S> TokenizedSrc<DefaultIdentFactory, S> {
+    fn new(src: Rc<str>, inclusion: Rc<FileInclusion<BufId, S>>) -> Self {
         TokenizedSrc {
             tokens: Lexer::new(src, DefaultIdentFactory),
-            context,
+            inclusion,
         }
     }
 }
 
-impl<F: IdentFactory, C> IdentSource for TokenizedSrc<F, C> {
+impl<F: IdentFactory, S> IdentSource for TokenizedSrc<F, S> {
     type Ident = F::Ident;
 }
 
-impl<R, I, F, C> TokenStream<R, I> for TokenizedSrc<F, C>
+impl<R, I, F, S> TokenStream<R, I> for TokenizedSrc<F, S>
 where
-    R: SpanSource<Span = C::Span>,
+    R: SpanSystem<F::Ident, I::StringRef, Span = S>,
     I: Interner,
     F: IdentFactory,
-    C: BufContext,
+    S: Clone,
 {
     fn next_token(
         &mut self,
         registry: &mut R,
         interner: &mut I,
     ) -> Option<LexItem<Self::Ident, I::StringRef, R::Span>> {
-        self.tokens
-            .next_token(registry, interner)
-            .map(|(t, r)| (t, self.context.mk_span(r)))
+        self.tokens.next_token(registry, interner).map(|(t, r)| {
+            (
+                t,
+                registry.encode_span(SpanDraft::File(Rc::clone(&self.inclusion), r)),
+            )
+        })
     }
 }

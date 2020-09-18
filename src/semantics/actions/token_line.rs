@@ -79,8 +79,7 @@ impl<I, R, S> ActOnToken<SemanticToken<I, R>, S> for TokenContext<I, R, S> {
 
 impl<I, R, S> MacroDefState<I, R, S> {
     fn act_on_token(&mut self, token: SemanticToken<I, R>, span: S) {
-        self.tokens.0.push(token);
-        self.tokens.1.push(span);
+        self.tokens.push((token, span));
     }
 }
 
@@ -132,7 +131,11 @@ impl<'a, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, S>
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    let id = self.parent.session.define_macro(name.1, params, tokens);
+                    let id = self.parent.session.define_macro(
+                        name.1,
+                        params.into_boxed_slice(),
+                        tokens.into_boxed_slice(),
+                    );
                     self.parent
                         .session
                         .define_name(name.0, ResolvedName::Macro(id));

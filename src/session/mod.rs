@@ -4,15 +4,13 @@ use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
 
-use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem};
+use crate::codebase::{BufId, FileCodebase, FileSystem};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::session::diagnostics::{Diagnostics, OutputForwarder};
-use crate::span::{MacroDefSpans, MergeSpans, RcContextFactory, RcSpan, SpanSource, StripSpan};
+use crate::span::{MergeSpans, RcContextFactory, Span, SpanSource, StripSpan};
 use crate::syntax::{IdentFactory, IdentSource, Sigil, Token};
 use crate::BuiltinSymbols;
-
-use std::rc::Rc;
 
 pub mod builder;
 #[macro_use]
@@ -28,7 +26,7 @@ pub(crate) trait Analysis:
     + StringSource
     + MacroSource
     + NextToken
-    + ReentrancyActions<<Self as StringSource>::StringRef>
+    + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope<<Self as IdentSource>::Ident>
@@ -47,7 +45,7 @@ impl<T> Analysis for T where
         + StringSource
         + MacroSource
         + NextToken
-        + ReentrancyActions<<Self as StringSource>::StringRef>
+        + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
         + StartScope<<Self as IdentSource>::Ident>
@@ -66,11 +64,11 @@ pub(crate) trait NextToken: IdentSource + StringSource + SpanSource {
 
 pub(crate) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
-    RcContextFactory,
+    RcContextFactory<BufId, Ident<String>, String>,
     MockInterner,
-    VecMacroTable<Ident<String>, Literal<String>, Rc<MacroDefSpans<RcSpan<BufId, BufRange>>>>,
+    VecMacroTable<Ident<String>, String, Span<BufId, Ident<String>, String>>,
     BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
-    ObjectBuilder<RcSpan<BufId, BufRange>>,
+    ObjectBuilder<Span<BufId, Ident<String>, String>>,
     OutputForwarder<'a>,
 >;
 

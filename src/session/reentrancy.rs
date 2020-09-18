@@ -1,4 +1,4 @@
-use super::lex::{Lex, Literal, SemanticToken, StringSource};
+use super::lex::{Lex, Literal, StringSource};
 use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
 use super::{CompositeSession, Interner, NextToken};
@@ -14,14 +14,13 @@ use crate::syntax::{IdentSource, LexError, ParseTokenStream};
 #[cfg(test)]
 pub(crate) use self::mock::*;
 
-pub(crate) trait ReentrancyActions<R> {
-    fn analyze_file(&mut self, path: R) -> Result<(), CodebaseError>;
+pub(crate) trait ReentrancyActions<R, S> {
+    fn analyze_file(&mut self, path: R, from: Option<S>) -> Result<(), CodebaseError>;
 }
 
-pub type MacroArgs<I, R, S> = super::macros::MacroArgs<SemanticToken<I, R>, S>;
-pub type Params<I, S> = (Vec<I>, Vec<S>);
+pub type Params<I, S> = Vec<(I, S)>;
 
-impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef>
+impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
     for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
@@ -32,7 +31,7 @@ where
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >,
-    R: SpanSystem,
+    R: SpanSystem<<Self as IdentSource>::Ident, <Self as StringSource>::StringRef>,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
@@ -45,8 +44,9 @@ where
     fn analyze_file(
         &mut self,
         path: <Self as StringSource>::StringRef,
+        from: Option<R::Span>,
     ) -> Result<(), CodebaseError> {
-        let tokens = self.lex_file(path)?;
+        let tokens = self.lex_file(path, from)?;
         self.tokens.push(Box::new(tokens));
         let mut parser = <DefaultParserFactory as ParserFactory<
             <Self as IdentSource>::Ident,
@@ -120,13 +120,13 @@ mod mock {
         type StringRef = String;
     }
 
-    impl<T, S, R: SpanSource, I, M, N, B, D> ReentrancyActions<String>
+    impl<T, S, R: SpanSource, I, M, N, B, D> ReentrancyActions<String, S>
         for CompositeSession<MockCodebase<T, S>, R, I, M, N, B, D>
     where
         T: From<ReentrancyEvent>,
         I: StringSource,
     {
-        fn analyze_file(&mut self, path: String) -> Result<(), CodebaseError> {
+        fn analyze_file(&mut self, path: String, _from: Option<S>) -> Result<(), CodebaseError> {
             self.codebase.log.push(ReentrancyEvent::AnalyzeFile(path));
             self.codebase.error.take().map_or(Ok(()), Err)
         }

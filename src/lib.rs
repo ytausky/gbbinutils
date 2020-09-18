@@ -85,7 +85,7 @@ fn try_assemble<'a>(
     let diagnostics = session::diagnostics::OutputForwarder { output };
     let mut session = Session::new(codebase, diagnostics);
     // session.analyze_file(name.into())?;
-    ReentrancyActions::analyze_file(&mut session, name.into())?;
+    ReentrancyActions::analyze_file(&mut session, name.into(), None)?;
 
     let mut diagnostics = DiagnosticsView {
         codebase: &mut session.codebase,
