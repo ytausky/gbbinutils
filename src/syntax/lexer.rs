@@ -1,7 +1,8 @@
 use super::Sigil::*;
 use super::{IdentFactory, Sigil, Token};
 
-use crate::session::lex::Literal;
+use crate::session::lex::{LexItem, Literal};
+use crate::session::Interner;
 
 use std::borrow::Borrow;
 use std::ops::Range;
@@ -196,11 +197,15 @@ impl<F: IdentFactory> TokenFactory<F> {
         Self { ident_factory }
     }
 
-    fn mk_token(
+    fn mk_token<I>(
         &mut self,
         kind: TokenKind,
         lexeme: &str,
-    ) -> Result<Token<F::Ident, Literal<String>>, LexError> {
+        interner: &mut I,
+    ) -> Result<Token<F::Ident, Literal<I::StringRef>>, LexError>
+    where
+        I: Interner,
+    {
         match kind {
             TokenKind::Ident => Ok(Token::Ident(self.ident_factory.mk_ident(lexeme))),
             TokenKind::Label => Ok(Token::Label(self.ident_factory.mk_ident(lexeme))),
@@ -213,7 +218,7 @@ impl<F: IdentFactory> TokenFactory<F> {
             },
             TokenKind::Sigil(sigil) => Ok(Token::Sigil(sigil)),
             TokenKind::String => Ok(Token::Literal(Literal::String(
-                lexeme[1..(lexeme.len() - 1)].to_string(),
+                interner.intern(&lexeme[1..(lexeme.len() - 1)]),
             ))),
         }
     }
@@ -226,19 +231,20 @@ impl<B: Borrow<str>, F: IdentFactory> Lexer<B, F> {
             factory: TokenFactory::new(ident_factory),
         }
     }
-}
 
-type LexResult<I> = Result<Token<I, Literal<String>>, LexError>;
-
-impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
-    type Item = (LexResult<F::Ident>, Range<usize>);
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub(crate) fn next_token<R, I>(
+        &mut self,
+        _registry: &mut R,
+        interner: &mut I,
+    ) -> Option<LexItem<F::Ident, I::StringRef, Range<usize>>>
+    where
+        I: Interner,
+    {
         self.scanner.next().map(|(result, range)| {
             (
                 result.and_then(|kind| {
                     self.factory
-                        .mk_token(kind, &self.scanner.src.borrow()[range.clone()])
+                        .mk_token(kind, &self.scanner.src.borrow()[range.clone()], interner)
                 }),
                 range,
             )
@@ -252,7 +258,20 @@ mod tests {
 
     use super::Literal::Number;
     use super::Token::*;
+
+    use crate::session::MockInterner;
+
     use std::borrow::Borrow;
+
+    type LexResult<I> = Result<Token<I, super::Literal<String>>, LexError>;
+
+    impl<B: Borrow<str>, F: IdentFactory> Iterator for Lexer<B, F> {
+        type Item = (LexResult<F::Ident>, Range<usize>);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.next_token(&mut (), &mut MockInterner)
+        }
+    }
 
     #[test]
     fn range_of_eos_in_empty_str() {

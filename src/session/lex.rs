@@ -1,6 +1,6 @@
 use crate::codebase::{Codebase, CodebaseError};
 use crate::session::resolve::*;
-use crate::session::{CompositeSession, TokenStream};
+use crate::session::{CompositeSession, Interner, TokenStream};
 use crate::span::{BufContext, BufContextFactory, SpanSource};
 use crate::syntax::*;
 
@@ -16,14 +16,12 @@ pub enum Literal<R> {
     String(R),
 }
 
-pub(crate) trait Lex<R, I>: IdentSource + StringSource + SpanSource {
-    type TokenIter: TokenStream<
-        R,
-        I,
-        Ident = Self::Ident,
-        StringRef = Self::StringRef,
-        Span = Self::Span,
-    >;
+pub(crate) trait Lex<R, I>: IdentSource + StringSource + SpanSource
+where
+    R: SpanSource,
+    I: Interner,
+{
+    type TokenIter: TokenStream<R, I, Ident = Self::Ident>;
 
     fn lex_file(&mut self, path: Self::StringRef) -> Result<Self::TokenIter, CodebaseError>;
 }
@@ -33,7 +31,7 @@ pub type TokenSeq<I, R, S> = (Vec<SemanticToken<I, R>>, Vec<S>);
 impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
-    I: StringSource<StringRef = String>,
+    I: Interner<StringRef = String>,
     R: BufContextFactory,
 {
     type TokenIter = TokenizedSrc<DefaultIdentFactory, R::BufContext>;
@@ -70,22 +68,20 @@ impl<F: IdentFactory, C> IdentSource for TokenizedSrc<F, C> {
     type Ident = F::Ident;
 }
 
-impl<F, C> StringSource for TokenizedSrc<F, C> {
-    type StringRef = String;
-}
-
-impl<F, C: BufContext> SpanSource for TokenizedSrc<F, C> {
-    type Span = C::Span;
-}
-
-impl<R, I, F: IdentFactory, C: BufContext> TokenStream<R, I> for TokenizedSrc<F, C> {
+impl<R, I, F, C> TokenStream<R, I> for TokenizedSrc<F, C>
+where
+    R: SpanSource<Span = C::Span>,
+    I: Interner,
+    F: IdentFactory,
+    C: BufContext,
+{
     fn next_token(
         &mut self,
-        _registry: &mut R,
-        _interner: &mut I,
-    ) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
+        registry: &mut R,
+        interner: &mut I,
+    ) -> Option<LexItem<Self::Ident, I::StringRef, R::Span>> {
         self.tokens
-            .next()
+            .next_token(registry, interner)
             .map(|(t, r)| (t, self.context.mk_span(r)))
     }
 }

@@ -1,7 +1,7 @@
 use super::lex::{Lex, Literal, SemanticToken, StringSource};
 use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
-use super::{CompositeSession, NextToken};
+use super::{CompositeSession, Interner, NextToken};
 
 use crate::codebase::{Codebase, CodebaseError};
 use crate::semantics::{Semantics, TokenStreamState};
@@ -33,7 +33,7 @@ where
         <Self as SpanSource>::Span,
     >,
     R: SpanSystem,
-    I: StringSource,
+    I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
     Self: Backend<R::Span>,

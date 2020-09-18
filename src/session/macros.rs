@@ -8,7 +8,7 @@ use crate::session::diagnostics::EmitDiag;
 use crate::session::lex::LexItem;
 use crate::session::resolve::Ident;
 use crate::session::resolve::{NameTable, StartScope};
-use crate::session::TokenStream;
+use crate::session::{Interner, TokenStream};
 use crate::span::*;
 use crate::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::syntax::IdentSource;
@@ -47,7 +47,7 @@ impl<'a, C, R: SpanSource, II: StringSource, N, B, D, I, L, H> MacroSource
     type MacroId = MacroId;
 }
 
-impl<'a, C, RR, II, N, B, D, I, R>
+impl<'a, C, RR, II, N, B, D, I>
     MacroTable<
         <Self as IdentSource>::Ident,
         Literal<<Self as StringSource>::StringRef>,
@@ -57,18 +57,17 @@ impl<'a, C, RR, II, N, B, D, I, R>
         C,
         RR,
         II,
-        VecMacroTable<I, Literal<R>, <RR as AddMacroDef<RR::Span>>::MacroDefHandle>,
+        VecMacroTable<I, Literal<II::StringRef>, <RR as AddMacroDef<RR::Span>>::MacroDefHandle>,
         N,
         B,
         D,
     >
 where
     I: AsRef<str> + Debug + Clone + Eq,
-    R: Clone + Debug + Eq,
-    Self: Lex<RR, II, Span = RR::Span, Ident = I, StringRef = R>,
+    Self: Lex<RR, II, Span = RR::Span, Ident = I, StringRef = II::StringRef>,
     C: Codebase,
     RR: SpanSystem,
-    II: StringSource,
+    II: Interner,
     Self: NextToken,
     Self: EmitDiag<RR::Span, RR::Stripped>,
     Self: StartScope<<Self as IdentSource>::Ident> + NameTable<<Self as IdentSource>::Ident>,
@@ -262,22 +261,10 @@ where
     type Ident = I;
 }
 
-impl<I, R, F> StringSource for MacroExpansionIter<I, Token<I, Literal<R>>, F>
-where
-    R: Clone + Debug + Eq,
-{
-    type StringRef = R;
-}
-
-impl<I, L, F> SpanSource for MacroExpansionIter<I, Token<I, L>, F>
-where
-    F: MacroCallCtx,
-{
-    type Span = F::Span;
-}
-
 impl<RR, II, I, R, F> TokenStream<RR, II> for MacroExpansionIter<I, Token<I, Literal<R>>, F>
 where
+    RR: SpanSource<Span = F::Span>,
+    II: StringSource<StringRef = R>,
     I: AsRef<str> + Clone + Debug + Eq,
     R: Clone + Debug + Eq,
     F: MacroCallCtx,
@@ -287,7 +274,7 @@ where
         &mut self,
         _registry: &mut RR,
         _interner: &mut II,
-    ) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>> {
+    ) -> Option<LexItem<Self::Ident, II::StringRef, RR::Span>> {
         self.pos.take().map(|pos| {
             self.pos = self.expansion.next_pos(&pos);
             let (token, span) = self.expansion.token_and_span(pos);

@@ -102,29 +102,19 @@ impl<'a> Session<'a> {
     }
 }
 
-pub(crate) trait TokenStream<R, I>: IdentSource + StringSource + SpanSource {
+pub(crate) trait TokenStream<R: SpanSource, I: StringSource>: IdentSource {
     fn next_token(
         &mut self,
         registry: &mut R,
         interner: &mut I,
-    ) -> Option<LexItem<Self::Ident, Self::StringRef, Self::Span>>;
+    ) -> Option<LexItem<Self::Ident, I::StringRef, R::Span>>;
 }
 
 pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D> {
     pub codebase: C,
     pub registry: R,
     interner: I,
-    tokens: Vec<
-        Box<
-            dyn TokenStream<
-                R,
-                I,
-                Ident = <Self as IdentSource>::Ident,
-                StringRef = <Self as StringSource>::StringRef,
-                Span = R::Span,
-            >,
-        >,
-    >,
+    tokens: Vec<Box<dyn TokenStream<R, I, Ident = <Self as IdentSource>::Ident>>>,
     macros: M,
     names: N,
     pub builder: B,
@@ -196,10 +186,20 @@ where
     }
 }
 
+pub(crate) trait Interner: StringSource {
+    fn intern(&mut self, string: &str) -> Self::StringRef;
+}
+
 pub struct MockInterner;
 
 impl StringSource for MockInterner {
     type StringRef = String;
+}
+
+impl Interner for MockInterner {
+    fn intern(&mut self, string: &str) -> Self::StringRef {
+        string.to_owned()
+    }
 }
 
 #[cfg(test)]
