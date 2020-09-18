@@ -363,12 +363,12 @@ pub mod mock {
             name: (Self::MacroId, D::Span),
             args: MacroArgs<Token<Ident<String>, Literal<String>>, D::Span>,
         ) {
-            let args = args
+            let args = Vec::from(args)
                 .into_iter()
                 .map(|arg| {
-                    arg.into_iter()
+                    Vec::from(arg)
+                        .into_iter()
                         .map(|(arg, _)| arg)
-                        .cloned()
                         .collect::<Vec<_>>()
                         .into_boxed_slice()
                 })

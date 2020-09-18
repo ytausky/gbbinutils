@@ -187,10 +187,7 @@ impl<F: Clone, I, R> StripSpan<Span<F, I, R>> for RcContextFactory<F, I, R> {
                     (Span::File(file, range), Span::File(other_file, other_range))
                         if Rc::ptr_eq(file, other_file) =>
                     {
-                        (
-                            file.file.clone(),
-                            range.start.clone()..other_range.end.clone(),
-                        )
+                        (file.file.clone(), range.start..other_range.end)
                     }
                     _ => unimplemented!(),
                 };
