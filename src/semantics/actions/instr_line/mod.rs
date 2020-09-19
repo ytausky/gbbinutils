@@ -79,7 +79,9 @@ where
 impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
     pub fn flush_label(mut self) -> Self {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            self.session.start_scope(&label);
+            if self.session.name_visibility(&label) == Visibility::Global {
+                self.session.start_scope();
+            }
             let id = self.reloc_lookup(label, span.clone());
             self.session.define_symbol(
                 id,

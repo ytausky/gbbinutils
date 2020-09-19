@@ -321,7 +321,7 @@ pub mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::StartScope(label.into()).into(),
+                NameTableEvent::StartScope.into(),
                 NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
                 BackendEvent::DefineSymbol((MockSymbolId(0), ()), LocationCounter.into()).into()
             ]

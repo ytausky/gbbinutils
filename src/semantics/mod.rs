@@ -4,8 +4,10 @@ use self::keywords::BuiltinMnemonic;
 use crate::session::builder::*;
 use crate::session::diagnostics::Diagnostics;
 use crate::session::lex::{StringSource, TokenSeq};
+use crate::session::macros::MacroSource;
 use crate::session::reentrancy::Params;
-use crate::session::Analysis;
+use crate::session::resolve::{NameTable, ResolvedName, Visibility};
+use crate::session::{Analysis, Interner};
 use crate::span::{SpanSource, Spanned};
 use crate::syntax::actions::{LexerOutput, LineRule};
 
@@ -140,5 +142,81 @@ pub(crate) struct ExprBuilder<R, S, P> {
 impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
+    }
+}
+
+trait NameVisibility<R> {
+    fn name_visibility(&self, name: &R) -> Visibility;
+}
+
+impl<S> NameVisibility<S::StringRef> for S
+where
+    S: Interner + NameTable<<S as StringSource>::StringRef>,
+{
+    fn name_visibility(&self, name: &S::StringRef) -> Visibility {
+        if self.get_string(name).starts_with('_') {
+            Visibility::Local
+        } else {
+            Visibility::Global
+        }
+    }
+}
+
+trait DefineName<R, M, S> {
+    fn define_name(&mut self, name: R, entry: ResolvedName<M, S>);
+}
+
+impl<S> DefineName<S::StringRef, S::MacroId, S::SymbolId> for S
+where
+    S: Interner + NameTable<<S as StringSource>::StringRef> + MacroSource + SymbolSource,
+{
+    fn define_name(&mut self, name: S::StringRef, entry: ResolvedName<S::MacroId, S::SymbolId>) {
+        let visibility = self.name_visibility(&name);
+        self.define_name_with_visibility(name, visibility, entry)
+    }
+}
+
+trait ResolveName<R>: MacroSource + SymbolSource {
+    fn resolve_name(&mut self, name: &R) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+}
+
+impl<S> ResolveName<S::StringRef> for S
+where
+    S: Interner + NameTable<<S as StringSource>::StringRef>,
+{
+    fn resolve_name(
+        &mut self,
+        name: &S::StringRef,
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+        let visibility = self.name_visibility(name);
+        self.resolve_name_with_visibility(name, visibility)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::actions::tests::TestOperation;
+
+    use crate::log::Log;
+    use crate::session::mock::MockSession;
+
+    #[test]
+    fn ident_with_underscore_prefix_is_local() {
+        let session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        assert_eq!(
+            session.name_visibility(&"_loop".to_owned()),
+            Visibility::Local
+        )
+    }
+
+    #[test]
+    fn ident_without_underscore_prefix_is_global() {
+        let session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        assert_eq!(
+            session.name_visibility(&"start".to_owned()),
+            Visibility::Global
+        )
     }
 }

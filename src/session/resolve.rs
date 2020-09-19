@@ -14,8 +14,18 @@ pub use self::mock::*;
 use crate::expr::{Atom, ExprOp};
 
 pub(crate) trait NameTable<I>: MacroSource + SymbolSource {
-    fn resolve_name(&mut self, ident: &I) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
-    fn define_name(&mut self, ident: I, entry: ResolvedName<Self::MacroId, Self::SymbolId>);
+    fn resolve_name_with_visibility(
+        &mut self,
+        ident: &I,
+        visibility: Visibility,
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+
+    fn define_name_with_visibility(
+        &mut self,
+        ident: I,
+        visibility: Visibility,
+        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+    );
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,8 +35,8 @@ pub enum ResolvedName<MacroId, SymbolId> {
     Symbol(SymbolId),
 }
 
-pub trait StartScope<I> {
-    fn start_scope(&mut self, ident: &I);
+pub trait StartScope {
+    fn start_scope(&mut self);
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,27 +69,6 @@ impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
 pub(crate) enum Visibility {
     Global,
     Local,
-}
-
-pub struct DefaultIdentFactory;
-
-impl DefaultIdentFactory {
-    pub fn mk_ident(&mut self, spelling: &str) -> Ident<String> {
-        Ident {
-            name: spelling.to_string(),
-            visibility: if spelling.starts_with('_') {
-                Visibility::Local
-            } else {
-                Visibility::Global
-            },
-        }
-    }
-}
-
-impl From<&str> for Ident<String> {
-    fn from(name: &str) -> Ident<String> {
-        DefaultIdentFactory.mk_ident(name)
-    }
 }
 
 pub struct BiLevelNameTable<M, S, R> {
@@ -126,20 +115,21 @@ where
     M: MacroSource,
     B: SymbolSource,
 {
-    fn resolve_name(
+    fn resolve_name_with_visibility(
         &mut self,
         ident: &II::StringRef,
+        visibility: Visibility,
     ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-        let string = DefaultIdentFactory.mk_ident(self.interner.get_string(ident));
-        let table = self.names.select_table_mut(string.visibility);
+        let table = self.names.select_table_mut(visibility);
         let interner = &mut self.interner;
         table.get(&ident).cloned().map_or_else(
             || {
-                let representative = interner.intern(&string.name.to_ascii_uppercase());
+                let representative =
+                    interner.intern(&interner.get_string(ident).to_ascii_uppercase());
                 if let Some(keyword @ ResolvedName::Keyword(_)) =
                     table.get(&representative).cloned()
                 {
-                    table.insert(representative, keyword.clone());
+                    table.insert(ident.clone(), keyword.clone());
                     Some(keyword)
                 } else {
                     None
@@ -149,18 +139,18 @@ where
         )
     }
 
-    fn define_name(
+    fn define_name_with_visibility(
         &mut self,
         ident: II::StringRef,
+        visibility: Visibility,
         entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     ) {
-        let string = DefaultIdentFactory.mk_ident(self.interner.get_string(&ident));
-        let table = self.names.select_table_mut(string.visibility);
+        let table = self.names.select_table_mut(visibility);
         table.insert(ident, entry);
     }
 }
 
-impl<C, R: SpanSource, II, M, B, D> StartScope<II::StringRef>
+impl<C, R: SpanSource, II, M, B, D> StartScope
     for CompositeSession<
         C,
         R,
@@ -175,11 +165,8 @@ where
     M: MacroSource,
     B: SymbolSource,
 {
-    fn start_scope(&mut self, ident: &II::StringRef) {
-        let ident = DefaultIdentFactory.mk_ident(self.interner.get_string(&ident));
-        if ident.visibility == Visibility::Global {
-            self.names.local = HashMap::new();
-        }
+    fn start_scope(&mut self) {
+        self.names.local = HashMap::new();
     }
 }
 
@@ -226,17 +213,19 @@ mod mock {
         B: SymbolSource,
         T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
     {
-        fn resolve_name(
+        fn resolve_name_with_visibility(
             &mut self,
             ident: &String,
+            visibility: Visibility,
         ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-            let ident = DefaultIdentFactory.mk_ident(ident);
-            let table = self.names.names.select_table_mut(ident.visibility);
-            table.get(&ident.name).cloned().map_or_else(
+            let table = self.names.names.select_table_mut(visibility);
+            table.get(ident).cloned().map_or_else(
                 || {
-                    let repr = ident.name.to_ascii_uppercase();
-                    if let Some(keyword @ ResolvedName::Keyword(_)) = table.get(&repr).cloned() {
-                        table.insert(ident.name.clone(), keyword.clone());
+                    let representative = ident.to_ascii_uppercase();
+                    if let Some(keyword @ ResolvedName::Keyword(_)) =
+                        table.get(&representative).cloned()
+                    {
+                        table.insert(ident.clone(), keyword.clone());
                         Some(keyword)
                     } else {
                         None
@@ -246,21 +235,19 @@ mod mock {
             )
         }
 
-        fn define_name(
+        fn define_name_with_visibility(
             &mut self,
             ident: String,
+            visibility: Visibility,
             entry: ResolvedName<Self::MacroId, Self::SymbolId>,
         ) {
-            let table = self
-                .names
-                .names
-                .select_table_mut(DefaultIdentFactory.mk_ident(&ident).visibility);
+            let table = self.names.names.select_table_mut(visibility);
             table.insert(ident.clone(), entry.clone());
             self.names.log.push(NameTableEvent::Insert(ident, entry))
         }
     }
 
-    impl<C, R, I, M, B, D, T> StartScope<String>
+    impl<C, R, I, M, B, D, T> StartScope
         for CompositeSession<
             C,
             R,
@@ -277,19 +264,16 @@ mod mock {
         B: SymbolSource,
         T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
     {
-        fn start_scope(&mut self, ident: &String) {
-            let ident = DefaultIdentFactory.mk_ident(&ident);
-            if ident.visibility == Visibility::Global {
-                self.names.names.local = HashMap::new();
-            }
-            self.names.log.push(NameTableEvent::StartScope(ident.name))
+        fn start_scope(&mut self) {
+            self.names.names.local = HashMap::new();
+            self.names.log.push(NameTableEvent::StartScope)
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub enum NameTableEvent<MacroId, SymbolId> {
         Insert(String, ResolvedName<MacroId, SymbolId>),
-        StartScope(String),
+        StartScope,
     }
 }
 
@@ -303,28 +287,16 @@ mod tests {
     use crate::session::mock::MockSession;
 
     #[test]
-    fn ident_with_underscore_prefix_is_local() {
-        assert_eq!(
-            DefaultIdentFactory.mk_ident("_loop").visibility,
-            Visibility::Local
-        )
-    }
-
-    #[test]
-    fn ident_without_underscore_prefix_is_global() {
-        assert_eq!(
-            DefaultIdentFactory.mk_ident("start").visibility,
-            Visibility::Global
-        )
-    }
-
-    #[test]
     fn retrieve_global_name() {
         let name = "start";
         let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
-        session.define_name(name.into(), ResolvedName::Symbol(MockSymbolId(42)));
+        session.define_name_with_visibility(
+            name.into(),
+            Visibility::Global,
+            ResolvedName::Symbol(MockSymbolId(42)),
+        );
         assert_eq!(
-            session.resolve_name(&name.into()),
+            session.resolve_name_with_visibility(&name.into(), Visibility::Global),
             Some(ResolvedName::Symbol(MockSymbolId(42)))
         )
     }
@@ -332,10 +304,14 @@ mod tests {
     #[test]
     fn retrieve_local_name() {
         let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
-        session.start_scope(&"global".into());
-        session.define_name("_local".into(), ResolvedName::Symbol(MockSymbolId(42)));
+        session.start_scope();
+        session.define_name_with_visibility(
+            "_local".into(),
+            Visibility::Local,
+            ResolvedName::Symbol(MockSymbolId(42)),
+        );
         assert_eq!(
-            session.resolve_name(&"_local".into()),
+            session.resolve_name_with_visibility(&"_local".into(), Visibility::Local),
             Some(ResolvedName::Symbol(MockSymbolId(42)))
         )
     }
@@ -343,9 +319,16 @@ mod tests {
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
         let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
-        session.start_scope(&"global1".into());
-        session.define_name("_local".into(), ResolvedName::Symbol(MockSymbolId(42)));
-        session.start_scope(&"global2".into());
-        assert_eq!(session.resolve_name(&"_local".into()), None)
+        session.start_scope();
+        session.define_name_with_visibility(
+            "_local".into(),
+            Visibility::Local,
+            ResolvedName::Symbol(MockSymbolId(42)),
+        );
+        session.start_scope();
+        assert_eq!(
+            session.resolve_name_with_visibility(&"_local".into(), Visibility::Local),
+            None
+        )
     }
 }

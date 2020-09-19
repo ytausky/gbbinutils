@@ -3,6 +3,7 @@ use super::*;
 use crate::semantics::actions::TokenStreamState;
 use crate::semantics::arg::*;
 use crate::semantics::keywords::{Directive, Mnemonic};
+use crate::semantics::ResolveName;
 use crate::session::builder::SymbolSource;
 use crate::session::resolve::NameTable;
 use crate::syntax::actions::{BuiltinInstrContext, InstrFinalizer};
@@ -133,12 +134,15 @@ trait ClassifyExpr<I, S>: SymbolSource {
     fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()>;
 }
 
-impl<T, R, S> Resolve<R, S> for T
+impl<T, S> Resolve<T::StringRef, S> for T
 where
-    T: NameTable<R> + Diagnostics<S> + AllocSymbol<S>,
+    T: Interner + NameTable<<T as StringSource>::StringRef> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()> {
+    fn resolve_names(
+        &mut self,
+        arg: ParsedArg<T::StringRef, S>,
+    ) -> Result<Arg<Self::SymbolId, T::StringRef, S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
                 BareArg::Symbol(symbol, span) => Ok(Arg::Bare(BareArg::Symbol(symbol, span))),
@@ -156,12 +160,15 @@ where
     }
 }
 
-impl<T, R, S> ClassifyExpr<R, S> for T
+impl<T, S> ClassifyExpr<T::StringRef, S> for T
 where
-    T: NameTable<R> + Diagnostics<S> + AllocSymbol<S>,
+    T: Interner + NameTable<<T as StringSource>::StringRef> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn classify_expr(&mut self, mut expr: Expr<R, S>) -> Result<BareArg<Self::SymbolId, S>, ()> {
+    fn classify_expr(
+        &mut self,
+        mut expr: Expr<T::StringRef, S>,
+    ) -> Result<BareArg<Self::SymbolId, S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {

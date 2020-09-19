@@ -30,7 +30,7 @@ pub(crate) trait Analysis:
     + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
-    + StartScope<<Self as StringSource>::StringRef>
+    + StartScope
     + NameTable<<Self as StringSource>::StringRef>
     + MacroTable<
         <Self as StringSource>::StringRef,
@@ -49,7 +49,7 @@ impl<T> Analysis for T where
         + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
         + Backend<<Self as SpanSource>::Span>
         + Diagnostics<<Self as SpanSource>::Span>
-        + StartScope<<Self as StringSource>::StringRef>
+        + StartScope
         + NameTable<<Self as StringSource>::StringRef>
         + MacroTable<
             <Self as StringSource>::StringRef,
@@ -90,11 +90,19 @@ impl<'a> Session<'a> {
         };
         for (string, name) in crate::object::eval::BUILTIN_SYMBOLS {
             let string = session.interner.intern(string);
-            session.define_name(string, ResolvedName::Symbol(*name))
+            session.define_name_with_visibility(
+                string,
+                Visibility::Global,
+                ResolvedName::Symbol(*name),
+            )
         }
         for (ident, keyword) in KEYWORDS {
             let string = session.interner.intern(ident);
-            session.define_name(string, ResolvedName::Keyword(keyword))
+            session.define_name_with_visibility(
+                string,
+                Visibility::Global,
+                ResolvedName::Keyword(keyword),
+            )
         }
         session
     }

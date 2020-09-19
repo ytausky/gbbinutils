@@ -60,7 +60,7 @@ where
     Self: NextToken,
     Self: Interner,
     Self: EmitDiag<RR::Span, RR::Stripped>,
-    Self: StartScope<II::StringRef> + NameTable<II::StringRef>,
+    Self: StartScope + NameTable<II::StringRef>,
     Self: Backend<RR::Span>,
     Self: MacroSource<MacroId = MacroId>,
     <Self as StringSource>::StringRef: 'static,

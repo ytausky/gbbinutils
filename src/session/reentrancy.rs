@@ -35,8 +35,7 @@ where
     R: SpanSystem<<Self as StringSource>::StringRef>,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
-    Self: StartScope<<Self as StringSource>::StringRef>
-        + NameTable<<Self as StringSource>::StringRef>,
+    Self: StartScope + NameTable<<Self as StringSource>::StringRef>,
     Self: Backend<R::Span>,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
