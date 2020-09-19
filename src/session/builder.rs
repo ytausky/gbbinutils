@@ -3,7 +3,7 @@ use crate::object::*;
 use crate::session::diagnostics::{Diagnostics, DiagnosticsView};
 use crate::session::lex::StringSource;
 use crate::span::{MergeSpans, SpanSource, StripSpan};
-use crate::{BuiltinSymbols, CompositeSession};
+use crate::CompositeSession;
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
     fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>);
@@ -228,14 +228,6 @@ impl<S: Clone> SymbolSource for ObjectBuilder<S> {
 impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
     fn alloc_symbol(&mut self, _span: S) -> Self::SymbolId {
         self.object.content.symbols.alloc().into()
-    }
-}
-
-impl<S: Clone> BuiltinSymbols for ObjectBuilder<S> {
-    type Name = SymbolId;
-
-    fn builtin_symbols(&self) -> &[(&str, Self::Name)] {
-        crate::object::eval::BUILTIN_SYMBOLS
     }
 }
 

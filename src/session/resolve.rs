@@ -56,7 +56,7 @@ impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Visibility {
+pub(crate) enum Visibility {
     Global,
     Local,
 }
@@ -82,48 +82,64 @@ impl From<&str> for Ident<String> {
     }
 }
 
-pub struct BasicNameTable<MacroId, SymbolId> {
-    table: HashMap<String, ResolvedName<MacroId, SymbolId>>,
+pub struct BiLevelNameTable<M, S, R> {
+    pub global: HashMap<R, ResolvedName<M, S>>,
+    local: HashMap<R, ResolvedName<M, S>>,
 }
 
-impl<MacroId, SymbolId> Default for BasicNameTable<MacroId, SymbolId> {
-    fn default() -> Self {
-        Self {
-            table: HashMap::default(),
+impl<M, S, R> BiLevelNameTable<M, S, R> {
+    pub fn new() -> Self {
+        BiLevelNameTable {
+            global: HashMap::new(),
+            local: HashMap::new(),
+        }
+    }
+
+    fn select_table_mut(&mut self, visibility: Visibility) -> &mut HashMap<R, ResolvedName<M, S>> {
+        match visibility {
+            Visibility::Global => &mut self.global,
+            Visibility::Local => &mut self.local,
         }
     }
 }
 
-impl<MacroId, SymbolId> MacroSource for BasicNameTable<MacroId, SymbolId>
-where
-    MacroId: Clone,
-    SymbolId: Clone,
-{
-    type MacroId = MacroId;
+impl<M: Clone, S, R> MacroSource for BiLevelNameTable<M, S, R> {
+    type MacroId = M;
 }
 
-impl<MacroId, SymbolId> SymbolSource for BasicNameTable<MacroId, SymbolId>
-where
-    MacroId: Clone,
-    SymbolId: Clone,
-{
-    type SymbolId = SymbolId;
+impl<M, S: Clone, R> SymbolSource for BiLevelNameTable<M, S, R> {
+    type SymbolId = S;
 }
 
-impl<MacroId, SymbolId> NameTable<String> for BasicNameTable<MacroId, SymbolId>
+impl<C, R: SpanSource, II, M, B, D> NameTable<II::StringRef>
+    for CompositeSession<
+        C,
+        R,
+        II,
+        M,
+        BiLevelNameTable<M::MacroId, B::SymbolId, II::StringRef>,
+        B,
+        D,
+    >
 where
-    MacroId: Clone,
-    SymbolId: Clone,
+    II: Interner,
+    M: MacroSource,
+    B: SymbolSource,
 {
     fn resolve_name(
         &mut self,
-        ident: &String,
+        ident: &II::StringRef,
     ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-        self.table.get(ident).cloned().map_or_else(
+        let string = DefaultIdentFactory.mk_ident(self.interner.get_string(ident));
+        let table = self.names.select_table_mut(string.visibility);
+        let interner = &mut self.interner;
+        table.get(&ident).cloned().map_or_else(
             || {
-                let repr = ident.to_ascii_uppercase();
-                if let Some(keyword @ ResolvedName::Keyword(_)) = self.table.get(&repr).cloned() {
-                    self.table.insert(repr, keyword.clone());
+                let representative = interner.intern(&string.name.to_ascii_uppercase());
+                if let Some(keyword @ ResolvedName::Keyword(_)) =
+                    table.get(&representative).cloned()
+                {
+                    table.insert(representative, keyword.clone());
                     Some(keyword)
                 } else {
                     None
@@ -133,101 +149,37 @@ where
         )
     }
 
-    fn define_name(&mut self, ident: String, entry: ResolvedName<Self::MacroId, Self::SymbolId>) {
-        self.table.insert(ident, entry);
-    }
-}
-
-pub struct BiLevelNameTable<T> {
-    global: T,
-    local: Option<T>,
-}
-
-impl<T: Default> BiLevelNameTable<T> {
-    pub fn new() -> Self {
-        BiLevelNameTable {
-            global: Default::default(),
-            local: None,
-        }
-    }
-
-    fn select_table_mut(&mut self, ident: &Ident<String>) -> &mut T {
-        match ident.visibility {
-            Visibility::Global => &mut self.global,
-            Visibility::Local => self.local.as_mut().unwrap(),
-        }
-    }
-}
-
-impl<T: MacroSource> MacroSource for BiLevelNameTable<T> {
-    type MacroId = T::MacroId;
-}
-
-impl<T: SymbolSource> SymbolSource for BiLevelNameTable<T> {
-    type SymbolId = T::SymbolId;
-}
-
-impl<T: Default + NameTable<String>> NameTable<Ident<String>> for BiLevelNameTable<T> {
-    fn resolve_name(
-        &mut self,
-        ident: &Ident<String>,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-        self.select_table_mut(ident).resolve_name(&ident.name)
-    }
-
-    fn define_name(
-        &mut self,
-        ident: Ident<String>,
-        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
-    ) {
-        self.select_table_mut(&ident).define_name(ident.name, entry)
-    }
-}
-
-impl<T: Default> StartScope<Ident<String>> for BiLevelNameTable<T> {
-    fn start_scope(&mut self, ident: &Ident<String>) {
-        if ident.visibility == Visibility::Global {
-            self.local.replace(Default::default());
-        }
-    }
-}
-
-impl<C, R: SpanSource, II, M, N, B, D> NameTable<II::StringRef>
-    for CompositeSession<C, R, II, M, N, B, D>
-where
-    II: Interner,
-    N: NameTable<Ident<String>, MacroId = Self::MacroId, SymbolId = Self::SymbolId>,
-    Self: MacroSource + SymbolSource,
-{
-    fn resolve_name(
-        &mut self,
-        ident: &II::StringRef,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-        self.names
-            .resolve_name(&DefaultIdentFactory.mk_ident(self.interner.get_string(ident)))
-    }
-
     fn define_name(
         &mut self,
         ident: II::StringRef,
         entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     ) {
-        self.names.define_name(
-            DefaultIdentFactory.mk_ident(self.interner.get_string(&ident)),
-            entry,
-        )
+        let string = DefaultIdentFactory.mk_ident(self.interner.get_string(&ident));
+        let table = self.names.select_table_mut(string.visibility);
+        table.insert(ident, entry);
     }
 }
 
-impl<C, R: SpanSource, II, M, N, B, D> StartScope<II::StringRef>
-    for CompositeSession<C, R, II, M, N, B, D>
+impl<C, R: SpanSource, II, M, B, D> StartScope<II::StringRef>
+    for CompositeSession<
+        C,
+        R,
+        II,
+        M,
+        BiLevelNameTable<M::MacroId, B::SymbolId, II::StringRef>,
+        B,
+        D,
+    >
 where
     II: Interner,
-    N: StartScope<Ident<String>>,
+    M: MacroSource,
+    B: SymbolSource,
 {
     fn start_scope(&mut self, ident: &II::StringRef) {
-        self.names
-            .start_scope(&DefaultIdentFactory.mk_ident(self.interner.get_string(ident)))
+        let ident = DefaultIdentFactory.mk_ident(self.interner.get_string(&ident));
+        if ident.visibility == Visibility::Global {
+            self.names.local = HashMap::new();
+        }
     }
 }
 
@@ -236,6 +188,7 @@ mod mock {
     use super::*;
 
     use crate::log::Log;
+    use crate::session::lex::StringSource;
 
     pub(crate) struct MockNameTable<N, T> {
         names: N,
@@ -256,48 +209,98 @@ mod mock {
         type SymbolId = N::SymbolId;
     }
 
-    impl<N, T> NameTable<Ident<String>> for MockNameTable<N, T>
+    impl<C, R, I, M, B, D, T> NameTable<String>
+        for CompositeSession<
+            C,
+            R,
+            I,
+            M,
+            MockNameTable<BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>, T>,
+            B,
+            D,
+        >
     where
-        N: NameTable<Ident<String>>,
-        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
+        R: SpanSource,
+        I: StringSource<StringRef = String>,
+        M: MacroSource,
+        B: SymbolSource,
+        T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
     {
         fn resolve_name(
             &mut self,
-            ident: &Ident<String>,
+            ident: &String,
         ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-            self.names.resolve_name(ident)
+            let ident = DefaultIdentFactory.mk_ident(ident);
+            let table = self.names.names.select_table_mut(ident.visibility);
+            table.get(&ident.name).cloned().map_or_else(
+                || {
+                    let repr = ident.name.to_ascii_uppercase();
+                    if let Some(keyword @ ResolvedName::Keyword(_)) = table.get(&repr).cloned() {
+                        table.insert(ident.name.clone(), keyword.clone());
+                        Some(keyword)
+                    } else {
+                        None
+                    }
+                },
+                Some,
+            )
         }
 
         fn define_name(
             &mut self,
-            ident: Ident<String>,
+            ident: String,
             entry: ResolvedName<Self::MacroId, Self::SymbolId>,
         ) {
-            self.names.define_name(ident.clone(), entry.clone());
-            self.log.push(NameTableEvent::Insert(ident, entry))
+            let table = self
+                .names
+                .names
+                .select_table_mut(DefaultIdentFactory.mk_ident(&ident).visibility);
+            table.insert(ident.clone(), entry.clone());
+            self.names.log.push(NameTableEvent::Insert(ident, entry))
         }
     }
 
-    impl<N, T> StartScope<Ident<String>> for MockNameTable<N, T>
+    impl<C, R, I, M, B, D, T> StartScope<String>
+        for CompositeSession<
+            C,
+            R,
+            I,
+            M,
+            MockNameTable<BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>, T>,
+            B,
+            D,
+        >
     where
-        N: NameTable<Ident<String>>,
-        T: From<NameTableEvent<N::MacroId, N::SymbolId>>,
+        R: SpanSource,
+        I: StringSource,
+        M: MacroSource,
+        B: SymbolSource,
+        T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
     {
-        fn start_scope(&mut self, ident: &Ident<String>) {
-            self.log.push(NameTableEvent::StartScope(ident.clone()))
+        fn start_scope(&mut self, ident: &String) {
+            let ident = DefaultIdentFactory.mk_ident(&ident);
+            if ident.visibility == Visibility::Global {
+                self.names.names.local = HashMap::new();
+            }
+            self.names.log.push(NameTableEvent::StartScope(ident.name))
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub enum NameTableEvent<MacroId, SymbolId> {
-        Insert(Ident<String>, ResolvedName<MacroId, SymbolId>),
-        StartScope(Ident<String>),
+        Insert(String, ResolvedName<MacroId, SymbolId>),
+        StartScope(String),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::log::Log;
+    use crate::semantics::actions::tests::TestOperation;
+    use crate::session::builder::mock::MockSymbolId;
+    use crate::session::mock::MockSession;
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
@@ -316,40 +319,33 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn panic_when_first_definition_is_local() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
-        table.define_name("_loop".into(), ResolvedName::Symbol(()));
-    }
-
-    #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
-        table.define_name(name.into(), ResolvedName::Symbol(42));
+        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        session.define_name(name.into(), ResolvedName::Symbol(MockSymbolId(42)));
         assert_eq!(
-            table.resolve_name(&name.into()),
-            Some(ResolvedName::Symbol(42))
+            session.resolve_name(&name.into()),
+            Some(ResolvedName::Symbol(MockSymbolId(42)))
         )
     }
 
     #[test]
     fn retrieve_local_name() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
-        table.start_scope(&"global".into());
-        table.define_name("_local".into(), ResolvedName::Symbol(42));
+        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        session.start_scope(&"global".into());
+        session.define_name("_local".into(), ResolvedName::Symbol(MockSymbolId(42)));
         assert_eq!(
-            table.resolve_name(&"_local".into()),
-            Some(ResolvedName::Symbol(42))
+            session.resolve_name(&"_local".into()),
+            Some(ResolvedName::Symbol(MockSymbolId(42)))
         )
     }
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut table = BiLevelNameTable::<BasicNameTable<(), _>>::new();
-        table.start_scope(&"global1".into());
-        table.define_name("_local".into(), ResolvedName::Symbol(42));
-        table.start_scope(&"global2".into());
-        assert_eq!(table.resolve_name(&"_local".into()), None)
+        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        session.start_scope(&"global1".into());
+        session.define_name("_local".into(), ResolvedName::Symbol(MockSymbolId(42)));
+        session.start_scope(&"global2".into());
+        assert_eq!(session.resolve_name(&"_local".into()), None)
     }
 }

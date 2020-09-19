@@ -97,12 +97,6 @@ fn try_assemble<'a>(
     Ok(result)
 }
 
-trait BuiltinSymbols {
-    type Name;
-
-    fn builtin_symbols(&self) -> &[(&str, Self::Name)];
-}
-
 #[cfg(test)]
 mod log {
     use std::cell::RefCell;

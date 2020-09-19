@@ -10,7 +10,6 @@ use crate::semantics::keywords::KEYWORDS;
 use crate::session::diagnostics::{Diagnostics, OutputForwarder};
 use crate::span::{MergeSpans, RcContextFactory, Span, SpanSource, StripSpan};
 use crate::syntax::{Sigil, Token};
-use crate::BuiltinSymbols;
 
 use std::collections::HashMap;
 
@@ -69,7 +68,7 @@ pub(crate) type Session<'a> = CompositeSession<
     RcContextFactory<BufId, StringId>,
     HashInterner,
     VecMacroTable<StringId, Span<BufId, StringId>>,
-    BiLevelNameTable<BasicNameTable<MacroId, SymbolId>>,
+    BiLevelNameTable<MacroId, SymbolId, StringId>,
     ObjectBuilder<Span<BufId, StringId>>,
     OutputForwarder<'a>,
 >;
@@ -89,11 +88,9 @@ impl<'a> Session<'a> {
             builder: ObjectBuilder::new(),
             diagnostics,
         };
-        for (string, name) in session.builder.builtin_symbols() {
-            session.names.define_name(
-                DefaultIdentFactory.mk_ident(string),
-                ResolvedName::Symbol(*name),
-            )
+        for (string, name) in crate::object::eval::BUILTIN_SYMBOLS {
+            let string = session.interner.intern(string);
+            session.define_name(string, ResolvedName::Symbol(*name))
         }
         for (ident, keyword) in KEYWORDS {
             let string = session.interner.intern(ident);
@@ -217,7 +214,7 @@ pub(crate) struct HashInterner {
     strings: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct StringId(usize);
 
 impl HashInterner {
@@ -267,7 +264,7 @@ pub mod mock {
         MockDiagnostics<T, S>,
         MockInterner,
         MockMacroTable<T>,
-        MockNameTable<BiLevelNameTable<BasicNameTable<MockMacroId, MockSymbolId>>, T>,
+        MockNameTable<BiLevelNameTable<MockMacroId, MockSymbolId, String>, T>,
         MockBackend<SerialIdAllocator<MockSymbolId>, T>,
         MockDiagnostics<T, S>,
     >;
@@ -276,7 +273,9 @@ pub mod mock {
         pub fn new(log: Log<T>) -> Self {
             let mut names = BiLevelNameTable::new();
             for (ident, keyword) in KEYWORDS {
-                names.define_name((*ident).into(), ResolvedName::Keyword(keyword))
+                names
+                    .global
+                    .insert((*ident).into(), ResolvedName::Keyword(keyword));
             }
             CompositeSession {
                 codebase: MockCodebase::with_log(log.clone()),

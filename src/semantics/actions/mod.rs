@@ -121,8 +121,6 @@ impl<'a, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, S> {
 pub mod tests {
     use super::*;
 
-    pub use crate::session::resolve::BasicNameTable;
-
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
@@ -264,7 +262,7 @@ pub mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(Ident::from(name), ResolvedName::Symbol(MockSymbolId(0)))
+                NameTableEvent::Insert(name.to_owned(), ResolvedName::Symbol(MockSymbolId(0)))
                     .into(),
                 BackendEvent::EmitFragment(Fragment::Embedded(
                     0b11_000_111,

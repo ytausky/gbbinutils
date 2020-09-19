@@ -4,6 +4,7 @@ use crate::span::{FileInclusion, SpanDraft, SpanSource, SpanSystem};
 use crate::syntax::*;
 
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::rc::Rc;
 
 pub type LexItem<R, S> = (Result<SemanticToken<R>, LexError>, S);
@@ -54,7 +55,7 @@ where
 }
 
 pub trait StringSource {
-    type StringRef: Clone + Debug + Eq;
+    type StringRef: Clone + Debug + Eq + Hash;
 }
 
 pub struct TokenizedSrc<S> {

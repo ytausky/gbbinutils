@@ -18,7 +18,7 @@ macro_rules! set_state {
     };
 }
 
-mod actions;
+pub mod actions;
 mod arg;
 pub mod keywords;
 

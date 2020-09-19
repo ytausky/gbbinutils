@@ -39,10 +39,14 @@ pub type MacroArgs<T, S> = Box<[Box<[(T, S)]>]>;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacroId(usize);
 
-impl<'a, C, R: SpanSource, II: StringSource, N, B, D, RR, S> MacroSource
-    for CompositeSession<C, R, II, VecMacroTable<RR, S>, N, B, D>
-{
+impl<R, S> MacroSource for VecMacroTable<R, S> {
     type MacroId = MacroId;
+}
+
+impl<'a, C, R: SpanSource, II: StringSource, M: MacroSource, N, B, D> MacroSource
+    for CompositeSession<C, R, II, M, N, B, D>
+{
+    type MacroId = M::MacroId;
 }
 
 impl<'a, C, RR, II, N, B, D>
@@ -270,12 +274,6 @@ pub mod mock {
     pub struct MockMacroId(pub usize);
 
     impl<T> MacroSource for MockMacroTable<T> {
-        type MacroId = MockMacroId;
-    }
-
-    impl<'a, C, R: SpanSource, I: StringSource, N, B, D, T> MacroSource
-        for CompositeSession<C, R, I, MockMacroTable<T>, N, B, D>
-    {
         type MacroId = MockMacroId;
     }
 
