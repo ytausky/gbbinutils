@@ -23,7 +23,7 @@ where
     type InstrContext = Self;
 
     fn will_parse_label(mut self, label: (S::StringRef, S::Span)) -> Self::LabelContext {
-        self = self.flush_label();
+        self.flush_label();
         self.map_state(|line| LabelState::new(line, label))
     }
 }
@@ -46,7 +46,7 @@ where
         match self.session.resolve_name(&ident) {
             Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
                 if !mnemonic.binds_to_label() {
-                    self = self.flush_label();
+                    self.flush_label();
                 }
                 InstrRule::BuiltinInstr(set_state!(
                     self,
@@ -54,7 +54,7 @@ where
                 ))
             }
             Some(ResolvedName::Macro(id)) => {
-                self = self.flush_label();
+                self.flush_label();
                 InstrRule::MacroInstr(set_state!(
                     self,
                     MacroInstrState::new(self.state, (id, span))
@@ -77,7 +77,7 @@ where
 }
 
 impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
-    pub fn flush_label(mut self) -> Self {
+    pub fn flush_label(&mut self) {
         if let Some(((label, span), _params)) = self.state.label.take() {
             if self.session.name_visibility(&label) == Visibility::Global {
                 self.session.start_scope();
@@ -89,7 +89,6 @@ impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
                 Expr(vec![ExprOp::Atom(Atom::Location).with_span(span)]),
             );
         }
-        self
     }
 }
 

@@ -77,7 +77,8 @@ where
     fn act_on_eos(self, span: S::Span) -> Self {
         match self.state.mode {
             LineRule::InstrLine(state) => {
-                let semantics = set_state!(self, state).flush_label();
+                let mut semantics = set_state!(self, state);
+                semantics.flush_label();
                 set_state!(semantics, semantics.state.into())
             }
             LineRule::TokenLine(ref state) => {
