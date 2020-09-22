@@ -8,7 +8,9 @@ use crate::codebase::{BufId, FileCodebase, FileSystem};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
 use crate::session::diagnostics::{Diagnostics, OutputForwarder};
-use crate::span::{MergeSpans, RcContextFactory, Span, SpanSource, StripSpan};
+use crate::span::{
+    MergeSpans, RcContextFactory, RcFileInclusion, RcMacroExpansion, Span, SpanSource, StripSpan,
+};
 use crate::syntax::{Sigil, Token};
 
 use std::collections::HashMap;
@@ -65,11 +67,22 @@ pub(crate) trait NextToken: StringSource + SpanSource {
 
 pub(crate) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
-    RcContextFactory<BufId, StringId>,
+    RcContextFactory<BufId, Token<StringId, Literal<StringId>>, StringId>,
     HashInterner,
-    VecMacroTable<StringId, Span<BufId, StringId>>,
+    VecMacroTable<
+        StringId,
+        Span<
+            RcFileInclusion<BufId, Token<StringId, Literal<StringId>>, StringId>,
+            RcMacroExpansion<BufId, Token<StringId, Literal<StringId>>, StringId>,
+        >,
+    >,
     BiLevelNameTable<MacroId, SymbolId, StringId>,
-    ObjectBuilder<Span<BufId, StringId>>,
+    ObjectBuilder<
+        Span<
+            RcFileInclusion<BufId, Token<StringId, Literal<StringId>>, StringId>,
+            RcMacroExpansion<BufId, Token<StringId, Literal<StringId>>, StringId>,
+        >,
+    >,
     OutputForwarder<'a>,
 >;
 

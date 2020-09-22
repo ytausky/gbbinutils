@@ -9,7 +9,7 @@ use crate::session::builder::Backend;
 use crate::session::diagnostics::*;
 use crate::span::{SpanSource, SpanSystem};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
-use crate::syntax::{LexError, ParseTokenStream};
+use crate::syntax::{LexError, ParseTokenStream, Token};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -32,7 +32,10 @@ where
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >,
-    R: SpanSystem<<Self as StringSource>::StringRef>,
+    R: SpanSystem<
+        Token<<Self as StringSource>::StringRef, Literal<<Self as StringSource>::StringRef>>,
+        <Self as StringSource>::StringRef,
+    >,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<<Self as StringSource>::StringRef>,

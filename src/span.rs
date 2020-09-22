@@ -1,6 +1,4 @@
 use crate::codebase::{BufId, BufRange, TextCache};
-use crate::session::lex::Literal;
-use crate::syntax::Token;
 
 use std::cmp::Ordering;
 use std::marker::PhantomData;
@@ -39,17 +37,21 @@ pub(crate) trait StripSpan<S> {
     fn strip_span(&mut self, span: &S) -> Self::Stripped;
 }
 
-pub(crate) trait SpanSystem<R>
+pub(crate) trait SpanSystem<T, R>
 where
     Self:
         SpanSource + MergeSpans<<Self as SpanSource>::Span> + StripSpan<<Self as SpanSource>::Span>,
 {
-    fn encode_span(&mut self, draft: SpanDraft<BufId, R, Self::Span>) -> Self::Span;
+    fn encode_span(
+        &mut self,
+        span: Span<Rc<FileInclusion<BufId, Self::Span>>, Rc<MacroExpansion<T, R, Self::Span>>>,
+    ) -> Self::Span;
 }
 
-pub(crate) enum SpanDraft<F, R, S> {
-    File(Rc<FileInclusion<F, S>>, BufRange),
-    MacroExpansion(Rc<MacroExpansion<R, S>>, RangeInclusive<MacroExpansionPos>),
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Span<I, E> {
+    File(I, BufRange),
+    MacroExpansion(E, RangeInclusive<MacroExpansionPos>),
 }
 
 #[derive(Debug)]
@@ -59,17 +61,17 @@ pub(crate) struct FileInclusion<F, S> {
 }
 
 #[derive(Debug)]
-pub(crate) struct MacroExpansion<R, S> {
+pub(crate) struct MacroExpansion<T, R, S> {
     pub name_span: S,
-    pub def: Rc<MacroDef<R, S>>,
-    pub args: Box<[Box<[(Token<R, Literal<R>>, S)]>]>,
+    pub def: Rc<MacroDef<T, R, S>>,
+    pub args: Box<[Box<[(T, S)]>]>,
 }
 
 #[derive(Debug)]
-pub(crate) struct MacroDef<R, S> {
+pub(crate) struct MacroDef<T, R, S> {
     pub name_span: S,
     pub params: Box<[(R, S)]>,
-    pub body: Box<[(Token<R, Literal<R>>, S)]>,
+    pub body: Box<[(T, S)]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -122,31 +124,73 @@ fn merge_macro_expansion_ranges(
     left.start().clone()..=right.end().clone()
 }
 
-pub(crate) struct RcContextFactory<F, R>(PhantomData<(F, R)>);
+pub(crate) struct RcContextFactory<F, T, R>(PhantomData<(F, T, R)>);
 
-impl<F, R> RcContextFactory<F, R> {
+impl<F, T, R> RcContextFactory<F, T, R> {
     pub fn new() -> Self {
         RcContextFactory(PhantomData)
     }
 }
 
-impl<F: Clone, R> SpanSource for RcContextFactory<F, R> {
-    type Span = Span<F, R>;
+impl<F: Clone, T, R> SpanSource for RcContextFactory<F, T, R> {
+    type Span = Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>;
 }
 
-impl<F, R> MergeSpans<Span<F, R>> for RcContextFactory<F, R> {
-    fn merge_spans(&mut self, left: &Span<F, R>, right: &Span<F, R>) -> Span<F, R> {
+#[derive(Debug)]
+pub(crate) struct RcFileInclusion<F, T, R>(
+    pub Rc<FileInclusion<F, Span<Self, RcMacroExpansion<F, T, R>>>>,
+);
+
+#[derive(Debug)]
+pub(crate) struct RcMacroExpansion<F, T, R>(
+    pub Rc<MacroExpansion<T, R, Span<RcFileInclusion<F, T, R>, Self>>>,
+);
+
+impl<F, T, R> Clone for RcFileInclusion<F, T, R> {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
+
+impl<F, T, R> Clone for RcMacroExpansion<F, T, R> {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
+}
+
+impl<F, T, R> PartialEq for RcFileInclusion<F, T, R> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<F, T, R> PartialEq for RcMacroExpansion<F, T, R> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<F, T, R> MergeSpans<Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>>
+    for RcContextFactory<F, T, R>
+{
+    fn merge_spans(
+        &mut self,
+        left: &Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>,
+        right: &Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>,
+    ) -> Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>> {
         match (left, right) {
-            (Span::File(file, range), Span::File(other_file, other_range))
-                if Rc::ptr_eq(file, other_file) =>
-            {
-                Span::File(Rc::clone(file), range.start..other_range.end)
-            }
             (
-                Span::MacroExpansion(expansion, range),
-                Span::MacroExpansion(other_expansion, other_range),
+                Span::File(RcFileInclusion(file), range),
+                Span::File(RcFileInclusion(other_file), other_range),
+            ) if Rc::ptr_eq(file, other_file) => Span::File(
+                RcFileInclusion(Rc::clone(file)),
+                range.start..other_range.end,
+            ),
+            (
+                Span::MacroExpansion(RcMacroExpansion(expansion), range),
+                Span::MacroExpansion(RcMacroExpansion(other_expansion), other_range),
             ) if Rc::ptr_eq(expansion, other_expansion) => Span::MacroExpansion(
-                Rc::clone(expansion),
+                RcMacroExpansion(Rc::clone(expansion)),
                 merge_macro_expansion_ranges(range, other_range),
             ),
             _ => unreachable!(),
@@ -154,22 +198,28 @@ impl<F, R> MergeSpans<Span<F, R>> for RcContextFactory<F, R> {
     }
 }
 
-impl<F: Clone, R> StripSpan<Span<F, R>> for RcContextFactory<F, R> {
+impl<F: Clone, T, R> StripSpan<Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>>
+    for RcContextFactory<F, T, R>
+{
     type Stripped = StrippedBufSpan<F, BufRange>;
 
-    fn strip_span(&mut self, span: &Span<F, R>) -> Self::Stripped {
+    fn strip_span(
+        &mut self,
+        span: &Span<RcFileInclusion<F, T, R>, RcMacroExpansion<F, T, R>>,
+    ) -> Self::Stripped {
         match span {
-            Span::File(file, range) => StrippedBufSpan {
+            Span::File(RcFileInclusion(file), range) => StrippedBufSpan {
                 buf_id: file.file.clone(),
                 range: range.clone(),
             },
-            Span::MacroExpansion(expansion, range) => {
+            Span::MacroExpansion(RcMacroExpansion(expansion), range) => {
                 let start = &expansion.def.body[range.start().token].1;
                 let end = &expansion.def.body[range.end().token].1;
                 let (buf_id, range) = match (start, end) {
-                    (Span::File(file, range), Span::File(other_file, other_range))
-                        if Rc::ptr_eq(file, other_file) =>
-                    {
+                    (
+                        Span::File(RcFileInclusion(file), range),
+                        Span::File(RcFileInclusion(other_file), other_range),
+                    ) if Rc::ptr_eq(file, other_file) => {
                         (file.file.clone(), range.start..other_range.end)
                     }
                     _ => unimplemented!(),
@@ -180,46 +230,16 @@ impl<F: Clone, R> StripSpan<Span<F, R>> for RcContextFactory<F, R> {
     }
 }
 
-impl<R> SpanSystem<R> for RcContextFactory<BufId, R> {
-    fn encode_span(&mut self, draft: SpanDraft<BufId, R, Self::Span>) -> Self::Span {
-        match draft {
-            SpanDraft::File(file, range) => Span::File(file, range),
-            SpanDraft::MacroExpansion(expansion, range) => Span::MacroExpansion(expansion, range),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum Span<F, R> {
-    File(Rc<FileInclusion<F, Self>>, BufRange),
-    MacroExpansion(
-        Rc<MacroExpansion<R, Self>>,
-        RangeInclusive<MacroExpansionPos>,
-    ),
-}
-
-impl<F, R> Clone for Span<F, R> {
-    fn clone(&self) -> Self {
-        match self {
-            Self::File(file, range) => Self::File(Rc::clone(file), range.clone()),
-            Self::MacroExpansion(expansion, range) => {
-                Self::MacroExpansion(Rc::clone(expansion), range.clone())
+impl<T, R> SpanSystem<T, R> for RcContextFactory<BufId, T, R> {
+    fn encode_span(
+        &mut self,
+        span: Span<Rc<FileInclusion<BufId, Self::Span>>, Rc<MacroExpansion<T, R, Self::Span>>>,
+    ) -> Self::Span {
+        match span {
+            Span::File(file, range) => Span::File(RcFileInclusion(file), range),
+            Span::MacroExpansion(expansion, range) => {
+                Span::MacroExpansion(RcMacroExpansion(expansion), range)
             }
-        }
-    }
-}
-
-impl<F, R> PartialEq for Span<F, R> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::File(inclusion, range), Self::File(other_inclusion, other_range)) => {
-                Rc::ptr_eq(inclusion, other_inclusion) && range == other_range
-            }
-            (
-                Self::MacroExpansion(expansion, range),
-                Self::MacroExpansion(other_expansion, other_range),
-            ) => Rc::ptr_eq(expansion, other_expansion) && range == other_range,
-            _ => false,
         }
     }
 }
@@ -237,12 +257,12 @@ mod tests {
         let mut codebase = TextCache::new();
         let src = "left right";
         let buf_id = codebase.add_src_buf("/my/file", src);
-        let file = Rc::new(FileInclusion {
+        let file = RcFileInclusion::<_, (), ()>(Rc::new(FileInclusion {
             file: buf_id,
             from: None,
-        });
-        let left = Span::<_, ()>::File(Rc::clone(&file), 0..4);
-        let right = Span::<_, ()>::File(Rc::clone(&file), 5..10);
+        }));
+        let left = Span::<_, RcMacroExpansion<_, _, _>>::File(file.clone(), 0..4);
+        let right = Span::<_, RcMacroExpansion<_, _, _>>::File(file.clone(), 5..10);
         let combined = RcContextFactory::new().merge_spans(&left, &right);
         assert_eq!(combined, Span::File(file, 0..10))
     }
@@ -270,7 +290,10 @@ mod tests {
         let file = 7;
         let range = 0..1;
         let inclusion = Rc::new(FileInclusion { file, from: None });
-        let span = Span::<_, ()>::File(Rc::clone(&inclusion), range.clone());
+        let span = Span::<_, RcMacroExpansion<_, (), ()>>::File(
+            RcFileInclusion(Rc::clone(&inclusion)),
+            range.clone(),
+        );
         assert_eq!(
             RcContextFactory::new().strip_span(&span),
             StrippedBufSpan {
@@ -283,20 +306,20 @@ mod tests {
     #[test]
     fn strip_macro_span() {
         let buf_id = 1;
-        let buf_context = Rc::new(FileInclusion {
+        let buf_context = RcFileInclusion(Rc::new(FileInclusion {
             file: buf_id,
             from: None,
-        });
+        }));
         let position = MacroExpansionPos {
             token: 0,
             param_expansion: None,
         };
         let macro_base = 0;
-        let expansion = Rc::new(MacroExpansion {
-            name_span: Span::File(Rc::clone(&buf_context), 40..50),
+        let expansion = RcMacroExpansion(Rc::new(MacroExpansion {
+            name_span: Span::File(buf_context.clone(), 40..50),
             def: mk_macro_def(&buf_context, macro_base),
             args: Box::new([]),
-        });
+        }));
         let span = Span::MacroExpansion(expansion, position.clone()..=position);
         let stripped = StrippedBufSpan {
             buf_id,
@@ -306,15 +329,15 @@ mod tests {
     }
 
     fn mk_macro_def<B>(
-        buf_context: &Rc<FileInclusion<B, Span<B, ()>>>,
+        buf_context: &RcFileInclusion<B, (), ()>,
         base: usize,
-    ) -> Rc<MacroDef<(), Span<B, ()>>> {
+    ) -> Rc<MacroDef<(), (), Span<RcFileInclusion<B, (), ()>, RcMacroExpansion<B, (), ()>>>> {
         Rc::new(MacroDef {
-            name_span: Span::File(Rc::clone(buf_context), macro_name_range(base)),
+            name_span: Span::File((*buf_context).clone(), macro_name_range(base)),
             params: Box::new([]),
             body: Box::new([(
-                Token::Ident(()),
-                Span::File(Rc::clone(buf_context), macro_body_range(base)),
+                (),
+                Span::File((*buf_context).clone(), macro_body_range(base)),
             )]),
         })
     }

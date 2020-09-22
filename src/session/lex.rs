@@ -1,6 +1,6 @@
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::session::{CompositeSession, Interner, TokenStream};
-use crate::span::{FileInclusion, SpanDraft, SpanSource, SpanSystem};
+use crate::span::{FileInclusion, Span, SpanSource, SpanSystem};
 use crate::syntax::*;
 
 use std::fmt::Debug;
@@ -36,7 +36,7 @@ impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D
 where
     C: Codebase,
     I: Interner,
-    R: SpanSystem<I::StringRef>,
+    R: SpanSystem<Token<I::StringRef, Literal<I::StringRef>>, I::StringRef>,
 {
     type TokenIter = TokenizedSrc<R::Span>;
 
@@ -74,7 +74,7 @@ impl<S> TokenizedSrc<S> {
 
 impl<R, I, S> TokenStream<R, I> for TokenizedSrc<S>
 where
-    R: SpanSystem<I::StringRef, Span = S>,
+    R: SpanSystem<Token<I::StringRef, Literal<I::StringRef>>, I::StringRef, Span = S>,
     I: Interner,
     S: Clone,
 {
@@ -86,7 +86,7 @@ where
         self.tokens.next_token(registry, interner).map(|(t, r)| {
             (
                 t,
-                registry.encode_span(SpanDraft::File(Rc::clone(&self.inclusion), r)),
+                registry.encode_span(Span::File(self.inclusion.clone(), r)),
             )
         })
     }
