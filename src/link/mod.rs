@@ -1,7 +1,7 @@
+use crate::diagnostics::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::object::num::Num;
 use crate::object::*;
 use crate::session::builder::Width;
-use crate::session::diagnostics::{BackendDiagnostics, IgnoreDiagnostics};
 
 use std::borrow::Borrow;
 
@@ -147,9 +147,9 @@ impl Width {
 mod tests {
     use super::*;
 
+    use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::*;
     use crate::session::builder::*;
-    use crate::session::diagnostics::IgnoreDiagnostics;
     use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
 

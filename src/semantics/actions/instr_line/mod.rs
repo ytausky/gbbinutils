@@ -3,9 +3,9 @@ use self::macro_instr::{MacroInstrSemantics, MacroInstrState};
 
 use super::{Keyword, Semantics, TokenStreamSemantics};
 
+use crate::diagnostics::Message;
 use crate::expr::{Atom, Expr, ExprOp};
 use crate::semantics::*;
-use crate::session::diagnostics::Message;
 use crate::session::resolve::ResolvedName;
 use crate::span::WithSpan;
 use crate::syntax::actions::{InstrContext, InstrLineContext, InstrRule};
@@ -119,9 +119,9 @@ where
 mod tests {
     use super::*;
 
+    use crate::diagnostics::{DiagnosticsEvent, Message, MockSpan};
     use crate::semantics::actions::tests::*;
     use crate::session::builder::mock::MockSymbolId;
-    use crate::session::diagnostics::{DiagnosticsEvent, Message, MockSpan};
     use crate::syntax::actions::*;
 
     #[test]

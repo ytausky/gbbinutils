@@ -7,10 +7,7 @@
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 
-use super::CompositeSession;
-
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
-use crate::session::lex::StringSource;
 use crate::span::*;
 
 #[cfg(test)]
@@ -53,47 +50,13 @@ pub(crate) struct OutputForwarder<'a> {
     pub output: &'a mut dyn FnMut(Diagnostic),
 }
 
-impl<'a, F, R, I, M, N, B, T>
-    EmitDiag<
-        Span<RcFileInclusion<BufId, T, I::StringRef>, RcMacroExpansion<BufId, T, I::StringRef>>,
-        StrippedBufSpan<BufId, BufRange>,
-    > for CompositeSession<FileCodebase<'a, F>, R, I, M, N, B, OutputForwarder<'a>>
-where
-    F: FileSystem + ?Sized,
-    R: SpanSource
-        + StripSpan<
-            Span<RcFileInclusion<BufId, T, I::StringRef>, RcMacroExpansion<BufId, T, I::StringRef>>,
-            Stripped = StrippedBufSpan<BufId, BufRange>,
-        >,
-    I: StringSource,
-{
-    fn emit_diag(
-        &mut self,
-        diag: impl Into<
-            CompactDiag<
-                Span<
-                    RcFileInclusion<BufId, T, I::StringRef>,
-                    RcMacroExpansion<BufId, T, I::StringRef>,
-                >,
-                StrippedBufSpan<BufId, BufRange>,
-            >,
-        >,
-    ) {
-        (self.diagnostics.output)(
-            diag.into()
-                .expand(&mut self.registry)
-                .render(&self.codebase.cache.borrow()),
-        )
-    }
-}
-
-pub(crate) struct DiagnosticsView<'a, C, R, D> {
+pub(crate) struct DiagnosticsContext<'a, C, R, D> {
     pub codebase: &'a mut C,
     pub registry: &'a mut R,
     pub diagnostics: &'a mut D,
 }
 
-impl<'a, C, R, D, S> MergeSpans<S> for DiagnosticsView<'a, C, R, D>
+impl<'a, C, R, D, S> MergeSpans<S> for DiagnosticsContext<'a, C, R, D>
 where
     R: MergeSpans<S>,
 {
@@ -102,7 +65,7 @@ where
     }
 }
 
-impl<'a, C, R, D, S> StripSpan<S> for DiagnosticsView<'a, C, R, D>
+impl<'a, C, R, D, S> StripSpan<S> for DiagnosticsContext<'a, C, R, D>
 where
     R: StripSpan<S>,
 {
@@ -117,7 +80,7 @@ impl<'a, 'b, F: FileSystem + ?Sized, R, T, RR>
     EmitDiag<
         Span<RcFileInclusion<BufId, T, RR>, RcMacroExpansion<BufId, T, RR>>,
         StrippedBufSpan<BufId, BufRange>,
-    > for DiagnosticsView<'b, FileCodebase<'a, F>, R, OutputForwarder<'a>>
+    > for DiagnosticsContext<'b, FileCodebase<'a, F>, R, OutputForwarder<'a>>
 where
     R: StripSpan<
         Span<RcFileInclusion<BufId, T, RR>, RcMacroExpansion<BufId, T, RR>>,
@@ -191,16 +154,7 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 }
 
 #[cfg(test)]
-impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, TestDiagnosticsListener<S>> {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
-        self.diagnostics.diagnostics.borrow_mut().push(diag.into())
-    }
-}
-
-#[cfg(test)]
-impl<C, R: SpanSource, I: StringSource, M, N, B, S> EmitDiag<S, S>
-    for CompositeSession<C, R, I, M, N, B, TestDiagnosticsListener<S>>
-{
+impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsContext<'a, C, R, TestDiagnosticsListener<S>> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
         self.diagnostics.diagnostics.borrow_mut().push(diag.into())
     }
@@ -479,22 +433,7 @@ mod mock {
         }
     }
 
-    impl<C, R, I, M, N, B, T, S> EmitDiag<S, S>
-        for CompositeSession<C, R, I, M, N, B, MockDiagnostics<T, S>>
-    where
-        R: SpanSource,
-        I: StringSource,
-        T: From<DiagnosticsEvent<S>>,
-        S: Clone,
-    {
-        fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
-            self.diagnostics
-                .log
-                .push(DiagnosticsEvent::EmitDiag(diag.into()))
-        }
-    }
-
-    impl<'a, C, R, T, S> EmitDiag<S, S> for DiagnosticsView<'a, C, R, MockDiagnostics<T, S>>
+    impl<'a, C, R, T, S> EmitDiag<S, S> for DiagnosticsContext<'a, C, R, MockDiagnostics<T, S>>
     where
         T: From<DiagnosticsEvent<S>>,
     {

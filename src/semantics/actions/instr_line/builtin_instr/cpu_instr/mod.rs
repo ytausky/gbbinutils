@@ -1,10 +1,10 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
+use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::object::Fragment;
 use crate::semantics::keywords::{Mnemonic, StackOperation};
 use crate::session::builder::*;
-use crate::session::diagnostics::*;
 use crate::span::Source;
 
 pub mod operand;
@@ -454,10 +454,10 @@ pub(super) enum Condition {
 
 #[cfg(test)]
 mod tests {
+    pub(crate) use crate::diagnostics::Message;
     pub(crate) use crate::object::Fragment;
     pub use crate::semantics::arg::OperandSymbol::*;
     pub(crate) use crate::session::builder::mock::MockSymbolId;
-    pub(crate) use crate::session::diagnostics::Message;
     pub(crate) use crate::span::{Spanned, WithSpan};
 
     use self::operand::tests::Event;

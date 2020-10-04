@@ -3,7 +3,7 @@ use self::token_line::TokenContextFinalizationSemantics;
 use super::Semantics;
 use super::*;
 
-use crate::session::diagnostics::{CompactDiag, Message};
+use crate::diagnostics::{CompactDiag, Message};
 use crate::session::lex::Literal;
 use crate::session::{Analysis, NextToken};
 use crate::span::StripSpan;
@@ -122,12 +122,12 @@ impl<'a, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, S> {
 pub mod tests {
     use super::*;
 
+    use crate::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
     use crate::object::Fragment;
     use crate::session::builder::mock::*;
     use crate::session::builder::Width;
-    use crate::session::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::session::lex::SemanticToken;
     use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::mock::MockSession;

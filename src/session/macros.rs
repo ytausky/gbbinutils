@@ -2,9 +2,9 @@ use super::lex::{Lex, Literal, StringSource};
 use super::NextToken;
 
 use crate::codebase::Codebase;
+use crate::diagnostics::EmitDiag;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::session::diagnostics::EmitDiag;
 use crate::session::lex::LexItem;
 use crate::session::resolve::{NameTable, StartScope};
 use crate::session::{Interner, TokenStream};

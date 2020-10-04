@@ -4,9 +4,9 @@ use super::resolve::{NameTable, StartScope};
 use super::{CompositeSession, Interner, NextToken};
 
 use crate::codebase::{Codebase, CodebaseError};
+use crate::diagnostics::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
-use crate::session::diagnostics::*;
 use crate::span::{SpanSource, SpanSystem};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::syntax::{LexError, ParseTokenStream, Token};

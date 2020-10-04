@@ -1,6 +1,6 @@
+use crate::diagnostics::{Diagnostics, DiagnosticsContext};
 use crate::expr::Expr;
 use crate::object::*;
-use crate::session::diagnostics::{Diagnostics, DiagnosticsView};
 use crate::session::lex::StringSource;
 use crate::span::{MergeSpans, SpanSource, StripSpan};
 use crate::CompositeSession;
@@ -159,7 +159,7 @@ where
     I: StringSource,
     Self: Diagnostics<S>,
     S: Clone,
-    for<'a> DiagnosticsView<'a, C, R, D>: Diagnostics<S>,
+    for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<S>,
 {
     fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Expr<Self::SymbolId, S>) {
         let location = self.builder.object.vars.alloc();
@@ -180,7 +180,7 @@ where
             vars: &self.builder.object.vars,
             location: 0.into(),
         };
-        let mut diagnostics = DiagnosticsView {
+        let mut diagnostics = DiagnosticsContext {
             codebase: &mut self.codebase,
             registry: &mut self.registry,
             diagnostics: &mut self.diagnostics,
@@ -345,10 +345,10 @@ pub mod mock {
 mod tests {
     use super::*;
 
+    use crate::diagnostics::*;
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
-    use crate::session::diagnostics::*;
     use crate::session::mock::StandaloneBackend;
     use crate::span::WithSpan;
 
@@ -569,7 +569,7 @@ mod tests {
     {
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = TestDiagnosticsListener::new();
-        let mut view = DiagnosticsView {
+        let mut view = DiagnosticsContext {
             codebase: &mut (),
             registry,
             diagnostics: &mut diagnostics,

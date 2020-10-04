@@ -5,9 +5,9 @@ use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
 
 use crate::codebase::{BufId, FileCodebase, FileSystem};
+use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};
 use crate::object::SymbolId;
 use crate::semantics::keywords::KEYWORDS;
-use crate::session::diagnostics::{Diagnostics, OutputForwarder};
 use crate::span::{
     MergeSpans, RcContextFactory, RcFileInclusion, RcMacroExpansion, Span, SpanSource, StripSpan,
 };
@@ -16,8 +16,6 @@ use crate::syntax::{Sigil, Token};
 use std::collections::HashMap;
 
 pub mod builder;
-#[macro_use]
-pub mod diagnostics;
 pub mod lex;
 pub mod macros;
 pub mod reentrancy;
@@ -175,6 +173,26 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D> NextToken
     }
 }
 
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, S, Stripped> EmitDiag<S, Stripped>
+    for CompositeSession<C, R, I, M, N, B, D>
+where
+    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<S, Stripped>,
+{
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, Stripped>>) {
+        self.diagnostics().emit_diag(diag)
+    }
+}
+
+impl<C, R: SpanSource, I: StringSource, M, N, B, D> CompositeSession<C, R, I, M, N, B, D> {
+    fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
+        DiagnosticsContext {
+            codebase: &mut self.codebase,
+            registry: &mut self.registry,
+            diagnostics: &mut self.diagnostics,
+        }
+    }
+}
+
 impl<C, R: SpanSource, I: StringSource, M, N, B, D, S> MergeSpans<S>
     for CompositeSession<C, R, I, M, N, B, D>
 where
@@ -277,8 +295,8 @@ pub mod mock {
     use super::reentrancy::MockCodebase;
 
     use crate::codebase::CodebaseError;
+    use crate::diagnostics::{MockDiagnostics, TestDiagnosticsListener};
     use crate::log::Log;
-    use crate::session::diagnostics::{MockDiagnostics, TestDiagnosticsListener};
 
     pub(crate) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,

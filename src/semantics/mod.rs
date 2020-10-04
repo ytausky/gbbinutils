@@ -1,8 +1,8 @@
 use self::arg::{Arg, OperandSymbol, ParsedArg};
 use self::keywords::BuiltinMnemonic;
 
+use crate::diagnostics::Diagnostics;
 use crate::session::builder::*;
-use crate::session::diagnostics::Diagnostics;
 use crate::session::lex::{StringSource, TokenSeq};
 use crate::session::macros::MacroSource;
 use crate::session::reentrancy::Params;

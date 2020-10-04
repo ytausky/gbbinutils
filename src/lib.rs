@@ -9,11 +9,11 @@ pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
 use crate::codebase::{CodebaseError, StdFileSystem};
-use crate::session::diagnostics::*;
+use crate::diagnostics::*;
 use crate::session::reentrancy::ReentrancyActions;
 use crate::session::{CompositeSession, Interner, Session};
 
-pub use crate::session::diagnostics;
+pub mod diagnostics;
 
 mod codebase;
 mod expr;
@@ -43,7 +43,7 @@ impl<'a> Default for InputConfig<'a> {
 
 pub enum DiagnosticsConfig<'a> {
     Ignore,
-    Output(&'a mut dyn FnMut(session::diagnostics::Diagnostic)),
+    Output(&'a mut dyn FnMut(Diagnostic)),
 }
 
 impl<'a> Default for DiagnosticsConfig<'a> {
@@ -67,7 +67,7 @@ pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
         InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
         InputConfig::Custom(ref mut input) => *input,
     };
-    let diagnostics: &mut dyn FnMut(session::diagnostics::Diagnostic) = match config.diagnostics {
+    let diagnostics: &mut dyn FnMut(Diagnostic) = match config.diagnostics {
         DiagnosticsConfig::Ignore => diagnostics_holder.get_or_insert(|_| {}),
         DiagnosticsConfig::Output(ref mut diagnostics) => *diagnostics,
     };
@@ -79,16 +79,16 @@ pub fn assemble(name: &str, config: &mut Config) -> Option<Program> {
 fn try_assemble<'a>(
     name: &str,
     input: &'a mut dyn codebase::FileSystem,
-    output: &'a mut dyn FnMut(session::diagnostics::Diagnostic),
+    output: &'a mut dyn FnMut(Diagnostic),
 ) -> Result<Program, CodebaseError> {
     let codebase = codebase::FileCodebase::new(input);
-    let diagnostics = session::diagnostics::OutputForwarder { output };
+    let diagnostics = diagnostics::OutputForwarder { output };
     let mut session = Session::new(codebase, diagnostics);
     // session.analyze_file(name.into())?;
     let name = session.intern(name);
     ReentrancyActions::analyze_file(&mut session, name, None)?;
 
-    let mut diagnostics = DiagnosticsView {
+    let mut diagnostics = DiagnosticsContext {
         codebase: &mut session.codebase,
         registry: &mut session.registry,
         diagnostics: &mut session.diagnostics,
@@ -142,7 +142,7 @@ mod log {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::diagnostics::Diagnostic;
+    use crate::diagnostics::Diagnostic;
     use std::collections::HashMap;
     use std::io;
 

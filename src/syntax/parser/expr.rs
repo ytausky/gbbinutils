@@ -4,8 +4,8 @@ use self::Sigil::*;
 
 use super::{Parser, LINE_FOLLOW_SET};
 
+use crate::diagnostics::{CompactDiag, Message};
 use crate::expr::BinOp;
-use crate::session::diagnostics::{CompactDiag, Message};
 use crate::syntax;
 
 type ParserResult<P, C, S> = Result<P, (P, ExpandedExprParsingError<C, S>)>;
@@ -240,7 +240,7 @@ mod tests {
     use super::Token::*;
     use super::*;
 
-    use crate::session::diagnostics::Merge;
+    use crate::diagnostics::Merge;
     use crate::syntax::actions::mock::{ExprAction, ExprActionCollector, IdentKind};
 
     #[test]

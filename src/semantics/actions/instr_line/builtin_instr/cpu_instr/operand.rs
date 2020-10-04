@@ -1,9 +1,9 @@
 use super::Condition;
 
+use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::semantics::arg::*;
 use crate::session::builder::{PtrReg, Reg16, RegPair, M};
-use crate::session::diagnostics::*;
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]

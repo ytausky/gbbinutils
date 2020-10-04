@@ -1,8 +1,8 @@
 use super::operand::AtomKind;
 use super::{Analysis, Expr, Fragment, Operand};
 
+use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::session::builder::*;
-use crate::session::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
@@ -373,8 +373,8 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
+    use crate::diagnostics::Merge;
     use crate::semantics::keywords::LD;
-    use crate::session::diagnostics::Merge;
 
     #[test]
     fn ld_a_a() {

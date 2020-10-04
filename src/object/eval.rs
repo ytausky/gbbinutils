@@ -1,9 +1,9 @@
 use super::{Expr, LinkageContext, VarTable};
 
+use crate::diagnostics::{BackendDiagnostics, Message, ValueKind};
 use crate::expr::{Atom, BinOp, ExprOp, ParamId};
 use crate::object::num::Num;
 use crate::object::*;
-use crate::session::diagnostics::{BackendDiagnostics, Message, ValueKind};
 use crate::span::{Spanned, WithSpan};
 
 use std::borrow::Borrow;
@@ -278,11 +278,11 @@ pub const BUILTIN_SYMBOLS: &[(&str, SymbolId)] =
 mod tests {
     use super::*;
 
+    use crate::diagnostics::*;
     use crate::log::Log;
     use crate::object::Var;
-    use crate::session::diagnostics::*;
 
-    type MockDiagnostics<S> = crate::session::diagnostics::MockDiagnostics<DiagnosticsEvent<S>, S>;
+    type MockDiagnostics<S> = crate::diagnostics::MockDiagnostics<DiagnosticsEvent<S>, S>;
 
     #[test]
     fn eval_section_addr() {
@@ -436,7 +436,7 @@ mod tests {
         let log = Log::new();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
-        let mut view = DiagnosticsView {
+        let mut view = DiagnosticsContext {
             codebase: &mut (),
             registry,
             diagnostics: &mut diagnostics,
@@ -473,7 +473,7 @@ mod tests {
         let log = Log::new();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
-        let mut view = DiagnosticsView {
+        let mut view = DiagnosticsContext {
             codebase: &mut (),
             registry,
             diagnostics: &mut diagnostics,
@@ -537,7 +537,7 @@ mod tests {
         let log = Log::new();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
-        let mut view = DiagnosticsView {
+        let mut view = DiagnosticsContext {
             codebase: &mut (),
             registry,
             diagnostics: &mut diagnostics,
