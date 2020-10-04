@@ -31,21 +31,21 @@ pub struct Constraints<S> {
 
 pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
-pub type SymbolId = Symbol<BuiltinId, ContentId>;
+pub type SymbolId = Symbol<BuiltinDefId, UserDefId>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Symbol<B, C> {
     Builtin(B),
-    Content(C),
+    UserDef(C),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BuiltinId {
+pub enum BuiltinDefId {
     Sizeof,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ContentId(usize);
+pub struct UserDefId(usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarId(pub usize);
@@ -60,16 +60,16 @@ pub enum Fragment<E> {
     Reserved(E),
 }
 
-pub struct SymbolTable<S>(Vec<Option<ContentDef<ExprDef<S>, SectionId>>>);
+pub struct SymbolTable<S>(Vec<Option<UserDef<Closure<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ContentDef<F, S> {
-    Expr(F),
+pub enum UserDef<F, S> {
+    Closure(F),
     Section(S),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExprDef<S> {
+pub struct Closure<S> {
     pub expr: Expr<S>,
     pub location: VarId,
 }
@@ -105,11 +105,11 @@ impl<S> Content<S> {
         self.sections.iter()
     }
 
-    pub fn add_section(&mut self, name: Option<ContentId>, addr: VarId, size: VarId) {
+    pub fn add_section(&mut self, name: Option<UserDefId>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
-            self.symbols.define(name, ContentDef::Section(section))
+            self.symbols.define(name, UserDef::Section(section))
         }
     }
 }
@@ -130,18 +130,18 @@ impl<S> SymbolTable<S> {
         Self(Vec::new())
     }
 
-    pub fn alloc(&mut self) -> ContentId {
-        let id = ContentId(self.0.len());
+    pub fn alloc(&mut self) -> UserDefId {
+        let id = UserDefId(self.0.len());
         self.0.push(None);
         id
     }
 
-    pub fn define(&mut self, ContentId(id): ContentId, def: ContentDef<ExprDef<S>, SectionId>) {
+    pub fn define(&mut self, UserDefId(id): UserDefId, def: UserDef<Closure<S>, SectionId>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    pub fn get(&self, ContentId(id): ContentId) -> Option<&ContentDef<ExprDef<S>, SectionId>> {
+    pub fn get(&self, UserDefId(id): UserDefId) -> Option<&UserDef<Closure<S>, SectionId>> {
         self.0[id].as_ref()
     }
 }
@@ -213,8 +213,8 @@ impl From<SymbolId> for Atom<SymbolId> {
 }
 
 #[cfg(test)]
-impl From<ContentId> for Atom<SymbolId> {
-    fn from(id: ContentId) -> Self {
+impl From<UserDefId> for Atom<SymbolId> {
+    fn from(id: UserDefId) -> Self {
         Atom::Name(id.into())
     }
 }
@@ -226,15 +226,15 @@ impl From<SymbolId> for ExprOp<SymbolId> {
 }
 
 #[cfg(test)]
-impl From<BuiltinId> for ExprOp<SymbolId> {
-    fn from(builtin: BuiltinId) -> Self {
+impl From<BuiltinDefId> for ExprOp<SymbolId> {
+    fn from(builtin: BuiltinDefId) -> Self {
         Atom::from(Symbol::from(builtin)).into()
     }
 }
 
 #[cfg(test)]
-impl From<ContentId> for ExprOp<SymbolId> {
-    fn from(id: ContentId) -> Self {
+impl From<UserDefId> for ExprOp<SymbolId> {
+    fn from(id: UserDefId) -> Self {
         Atom::from(id).into()
     }
 }
@@ -243,20 +243,20 @@ impl<B, C> Symbol<B, C> {
     pub fn content(self) -> Option<C> {
         match self {
             Symbol::Builtin(_) => None,
-            Symbol::Content(id) => Some(id),
+            Symbol::UserDef(id) => Some(id),
         }
     }
 }
 
-impl From<BuiltinId> for SymbolId {
-    fn from(builtin: BuiltinId) -> Self {
+impl From<BuiltinDefId> for SymbolId {
+    fn from(builtin: BuiltinDefId) -> Self {
         Symbol::Builtin(builtin)
     }
 }
 
-impl From<ContentId> for SymbolId {
-    fn from(id: ContentId) -> Self {
-        Symbol::Content(id)
+impl From<UserDefId> for SymbolId {
+    fn from(id: UserDefId) -> Self {
+        Symbol::UserDef(id)
     }
 }
 
@@ -271,7 +271,7 @@ mod tests {
         program.add_section(Some(name), VarId(0), VarId(1));
         assert_eq!(
             program.symbols.get(name),
-            Some(&ContentDef::Section(SectionId(0)))
+            Some(&UserDef::Section(SectionId(0)))
         )
     }
 }

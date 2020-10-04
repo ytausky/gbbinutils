@@ -146,7 +146,7 @@ impl<S> ObjectBuilder<S> {
         }
     }
 
-    fn add_section(&mut self, symbol: Option<ContentId>) {
+    fn add_section(&mut self, symbol: Option<UserDefId>) {
         self.object
             .content
             .add_section(symbol, self.object.vars.alloc(), self.object.vars.alloc())
@@ -166,7 +166,7 @@ where
         self.builder.push(Fragment::Reloc(location));
         self.builder.object.content.symbols.define(
             name.content().unwrap(),
-            ContentDef::Expr(ExprDef { expr, location }),
+            UserDef::Closure(Closure { expr, location }),
         );
     }
 
@@ -389,7 +389,7 @@ mod tests {
                 .content
                 .symbols
                 .get(wrapped_name.unwrap().content().unwrap()),
-            Some(&ContentDef::Section(SectionId(0)))
+            Some(&UserDef::Section(SectionId(0)))
         )
     }
 
