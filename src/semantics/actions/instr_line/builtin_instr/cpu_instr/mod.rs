@@ -97,6 +97,7 @@ where
     fn analyze_add_reg16_instruction(&mut self, target: (Reg16, S)) -> Result<(), ()> {
         match target.0 {
             Reg16::Hl => self.analyze_add_hl_instruction(),
+            Reg16::Sp => self.analyze_add_sp_e(),
             _ => {
                 self.emit_diag(Message::DestMustBeHl.at(target.1));
                 Err(())
@@ -115,6 +116,18 @@ where
                 self.emit_diag(Message::IncompatibleOperand.at(operand.span()));
                 Err(())
             }
+        }
+    }
+
+    fn analyze_add_sp_e(&mut self) -> Result<(), ()> {
+        match self.next_operand_of(2)? {
+            Operand::Const(expr) => {
+                self.session.emit_fragment(Fragment::Byte(0xe8));
+                self.session
+                    .emit_fragment(Fragment::Immediate(expr, Width::Byte));
+                Ok(())
+            }
+            _ => todo!(),
         }
     }
 
@@ -1843,6 +1856,14 @@ mod tests {
     fn srl_deref_hl() {
         analyze(SRL, vec![M::DerefHl.into()])
             .expect_fragments(vec![Fragment::Byte(0xcb), Fragment::Byte(0x3e)])
+    }
+
+    #[test]
+    fn add_sp_5() {
+        analyze(ADD, vec![Reg16::Sp.into(), 5.into()]).expect_fragments(vec![
+            Fragment::Byte(0xe8),
+            Fragment::Immediate(number(5, TokenId::Operand(1, 0)), Width::Byte),
+        ])
     }
 
     pub(super) struct AnalysisResult(Vec<Event<TokenSpan>>);
