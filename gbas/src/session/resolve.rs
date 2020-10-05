@@ -174,8 +174,9 @@ where
 mod mock {
     use super::*;
 
-    use crate::log::Log;
     use crate::session::lex::StringSource;
+
+    use log::Log;
 
     pub(crate) struct MockNameTable<N, T> {
         names: N,
@@ -281,10 +282,11 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::log::Log;
     use crate::semantics::actions::tests::TestOperation;
     use crate::session::builder::mock::MockSymbolId;
     use crate::session::mock::MockSession;
+
+    use log::Log;
 
     #[test]
     fn retrieve_global_name() {

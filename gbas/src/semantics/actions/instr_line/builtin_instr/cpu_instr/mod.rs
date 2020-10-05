@@ -1899,7 +1899,7 @@ mod tests {
         use super::operand::analyze_operand;
         use crate::session::mock::MockSession;
 
-        let log = crate::log::with_log(|log| {
+        let log = log::with_log(|log| {
             let mut session = MockSession::new(log);
             let operands: Vec<_> = operands
                 .into_iter()

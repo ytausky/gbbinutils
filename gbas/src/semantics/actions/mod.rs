@@ -124,7 +124,6 @@ pub mod tests {
 
     use crate::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
-    use crate::log::with_log;
     use crate::object::{Fragment, Width};
     use crate::session::builder::mock::*;
     use crate::session::lex::SemanticToken;
@@ -133,6 +132,8 @@ pub mod tests {
     use crate::session::reentrancy::ReentrancyEvent;
     use crate::session::resolve::*;
     use crate::syntax::{Sigil, Token};
+
+    use log::with_log;
 
     use std::borrow::Borrow;
     use std::fmt::Debug;

@@ -230,8 +230,9 @@ pub mod mock {
     use super::*;
 
     use crate::expr::{Atom, Expr, ExprOp};
-    use crate::log::Log;
     use crate::span::{Source, Spanned};
+
+    use log::Log;
 
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub(crate) struct MockSymbolId(pub usize);

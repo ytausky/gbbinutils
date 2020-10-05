@@ -70,9 +70,10 @@ where
 mod mock {
     use super::*;
 
-    use crate::log::Log;
     use crate::session::macros::mock::MockMacroId;
     use crate::session::macros::MacroSource;
+
+    use log::Log;
 
     use std::marker::PhantomData;
 

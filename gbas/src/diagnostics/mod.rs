@@ -353,7 +353,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan<BufId, BufRange>, BufId, BufRange>
 mod mock {
     use super::*;
 
-    use crate::log::Log;
+    use log::Log;
 
     use std::fmt::Debug;
     use std::marker::PhantomData;

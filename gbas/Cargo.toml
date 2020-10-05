@@ -7,4 +7,5 @@ repository = "https://github.com/ytausky/gbas"
 license = "GPL-3.0-or-later"
 edition = "2018"
 
-[dependencies]
+[dev-dependencies]
+log = { path = "../log" }
