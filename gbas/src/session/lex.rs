@@ -1,6 +1,6 @@
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::session::{CompositeSession, Interner, TokenStream};
-use crate::span::{FileInclusion, Span, SpanSource, SpanSystem};
+use crate::span::{FileInclusionMetadata, Span, SpanSource, SpanSystem};
 use crate::syntax::*;
 
 use std::fmt::Debug;
@@ -30,15 +30,15 @@ where
     ) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-pub type TokenSeq<R, S> = Vec<(SemanticToken<R>, S)>;
+pub type TokenSeq<R, S> = (Vec<SemanticToken<R>>, Vec<S>);
 
 impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
     C: Codebase,
     I: Interner,
-    R: SpanSystem<Token<I::StringRef, Literal<I::StringRef>>, I::StringRef>,
+    R: SpanSystem<BufId>,
 {
-    type TokenIter = TokenizedSrc<R::Span>;
+    type TokenIter = TokenizedSrc<R::FileInclusionMetadataId>;
 
     fn lex_file(
         &mut self,
@@ -49,7 +49,8 @@ where
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,
-            Rc::new(FileInclusion { file: buf_id, from }),
+            self.registry
+                .add_file_inclusion(FileInclusionMetadata { file: buf_id, from }),
         ))
     }
 }
@@ -58,13 +59,13 @@ pub trait StringSource {
     type StringRef: Clone + Debug + Eq + Hash;
 }
 
-pub struct TokenizedSrc<S> {
+pub struct TokenizedSrc<I> {
     tokens: Lexer<Rc<str>>,
-    inclusion: Rc<FileInclusion<BufId, S>>,
+    inclusion: I,
 }
 
-impl<S> TokenizedSrc<S> {
-    fn new(src: Rc<str>, inclusion: Rc<FileInclusion<BufId, S>>) -> Self {
+impl<I> TokenizedSrc<I> {
+    fn new(src: Rc<str>, inclusion: I) -> Self {
         TokenizedSrc {
             tokens: Lexer::new(src),
             inclusion,
@@ -72,11 +73,10 @@ impl<S> TokenizedSrc<S> {
     }
 }
 
-impl<R, I, S> TokenStream<R, I> for TokenizedSrc<S>
+impl<R, I> TokenStream<R, I> for TokenizedSrc<R::FileInclusionMetadataId>
 where
-    R: SpanSystem<Token<I::StringRef, Literal<I::StringRef>>, I::StringRef, Span = S>,
+    R: SpanSystem<BufId>,
     I: Interner,
-    S: Clone,
 {
     fn next_token(
         &mut self,

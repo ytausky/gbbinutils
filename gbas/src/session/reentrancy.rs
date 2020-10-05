@@ -3,13 +3,13 @@ use super::macros::MacroTable;
 use super::resolve::{NameTable, StartScope};
 use super::{CompositeSession, Interner, NextToken};
 
-use crate::codebase::{Codebase, CodebaseError};
+use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::diagnostics::*;
 use crate::semantics::{Semantics, TokenStreamState};
 use crate::session::builder::Backend;
 use crate::span::{SpanSource, SpanSystem};
 use crate::syntax::parser::{DefaultParserFactory, ParserFactory};
-use crate::syntax::{LexError, ParseTokenStream, Token};
+use crate::syntax::{LexError, ParseTokenStream};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
@@ -18,7 +18,7 @@ pub(crate) trait ReentrancyActions<R, S> {
     fn analyze_file(&mut self, path: R, from: Option<S>) -> Result<(), CodebaseError>;
 }
 
-pub type Params<I, S> = Vec<(I, S)>;
+pub type Params<I, S> = (Vec<I>, Vec<S>);
 
 impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
     for CompositeSession<C, R, I, M, N, B, D>
@@ -32,10 +32,7 @@ where
         Literal<<Self as StringSource>::StringRef>,
         <Self as SpanSource>::Span,
     >,
-    R: SpanSystem<
-        Token<<Self as StringSource>::StringRef, Literal<<Self as StringSource>::StringRef>>,
-        <Self as StringSource>::StringRef,
-    >,
+    R: SpanSystem<BufId>,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<<Self as StringSource>::StringRef>,

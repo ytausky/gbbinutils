@@ -66,13 +66,10 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
     fn act_on_ident(&mut self, ident: S::StringRef, span: S::Span) {
         let no_params = vec![];
         let params = match &self.state.parent.label {
-            Some((_, params)) => &params,
+            Some((_, (params, _))) => &params,
             _ => &no_params,
         };
-        let param = params
-            .iter()
-            .position(|(param, _)| *param == ident)
-            .map(ParamId);
+        let param = params.iter().position(|param| *param == ident).map(ParamId);
         match param {
             None => self.act_on_expr_node(ExprOp::Atom(Atom::Name(ident)), span),
             Some(id) => self.act_on_expr_node(ExprOp::Atom(Atom::Param(id)), span),

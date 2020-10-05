@@ -100,7 +100,7 @@ impl<R, S> MacroDefState<R, S> {
     fn new(label: Option<Label<R, S>>) -> Self {
         Self {
             label,
-            tokens: Vec::new(),
+            tokens: (Vec::new(), Vec::new()),
         }
     }
 }
