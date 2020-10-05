@@ -93,12 +93,6 @@ pub(crate) enum Span<I, E> {
     MacroExpansion(E, RangeInclusive<MacroExpansionPos>),
 }
 
-#[derive(Debug)]
-pub(crate) struct FileInclusion<F, S> {
-    pub file: F,
-    pub from: Option<S>,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct MacroExpansionPos {
     pub token: usize,
