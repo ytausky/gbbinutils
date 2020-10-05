@@ -1,7 +1,7 @@
-# gbas
+# gbbinutils
 
-An assembler for Game Boy.
+Assembler and linker for Game Boy.
 
 ## Note
 
-gbas is not ready for prime time yet. I recommend you do not use it for any serious project.
+gbbinutils is not ready for prime time yet. I recommend you do not use it for any serious project.
