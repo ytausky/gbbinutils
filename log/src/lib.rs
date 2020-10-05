@@ -4,11 +4,13 @@ use std::rc::Rc;
 
 pub struct Log<T>(Rc<RefCell<Vec<T>>>);
 
-impl<T> Log<T> {
-    pub fn new() -> Self {
-        Log(Rc::new(RefCell::new(Vec::new())))
+impl<T> Default for Log<T> {
+    fn default() -> Self {
+        Self(Rc::new(RefCell::new(Vec::new())))
     }
+}
 
+impl<T> Log<T> {
     pub fn into_inner(self) -> Vec<T>
     where
         T: Debug,
@@ -32,7 +34,7 @@ impl<T> Clone for Log<T> {
 }
 
 pub fn with_log<T: Debug>(f: impl FnOnce(Log<T>)) -> Vec<T> {
-    let log = Log::new();
+    let log = Log::default();
     f(log.clone());
     log.into_inner()
 }

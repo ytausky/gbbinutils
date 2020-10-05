@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn diagnose_using_sizeof_as_immediate() {
-        let log = Log::new();
+        let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
         let mut view = DiagnosticsContext {
@@ -471,7 +471,7 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let log = Log::new();
+        let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
         let mut view = DiagnosticsContext {
@@ -535,7 +535,7 @@ mod tests {
             vars,
             location: Num::Unknown,
         };
-        let log = Log::new();
+        let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
         let mut view = DiagnosticsContext {

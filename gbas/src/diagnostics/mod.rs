@@ -475,7 +475,7 @@ mod tests {
         });
         let call_range = 10..11;
         let context = RcMacroExpansion(Rc::new(MacroExpansionMetadata {
-            name_span: Span::File(buf_context.clone(), call_range.clone()),
+            name_span: Span::File(buf_context, call_range.clone()),
             def: macro_def,
             arg_spans: Box::new([]),
         }));

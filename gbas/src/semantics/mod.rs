@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
-        let session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        let session = MockSession::<TestOperation<()>, ()>::new(Log::default());
         assert_eq!(
             session.name_visibility(&"_loop".to_owned()),
             Visibility::Local
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn ident_without_underscore_prefix_is_global() {
-        let session = MockSession::<TestOperation<()>, ()>::new(Log::new());
+        let session = MockSession::<TestOperation<()>, ()>::new(Log::default());
         assert_eq!(
             session.name_visibility(&"start".to_owned()),
             Visibility::Global

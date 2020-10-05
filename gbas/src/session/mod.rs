@@ -262,12 +262,13 @@ impl StringSource for HashInterner {
 
 impl Interner for HashInterner {
     fn intern(&mut self, string: &str) -> Self::StringRef {
+        let strings = &mut self.strings;
         let id = self
             .map
             .entry(string.to_owned())
-            .or_insert(StringId(self.strings.len()));
-        if id.0 == self.strings.len() {
-            self.strings.push(string.to_owned())
+            .or_insert_with(|| StringId(strings.len()));
+        if id.0 == strings.len() {
+            strings.push(string.to_owned())
         }
         *id
     }
