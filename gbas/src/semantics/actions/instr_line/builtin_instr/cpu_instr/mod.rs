@@ -2,7 +2,7 @@ use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::Fragment;
+use crate::object::{Fragment, Width};
 use crate::semantics::keywords::{Mnemonic, StackOperation};
 use crate::session::builder::*;
 use crate::span::Source;

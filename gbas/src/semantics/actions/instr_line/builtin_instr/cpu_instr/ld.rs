@@ -1,5 +1,5 @@
 use super::operand::AtomKind;
-use super::{Analysis, Expr, Fragment, Operand};
+use super::{Analysis, Expr, Fragment, Operand, Width};
 
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::session::builder::*;

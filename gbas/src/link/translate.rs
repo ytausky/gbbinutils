@@ -1,8 +1,7 @@
 use super::{BinarySection, LinkageContext, VarTable};
 
 use crate::diagnostics::{BackendDiagnostics, Message};
-use crate::object::{Content, Expr, Fragment, Section};
-use crate::session::builder::Width;
+use crate::object::{Content, Expr, Fragment, Section, Width};
 use crate::span::Source;
 
 use std::mem::replace;

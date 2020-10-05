@@ -125,9 +125,8 @@ pub mod tests {
     use crate::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::with_log;
-    use crate::object::Fragment;
+    use crate::object::{Fragment, Width};
     use crate::session::builder::mock::*;
-    use crate::session::builder::Width;
     use crate::session::lex::SemanticToken;
     use crate::session::macros::mock::{MacroTableEvent, MockMacroId};
     use crate::session::mock::MockSession;

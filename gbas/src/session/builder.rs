@@ -22,12 +22,6 @@ pub trait SymbolSource {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Width {
-    Byte,
-    Word,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AluOperation {
     Add,
     Adc,

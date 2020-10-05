@@ -200,7 +200,6 @@ mod tests {
     use crate::diagnostics::Merge;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::semantics::keywords::*;
-    use crate::session::builder::Width;
 
     #[test]
     fn jp_nn() {

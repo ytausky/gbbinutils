@@ -1,7 +1,6 @@
 use self::num::Num;
 
 use crate::expr::{Atom, ExprOp};
-use crate::session::builder::Width;
 
 use std::ops::{Index, IndexMut};
 
@@ -58,6 +57,12 @@ pub enum Fragment<E> {
     Embedded(u8, E),
     Reloc(VarId),
     Reserved(E),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Width {
+    Byte,
+    Word,
 }
 
 pub struct SymbolTable<S>(Vec<Option<UserDef<Closure<S>, SectionId>>>);

@@ -1,10 +1,9 @@
 use crate::diagnostics::*;
-use crate::object::Fragment;
+use crate::object::{Fragment, Width};
 use crate::semantics::arg::*;
 use crate::semantics::keywords::Directive;
 use crate::semantics::Semantics;
 use crate::semantics::*;
-use crate::session::builder::Width;
 use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Analysis>(

@@ -1,7 +1,6 @@
 use crate::diagnostics::{BackendDiagnostics, IgnoreDiagnostics};
 use crate::object::num::Num;
 use crate::object::*;
-use crate::session::builder::Width;
 
 use std::borrow::Borrow;
 
