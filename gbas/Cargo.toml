@@ -1,0 +1,10 @@
+[package]
+name = "gbas"
+version = "0.2.0"
+authors = ["Yaron Tausky <ytausky@protonmail.com>"]
+description = "An assembler for Game Boy"
+repository = "https://github.com/ytausky/gbas"
+license = "GPL-3.0-or-later"
+edition = "2018"
+
+[dependencies]
