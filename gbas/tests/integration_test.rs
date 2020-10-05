@@ -79,7 +79,7 @@ MY_MAC(OP)
 
 const NOP: u8 = 0x00;
 
-fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::diagnostics::Diagnostic>) {
+fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::Diagnostic>) {
     let name = "__buffer";
     let mut fs = SingleBuffer::new(name, src);
     let mut diagnostics = vec![];

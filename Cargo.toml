@@ -1,2 +1,6 @@
 [workspace]
-members = ["gbas", "log"]
+members = [
+    "diagnostics",
+    "gbas",
+    "log",
+]

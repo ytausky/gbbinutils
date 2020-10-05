@@ -5,10 +5,11 @@
 //! present it to the end user.
 
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
-pub use crate::codebase::{LineNumber, TextPosition, TextRange};
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
 use crate::span::*;
+
+use diagnostics::{Clause, Diagnostic, Excerpt, Tag};
 
 #[cfg(test)]
 use std::cell::RefCell;
@@ -256,47 +257,6 @@ where
     })
 }
 
-/// A full description of an assembler diagnostic.
-///
-/// A [`Diagnostic`](struct.Diagnostic.html) contains all the information required to display a
-/// meaningful diagnostic message to a user. It consists of one or more
-/// [`Clause`](struct.Clause.html)s, where the first one describes the object of the diagnostic and
-/// the rest provide more context if necessary.
-#[derive(Debug, PartialEq)]
-pub struct Diagnostic {
-    pub clauses: Vec<Clause>,
-}
-
-/// A single clause of an assembler diagnostic.
-///
-/// A [`Clause`](struct.Clause.html) contains a message that's relevant to a particular source file
-/// or a part thereof. In addition it may include an excerpt from said file, as well as an optional
-/// highlight within it.
-#[derive(Debug, PartialEq)]
-pub struct Clause {
-    pub file: String,
-    pub tag: Tag,
-    pub message: String,
-    pub excerpt: Option<Excerpt>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Tag {
-    Error,
-    Note,
-}
-
-/// A code excerpt with an optional highlight.
-///
-/// An [`Excerpt`](struct.Excerpt.html) contains a single line of code meant to provide context for
-/// a diagnostic clause. The optional highlight can pinpoint the interesting part of the line.
-#[derive(Debug, PartialEq)]
-pub struct Excerpt {
-    pub line: LineNumber,
-    pub source: String,
-    pub highlight: Option<TextRange>,
-}
-
 pub(crate) fn mk_diagnostic(
     file: impl Into<String>,
     message: &Message<StrippedBufSpan<BufId, BufRange>>,
@@ -449,7 +409,7 @@ mod mock {
 mod tests {
     use super::*;
 
-    use crate::codebase::TextPosition;
+    use diagnostics::{LineNumber, TextPosition, TextRange};
 
     use std::rc::Rc;
 

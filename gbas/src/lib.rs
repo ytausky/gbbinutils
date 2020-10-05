@@ -8,6 +8,8 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
+pub use ::diagnostics::{Clause, Diagnostic, Excerpt, LineNumber, Tag, TextPosition, TextRange};
+
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diagnostics::*;
 use crate::session::reentrancy::ReentrancyActions;
@@ -100,7 +102,9 @@ fn try_assemble<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostics::Diagnostic;
+
+    use ::diagnostics::{Clause, Tag};
+
     use std::collections::HashMap;
     use std::io;
 

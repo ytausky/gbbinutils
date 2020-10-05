@@ -1,53 +1,10 @@
+use diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
+
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 use std::string::FromUtf8Error;
 use std::{cmp, fs, ops};
-
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct LineIndex(usize);
-
-impl ops::Add<usize> for LineIndex {
-    type Output = LineIndex;
-    fn add(mut self, rhs: usize) -> Self::Output {
-        self += rhs;
-        self
-    }
-}
-
-impl ops::AddAssign<usize> for LineIndex {
-    fn add_assign(&mut self, rhs: usize) {
-        self.0 += rhs
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LineNumber(pub usize);
-
-impl From<LineIndex> for LineNumber {
-    fn from(LineIndex(index): LineIndex) -> LineNumber {
-        LineNumber(index + 1)
-    }
-}
-
-impl From<LineNumber> for LineIndex {
-    fn from(LineNumber(n): LineNumber) -> LineIndex {
-        assert_ne!(n, 0);
-        LineIndex(n - 1)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TextPosition {
-    pub line: LineIndex,
-    pub column_index: usize,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TextRange {
-    pub start: TextPosition,
-    pub end: TextPosition,
-}
 
 pub type BufRange = ops::Range<usize>;
 
