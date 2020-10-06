@@ -199,9 +199,8 @@ mod tests {
 
     use super::actions::tests::TestOperation;
 
+    use crate::log::Log;
     use crate::session::mock::MockSession;
-
-    use log::Log;
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {

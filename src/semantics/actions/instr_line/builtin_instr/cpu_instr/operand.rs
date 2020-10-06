@@ -250,7 +250,7 @@ pub mod tests {
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         let mut result = None;
-        let log = log::with_log(|log| {
+        let log = crate::log::with_log(|log| {
             result = Some(super::analyze_operand(
                 expr,
                 context,

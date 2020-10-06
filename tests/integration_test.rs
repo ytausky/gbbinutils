@@ -1,3 +1,6 @@
+use gbbinutils::diagnostics::Diagnostic;
+use gbbinutils::*;
+
 use std::io;
 
 #[test]
@@ -79,16 +82,16 @@ MY_MAC(OP)
 
 const NOP: u8 = 0x00;
 
-fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<gbas::Diagnostic>) {
+fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<Diagnostic>) {
     let name = "__buffer";
     let mut fs = SingleBuffer::new(name, src);
     let mut diagnostics = vec![];
     let mut output = |diagnostic| diagnostics.push(diagnostic);
-    let mut config = gbas::Config {
-        input: gbas::InputConfig::Custom(&mut fs),
-        diagnostics: gbas::DiagnosticsConfig::Output(&mut output),
+    let mut config = Config {
+        input: InputConfig::Custom(&mut fs),
+        diagnostics: DiagnosticsConfig::Output(&mut output),
     };
-    let binary = gbas::assemble(name, &mut config);
+    let binary = assemble(name, &mut config);
     (
         binary.map(|mut binary| binary.sections.pop().unwrap().data.into()),
         diagnostics,
@@ -106,7 +109,7 @@ impl<'a> SingleBuffer<'a> {
     }
 }
 
-impl<'a> gbas::FileSystem for SingleBuffer<'a> {
+impl<'a> FileSystem for SingleBuffer<'a> {
     fn read_file(&self, name: &str) -> Result<Vec<u8>, io::Error> {
         if name == self.name {
             Ok(self.src.bytes().collect())

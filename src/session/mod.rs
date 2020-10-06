@@ -288,8 +288,7 @@ pub mod mock {
 
     use crate::codebase::CodebaseError;
     use crate::diagnostics::{MockDiagnostics, TestDiagnosticsListener};
-
-    use log::Log;
+    use crate::log::Log;
 
     pub(crate) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,

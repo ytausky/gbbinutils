@@ -277,9 +277,8 @@ mod tests {
     use super::*;
 
     use crate::diagnostics::*;
+    use crate::log::Log;
     use crate::object::Var;
-
-    use log::Log;
 
     type MockDiagnostics<S> = crate::diagnostics::MockDiagnostics<DiagnosticsEvent<S>, S>;
 

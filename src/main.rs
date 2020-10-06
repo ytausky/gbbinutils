@@ -1,3 +1,5 @@
+use gbbinutils::*;
+
 use std::fs::File;
 use std::io::Write;
 
@@ -9,11 +11,11 @@ fn main() {
     }
     let filename = &args[1];
     let mut diagnostics = |diagnostic| println!("{}", diagnostic);
-    let mut config = gbas::Config {
-        input: gbas::InputConfig::default(),
-        diagnostics: gbas::DiagnosticsConfig::Output(&mut diagnostics),
+    let mut config = Config {
+        input: InputConfig::default(),
+        diagnostics: DiagnosticsConfig::Output(&mut diagnostics),
     };
-    if let Some(program) = gbas::assemble(filename, &mut config) {
+    if let Some(program) = assemble(filename, &mut config) {
         let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
         rom_file.write_all(&program.into_rom().data).unwrap()
     }

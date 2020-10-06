@@ -1,4 +1,4 @@
-use diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
+use crate::diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
 
 use std::cell::RefCell;
 use std::io;

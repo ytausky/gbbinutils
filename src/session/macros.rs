@@ -268,10 +268,9 @@ where
 pub mod mock {
     use super::*;
 
+    use crate::log::Log;
     use crate::session::lex::Literal;
     use crate::syntax::Token;
-
-    use log::Log;
 
     #[derive(Debug, PartialEq)]
     pub enum MacroTableEvent {
