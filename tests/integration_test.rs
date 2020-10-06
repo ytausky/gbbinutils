@@ -1,3 +1,4 @@
+use gbbinutils::assembler::Assembler;
 use gbbinutils::diagnostics::Diagnostic;
 use gbbinutils::*;
 
@@ -91,7 +92,8 @@ fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<Diagnostic>) {
         input: InputConfig::Custom(&mut fs),
         diagnostics: DiagnosticsConfig::Output(&mut output),
     };
-    let binary = assemble(name, &mut config);
+    let mut assembler = Assembler::new(&mut config);
+    let binary = assembler.assemble(name);
     (
         binary.map(|mut binary| binary.sections.pop().unwrap().data.into()),
         diagnostics,

@@ -1,9 +1,10 @@
+use super::CompositeSession;
+
 use crate::assembler::session::lex::StringSource;
 use crate::diagnostics::{Diagnostics, DiagnosticsContext};
 use crate::expr::Expr;
 use crate::object::*;
 use crate::span::{MergeSpans, SpanSource, StripSpan};
-use crate::CompositeSession;
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
     fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>);

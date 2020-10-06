@@ -1,5 +1,5 @@
 use super::lex::{Lex, Literal, StringSource};
-use super::NextToken;
+use super::{CompositeSession, NextToken};
 
 use crate::assembler::semantics::{Semantics, TokenStreamState};
 use crate::assembler::session::builder::Backend;
@@ -12,7 +12,6 @@ use crate::assembler::syntax::Token;
 use crate::codebase::{BufId, Codebase};
 use crate::diagnostics::EmitDiag;
 use crate::span::*;
-use crate::CompositeSession;
 
 use std::fmt::Debug;
 use std::rc::Rc;

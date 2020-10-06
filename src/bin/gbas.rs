@@ -15,7 +15,8 @@ fn main() {
         input: InputConfig::default(),
         diagnostics: DiagnosticsConfig::Output(&mut diagnostics),
     };
-    if let Some(program) = assemble(filename, &mut config) {
+    let mut assembler = assembler::Assembler::new(&mut config);
+    if let Some(program) = assembler.assemble(filename) {
         let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
         rom_file.write_all(&program.into_rom().data).unwrap()
     }
