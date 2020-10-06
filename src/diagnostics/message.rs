@@ -1,6 +1,6 @@
+use crate::assembler::session::builder::IncDec;
 use crate::codebase::{BufId, BufRange, CodebaseError, TextCache};
 use crate::object::Width;
-use crate::session::builder::IncDec;
 use crate::span::StrippedBufSpan;
 
 use std::fmt;

@@ -8,11 +8,12 @@
 pub use crate::codebase::FileSystem;
 pub use crate::link::{Program, Rom};
 
+use crate::assembler::session::reentrancy::ReentrancyActions;
+use crate::assembler::session::{CompositeSession, Interner, Session};
 use crate::codebase::{CodebaseError, StdFileSystem};
 use crate::diagnostics::*;
-use crate::session::reentrancy::ReentrancyActions;
-use crate::session::{CompositeSession, Interner, Session};
 
+pub mod assembler;
 pub mod diagnostics;
 
 mod codebase;
@@ -20,10 +21,7 @@ mod eval;
 mod expr;
 mod link;
 mod object;
-mod semantics;
-mod session;
 mod span;
-mod syntax;
 
 #[cfg(test)]
 mod log;
