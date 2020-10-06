@@ -135,12 +135,12 @@ fn mk_squiggle(range: &TextRange) -> String {
 
     use std::cmp::max;
     let space_count = range.start.column_index;
-    let tilde_count = max(range.end.column_index - space_count, 1);
+    let caret_count = max(range.end.column_index - space_count, 1);
 
     use std::iter::{once, repeat};
     let spaces = repeat(' ').take(space_count);
-    let tildes = repeat('~').take(tilde_count);
-    once('\n').chain(spaces).chain(tildes).collect()
+    let carets = repeat('^').take(caret_count);
+    once('\n').chain(spaces).chain(carets).collect()
 }
 
 #[cfg(test)]
@@ -165,7 +165,7 @@ mod tests {
         };
         let expected = r"/my/file:2: error: invocation of undefined macro `my_macro`
     my_macro a, $12
-    ~~~~~~~~
+    ^^^^^^^^
 ";
         assert_eq!(diagnostic.to_string(), expected)
     }
@@ -201,7 +201,7 @@ mod tests {
         };
         let expected = r"/my/file:2: error: unexpected end of file
 dummy
-     ~
+     ^
 ";
         assert_eq!(elaborated.to_string(), expected)
     }
