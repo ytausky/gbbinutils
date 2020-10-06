@@ -146,8 +146,8 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::builder::*;
     use crate::assembler::session::mock::StandaloneBackend;
+    use crate::assembler::session::{AllocSymbol, Backend};
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::*;
     use crate::span::WithSpan;

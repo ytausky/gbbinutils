@@ -1,14 +1,11 @@
-use super::lex::{Lex, Literal, StringSource};
-use super::{CompositeSession, NextToken};
+use super::lex::Lex;
+use super::{CompositeSession, MacroSource, NextToken, StringSource};
 
 use crate::assembler::semantics::{Semantics, TokenStreamState};
-use crate::assembler::session::builder::Backend;
-use crate::assembler::session::lex::LexItem;
-use crate::assembler::session::resolve::{NameTable, StartScope};
-use crate::assembler::session::{Interner, TokenStream};
+use crate::assembler::session::resolve::StartScope;
+use crate::assembler::session::{Backend, Interner, NameTable, TokenStream};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
-use crate::assembler::syntax::LexError;
-use crate::assembler::syntax::Token;
+use crate::assembler::syntax::{LexError, LexItem, Literal, Token};
 use crate::codebase::{BufId, Codebase};
 use crate::diagnostics::EmitDiag;
 use crate::span::*;
@@ -16,11 +13,9 @@ use crate::span::*;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-pub(crate) trait MacroSource {
-    type MacroId: Clone;
-}
-
-pub(crate) trait MacroTable<I, L, S: Clone>: MacroSource {
+pub(in crate::assembler) trait MacroTable<I, L, S: Clone>:
+    MacroSource
+{
     fn define_macro(
         &mut self,
         name_span: S,
@@ -267,9 +262,8 @@ where
 pub mod mock {
     use super::*;
 
-    use crate::assembler::session::lex::Literal;
     use crate::assembler::session::mock::{MacroTableEvent, MockMacroId};
-    use crate::assembler::syntax::Token;
+    use crate::assembler::syntax::{Literal, Token};
     use crate::log::Log;
 
     pub struct MockMacroTable<T> {

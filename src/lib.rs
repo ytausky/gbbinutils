@@ -50,3 +50,9 @@ impl<'a> Default for DiagnosticsConfig<'a> {
         DiagnosticsConfig::Ignore
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum IncDec {
+    Inc,
+    Dec,
+}

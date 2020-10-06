@@ -157,8 +157,8 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::builder::*;
     use crate::assembler::session::mock::StandaloneBackend;
+    use crate::assembler::session::Backend;
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
     use crate::object::num::Num;

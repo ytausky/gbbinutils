@@ -1,11 +1,12 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::assembler::keywords::{Mnemonic, StackOperation};
-use crate::assembler::session::builder::*;
+use crate::assembler::keywords::*;
+use crate::assembler::session::Backend;
 use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::object::{Fragment, Width};
 use crate::span::Source;
+use crate::IncDec;
 
 pub mod operand;
 
@@ -294,6 +295,18 @@ impl MiscOperation {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum M {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    DerefHl,
+}
+
 impl M {
     pub fn encode(self) -> u8 {
         use self::M::*;
@@ -324,6 +337,14 @@ fn encode_alu_operation(operation: AluOperation) -> u8 {
     }) << 3
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RegPair {
+    Bc,
+    De,
+    Hl,
+    Af,
+}
+
 fn encode_reg_pair(reg_pair: RegPair) -> u8 {
     use self::RegPair::*;
     match reg_pair {
@@ -332,6 +353,14 @@ fn encode_reg_pair(reg_pair: RegPair) -> u8 {
         Hl => 0b10,
         Af => 0b11,
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Reg16 {
+    Bc,
+    De,
+    Hl,
+    Sp,
 }
 
 fn encode_reg16(reg16: Reg16) -> u8 {
@@ -452,6 +481,14 @@ pub(super) enum Condition {
     Z,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PtrReg {
+    Bc,
+    De,
+    Hli,
+    Hld,
+}
+
 #[cfg(test)]
 mod tests {
     pub use crate::assembler::keywords::OperandSymbol::*;
@@ -464,10 +501,9 @@ mod tests {
 
     use super::*;
 
-    use crate::assembler::keywords::*;
     use crate::assembler::semantics::*;
-    use crate::assembler::session::lex::Literal;
     use crate::assembler::session::mock::BackendEvent;
+    use crate::assembler::syntax::Literal;
     use crate::expr::Atom;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

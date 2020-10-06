@@ -1,7 +1,6 @@
 use super::operand::AtomKind;
-use super::{Analysis, Expr, Fragment, Operand, Width};
+use super::*;
 
-use crate::assembler::session::builder::*;
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::span::{Source, SpanSource};
 
@@ -339,6 +338,12 @@ impl<N, S: Clone> Source for LdDest16<N, S> {
             LdDest16::DerefNn(nn) => nn.span(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Direction {
+    FromA,
+    IntoA,
 }
 
 fn encode_direction(direction: Direction) -> u8 {

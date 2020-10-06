@@ -1,7 +1,6 @@
-use super::Condition;
+use super::{Condition, PtrReg, Reg16, RegPair, M};
 
 use crate::assembler::semantics::*;
-use crate::assembler::session::builder::{PtrReg, Reg16, RegPair, M};
 use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::span::{Source, SpanSource};

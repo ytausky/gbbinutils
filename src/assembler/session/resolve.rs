@@ -1,8 +1,5 @@
-use super::macros::MacroSource;
-use super::{CompositeSession, Interner};
+use super::*;
 
-use crate::assembler::semantics::Keyword;
-use crate::assembler::session::builder::SymbolSource;
 use crate::span::SpanSource;
 
 use std::collections::HashMap;
@@ -10,29 +7,7 @@ use std::collections::HashMap;
 #[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
-pub(crate) trait NameTable<I>: MacroSource + SymbolSource {
-    fn resolve_name_with_visibility(
-        &mut self,
-        ident: &I,
-        visibility: Visibility,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
-
-    fn define_name_with_visibility(
-        &mut self,
-        ident: I,
-        visibility: Visibility,
-        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
-    );
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ResolvedName<MacroId, SymbolId> {
-    Keyword(&'static Keyword),
-    Macro(MacroId),
-    Symbol(SymbolId),
-}
-
-pub trait StartScope {
+pub(in crate::assembler) trait StartScope {
     fn start_scope(&mut self);
 }
 
@@ -62,14 +37,8 @@ impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Visibility {
-    Global,
-    Local,
-}
-
 pub struct BiLevelNameTable<M, S, R> {
-    pub global: HashMap<R, ResolvedName<M, S>>,
+    pub(super) global: HashMap<R, ResolvedName<M, S>>,
     local: HashMap<R, ResolvedName<M, S>>,
 }
 
@@ -171,7 +140,6 @@ where
 pub mod mock {
     use super::*;
 
-    use crate::assembler::session::lex::StringSource;
     use crate::assembler::session::mock::NameTableEvent;
     use crate::log::Log;
 

@@ -1,24 +1,16 @@
-use super::lex::{Lex, Literal, StringSource};
+use super::lex::Lex;
 use super::macros::MacroTable;
-use super::resolve::{NameTable, StartScope};
-use super::{CompositeSession, Interner, NextToken};
+use super::resolve::StartScope;
+use super::*;
 
 use crate::assembler::semantics::{Semantics, TokenStreamState};
-use crate::assembler::session::builder::Backend;
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParserFactory};
-use crate::assembler::syntax::{LexError, ParseTokenStream};
+use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
 use crate::codebase::{BufId, Codebase, CodebaseError};
-use crate::diagnostics::*;
 use crate::span::{SpanSource, SpanSystem};
 
 #[cfg(test)]
 pub(crate) use self::mock::*;
-
-pub(crate) trait ReentrancyActions<R, S> {
-    fn analyze_file(&mut self, path: R, from: Option<S>) -> Result<(), CodebaseError>;
-}
-
-pub type Params<I, S> = (Vec<I>, Vec<S>);
 
 impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
     for CompositeSession<C, R, I, M, N, B, D>
@@ -67,8 +59,7 @@ where
 mod mock {
     use super::*;
 
-    use crate::assembler::session::macros::MacroSource;
-    use crate::assembler::session::mock::{MockMacroId, ReentrancyEvent};
+    use crate::assembler::session::mock::ReentrancyEvent;
     use crate::log::Log;
 
     use std::marker::PhantomData;
@@ -77,10 +68,6 @@ mod mock {
         log: Log<T>,
         error: Option<CodebaseError>,
         _span: PhantomData<S>,
-    }
-
-    impl<T, S: Clone> MacroSource for MockCodebase<T, S> {
-        type MacroId = MockMacroId;
     }
 
     impl<T, S: Clone> SpanSource for MockCodebase<T, S> {

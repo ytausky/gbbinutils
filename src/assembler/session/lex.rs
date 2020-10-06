@@ -1,20 +1,11 @@
+use super::StringSource;
+
 use crate::assembler::session::{CompositeSession, Interner, TokenStream};
 use crate::assembler::syntax::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{FileInclusionMetadata, Span, SpanSource, SpanSystem};
 
-use std::fmt::Debug;
-use std::hash::Hash;
 use std::rc::Rc;
-
-pub type LexItem<R, S> = (Result<SemanticToken<R>, LexError>, S);
-pub type SemanticToken<R> = crate::assembler::syntax::Token<R, Literal<R>>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Literal<R> {
-    Number(i32),
-    String(R),
-}
 
 pub(crate) trait Lex<R, I>: StringSource + SpanSource
 where
@@ -29,8 +20,6 @@ where
         from: Option<R::Span>,
     ) -> Result<Self::TokenIter, CodebaseError>;
 }
-
-pub type TokenSeq<R, S> = (Vec<SemanticToken<R>>, Vec<S>);
 
 impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
 where
@@ -53,10 +42,6 @@ where
                 .add_file_inclusion(FileInclusionMetadata { file: buf_id, from }),
         ))
     }
-}
-
-pub trait StringSource {
-    type StringRef: Clone + Debug + Eq + Hash;
 }
 
 pub struct TokenizedSrc<I> {

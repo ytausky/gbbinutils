@@ -1,26 +1,29 @@
-use self::builder::{Backend, ObjectBuilder, SymbolSource};
-use self::lex::{LexItem, Literal, StringSource};
-use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
-use self::reentrancy::ReentrancyActions;
+use self::builder::ObjectBuilder;
+use self::macros::{MacroId, MacroTable, VecMacroTable};
 use self::resolve::*;
 
-use crate::assembler::keywords::KEYWORDS;
-use crate::assembler::syntax::{Sigil, Token};
-use crate::codebase::{BufId, FileCodebase, FileSystem};
+use super::keywords::KEYWORDS;
+use super::semantics::Keyword;
+use super::syntax::{LexItem, Literal, Sigil, Token};
+
+use crate::codebase::{BufId, CodebaseError, FileCodebase, FileSystem};
 use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};
-use crate::object::SymbolId;
+use crate::expr::Expr;
+use crate::object::{Fragment, SymbolId};
 use crate::span::*;
 
 use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::rc::Rc;
 
-pub mod builder;
-pub mod lex;
-pub mod macros;
-pub mod reentrancy;
-pub mod resolve;
+mod builder;
+mod lex;
+mod macros;
+mod reentrancy;
+mod resolve;
 
-pub(crate) trait Analysis:
+pub(super) trait Analysis:
     SpanSource
     + StringSource
     + MacroSource
@@ -62,7 +65,63 @@ pub(crate) trait NextToken: StringSource + SpanSource {
     fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>>;
 }
 
-pub(crate) type Session<'a> = CompositeSession<
+pub(super) trait ReentrancyActions<R, S> {
+    fn analyze_file(&mut self, path: R, from: Option<S>) -> Result<(), CodebaseError>;
+}
+
+pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
+    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>);
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>);
+    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool>;
+    fn set_origin(&mut self, origin: Expr<Self::SymbolId, S>);
+    fn start_section(&mut self, name: Self::SymbolId, span: S);
+}
+
+pub trait AllocSymbol<S: Clone>: SymbolSource {
+    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId;
+}
+
+pub(super) trait NameTable<I>: MacroSource + SymbolSource {
+    fn resolve_name_with_visibility(
+        &mut self,
+        ident: &I,
+        visibility: Visibility,
+    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+
+    fn define_name_with_visibility(
+        &mut self,
+        ident: I,
+        visibility: Visibility,
+        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+    );
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Visibility {
+    Global,
+    Local,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum ResolvedName<MacroId, SymbolId> {
+    Keyword(&'static Keyword),
+    Macro(MacroId),
+    Symbol(SymbolId),
+}
+
+pub trait StringSource {
+    type StringRef: Clone + Debug + Eq + Hash;
+}
+
+pub trait SymbolSource {
+    type SymbolId: Clone;
+}
+
+pub(super) trait MacroSource {
+    type MacroId: Clone;
+}
+
+pub(super) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
     RcContextFactory<BufId>,
     HashInterner,
@@ -293,7 +352,7 @@ pub mod mock {
     use crate::object::Fragment;
 
     #[derive(Debug, PartialEq)]
-    pub enum TestOperation<S: Clone> {
+    pub(in crate::assembler) enum TestOperation<S: Clone> {
         Backend(BackendEvent<MockSymbolId, Expr<S>>),
         Diagnostics(DiagnosticsEvent<S>),
         MacroTable(MacroTableEvent),
@@ -323,7 +382,7 @@ pub mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum NameTableEvent<MacroId, SymbolId> {
+    pub(in crate::assembler) enum NameTableEvent<MacroId, SymbolId> {
         Insert(String, ResolvedName<MacroId, SymbolId>),
         StartScope,
     }
@@ -334,7 +393,7 @@ pub mod mock {
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct MockSymbolId(pub usize);
 
-    pub(crate) type MockSession<T, S> = CompositeSession<
+    pub(in crate::assembler) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,
         MockDiagnostics<T, S>,
         MockInterner,

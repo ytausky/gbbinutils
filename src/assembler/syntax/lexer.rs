@@ -1,7 +1,6 @@
 use super::Sigil::*;
-use super::{Sigil, Token};
+use super::{LexItem, Literal, Sigil, Token};
 
-use crate::assembler::session::lex::{LexItem, Literal};
 use crate::assembler::session::Interner;
 
 use std::borrow::Borrow;
@@ -306,7 +305,7 @@ mod tests {
         )
     }
 
-    type TestToken = Token<String, crate::assembler::session::lex::Literal<String>>;
+    type TestToken = Token<String, crate::assembler::syntax::Literal<String>>;
 
     #[test]
     fn lex_empty_str() {

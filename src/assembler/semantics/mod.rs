@@ -1,14 +1,8 @@
-use super::keywords::{BuiltinMnemonic, OperandSymbol};
+use super::keywords::{BuiltinMnemonic, Directive, Mnemonic, OperandSymbol};
+use super::session::*;
+use super::syntax::actions::*;
+use super::syntax::{LexError, Literal, SemanticToken, Sigil, Token};
 
-use crate::assembler::keywords::{Directive, Mnemonic};
-use crate::assembler::session::builder::*;
-use crate::assembler::session::lex::{Literal, SemanticToken, StringSource, TokenSeq};
-use crate::assembler::session::macros::MacroSource;
-use crate::assembler::session::reentrancy::Params;
-use crate::assembler::session::resolve::{NameTable, ResolvedName, Visibility};
-use crate::assembler::session::{Analysis, Interner, NextToken};
-use crate::assembler::syntax::actions::*;
-use crate::assembler::syntax::{LexError, Sigil, Token};
 use crate::diagnostics::{CompactDiag, Diagnostics, Message};
 use crate::expr::{Atom, Expr, ExprOp, ParamId};
 use crate::span::{SpanSource, Spanned, StripSpan, WithSpan};
@@ -26,12 +20,12 @@ mod cpu_instr;
 mod directive;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Keyword {
+pub(super) enum Keyword {
     BuiltinMnemonic(BuiltinMnemonic),
     Operand(OperandSymbol),
 }
 
-pub(crate) struct Semantics<'a, S, T> {
+pub(super) struct Semantics<'a, S, T> {
     pub session: &'a mut S,
     pub state: T,
 }
@@ -49,7 +43,7 @@ type TokenStreamSemantics<'a, S> =
     Semantics<'a, S, TokenStreamState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct TokenStreamState<R, S> {
+pub(super) struct TokenStreamState<R, S> {
     mode: LineRule<InstrLineState<R, S>, TokenLineState<R, S>>,
 }
 
@@ -76,6 +70,7 @@ impl<R, S> InstrLineState<R, S> {
 }
 
 type Label<R, S> = ((R, S), Params<R, S>);
+type Params<I, S> = (Vec<I>, Vec<S>);
 
 type TokenLineSemantics<'a, S> =
     Semantics<'a, S, TokenLineState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
@@ -97,6 +92,8 @@ pub struct MacroDefState<R, S> {
     tokens: TokenSeq<R, S>,
 }
 
+pub type TokenSeq<R, S> = (Vec<SemanticToken<R>>, Vec<S>);
+
 impl<R, S> MacroDefState<R, S> {
     fn new(label: Option<Label<R, S>>) -> Self {
         Self {
@@ -108,7 +105,7 @@ impl<R, S> MacroDefState<R, S> {
 
 type BuiltinInstrSemantics<'a, S> = Semantics<'a, S, BuiltinInstrState<S>>;
 
-pub(crate) struct BuiltinInstrState<S: Analysis> {
+pub(super) struct BuiltinInstrState<S: Analysis> {
     label: Option<Label<S::StringRef, S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
     args: BuiltinInstrArgs<S::StringRef, S::Span>,
@@ -129,7 +126,7 @@ impl<S: Analysis> BuiltinInstrState<S> {
 
 type BuiltinInstrArgs<R, S> = Vec<ParsedArg<R, S>>;
 
-pub(crate) type ArgSemantics<'a, S> = Semantics<
+pub(super) type ArgSemantics<'a, S> = Semantics<
     'a,
     S,
     ExprBuilder<<S as StringSource>::StringRef, <S as SpanSource>::Span, BuiltinInstrState<S>>,
@@ -403,7 +400,7 @@ impl<'a, S: Analysis> LineFinalizer for TokenLineSemantics<'a, S> {
     }
 }
 
-pub(crate) struct TokenContextFinalizationSemantics<'a, S: Analysis> {
+pub(super) struct TokenContextFinalizationSemantics<'a, S: Analysis> {
     parent: TokenLineSemantics<'a, S>,
 }
 
@@ -558,9 +555,9 @@ where
     }
 }
 
-pub(crate) type LabelSemantics<'a, S> = Semantics<'a, S, LabelState<S>>;
+pub(super) type LabelSemantics<'a, S> = Semantics<'a, S, LabelState<S>>;
 
-pub(crate) struct LabelState<S: Analysis> {
+pub(super) struct LabelState<S: Analysis> {
     parent: InstrLineState<S::StringRef, S::Span>,
     label: (S::StringRef, S::Span),
     params: Params<S::StringRef, S::Span>,
@@ -596,7 +593,7 @@ impl<'a, S: Analysis> LabelContext for LabelSemantics<'a, S> {
 
 pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>>;
 
-pub(crate) struct MacroInstrState<S: Analysis> {
+pub(super) struct MacroInstrState<S: Analysis> {
     parent: InstrLineState<S::StringRef, S::Span>,
     name: (S::MacroId, S::Span),
     args: (Vec<Box<[SemanticToken<S::StringRef>]>>, Vec<Box<[S::Span]>>),
@@ -654,7 +651,7 @@ where
 
 type MacroArgSemantics<'a, S> = Semantics<'a, S, MacroArgState<S>>;
 
-pub(crate) struct MacroArgState<S: Analysis> {
+pub(super) struct MacroArgState<S: Analysis> {
     tokens: TokenSeq<S::StringRef, S::Span>,
     parent: MacroInstrState<S>,
 }
@@ -999,10 +996,9 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::lex::SemanticToken;
     use crate::assembler::session::mock::Expr;
     use crate::assembler::session::mock::*;
-    use crate::assembler::syntax::{Sigil, Token};
+    use crate::assembler::syntax::{SemanticToken, Sigil, Token};
     use crate::diagnostics::mock::{DiagnosticsEvent, Merge, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::log::Log;
@@ -1377,7 +1373,7 @@ mod tests {
         )
     }
 
-    pub(crate) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
+    pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
     where
         F: for<'a, 'b> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Debug + Merge,

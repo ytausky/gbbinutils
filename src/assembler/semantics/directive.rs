@@ -207,10 +207,9 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::tests::*;
-    use crate::assembler::session::lex::Literal;
-    use crate::assembler::session::mock::MockSession;
     use crate::assembler::session::mock::*;
-    use crate::assembler::session::resolve::ResolvedName;
+    use crate::assembler::session::ResolvedName;
+    use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
 

@@ -1,12 +1,12 @@
-use crate::assembler::session::builder::IncDec;
 use crate::codebase::{BufId, BufRange, CodebaseError, TextCache};
 use crate::object::Width;
 use crate::span::StrippedBufSpan;
+use crate::IncDec;
 
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Message<S> {
+pub(crate) enum Message<S> {
     AfOutsideStackOperation,
     AlwaysUnconditional,
     CannotBeUsedAsTarget,

@@ -1,5 +1,4 @@
-use self::session::reentrancy::ReentrancyActions;
-use self::session::{Interner, Session};
+use self::session::{Interner, ReentrancyActions, Session};
 
 use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
 use crate::diagnostics::{mk_diagnostic, Diagnostic, DiagnosticsContext, OutputForwarder};

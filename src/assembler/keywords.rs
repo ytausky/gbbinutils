@@ -5,9 +5,9 @@ use self::OperandSymbol::*;
 use super::semantics::Keyword;
 use super::semantics::Keyword::*;
 
-use crate::assembler::session::builder::*;
+use crate::IncDec;
 
-pub const KEYWORDS: &[(&str, Keyword)] = &[
+pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
     ("ADC", BuiltinMnemonic(CpuInstr(ADC))),
     ("ADD", BuiltinMnemonic(CpuInstr(ADD))),
@@ -81,7 +81,7 @@ pub const KEYWORDS: &[(&str, Keyword)] = &[
 ];
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum BuiltinMnemonic {
+pub(super) enum BuiltinMnemonic {
     CpuInstr(Mnemonic),
     Directive(Directive),
 }
@@ -114,7 +114,7 @@ impl BuiltinMnemonic {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Mnemonic {
+pub(super) enum Mnemonic {
     Alu(AluOperation),
     Bit(BitOperation),
     Branch(BranchKind),
@@ -126,6 +126,37 @@ pub enum Mnemonic {
     Rst,
     Stack(StackOperation),
     Stop,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AluOperation {
+    Add,
+    Adc,
+    Sub,
+    Sbc,
+    And,
+    Xor,
+    Or,
+    Cp,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BitOperation {
+    Bit,
+    Set,
+    Res,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MiscOperation {
+    Rlc,
+    Rrc,
+    Rl,
+    Rr,
+    Sla,
+    Sra,
+    Swap,
+    Srl,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -155,48 +186,48 @@ pub enum OperandSymbol {
     Z,
 }
 
-pub(crate) const ADC: Mnemonic = Mnemonic::Alu(AluOperation::Adc);
-pub(crate) const ADD: Mnemonic = Mnemonic::Alu(AluOperation::Add);
-pub(crate) const AND: Mnemonic = Mnemonic::Alu(AluOperation::And);
-pub(crate) const BIT: Mnemonic = Mnemonic::Bit(BitOperation::Bit);
-pub(crate) const CALL: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Call));
-pub(crate) const CP: Mnemonic = Mnemonic::Alu(AluOperation::Cp);
-pub(crate) const CPL: Mnemonic = Mnemonic::Nullary(0x2f);
-pub(crate) const DAA: Mnemonic = Mnemonic::Nullary(0x27);
-pub(crate) const DEC: Mnemonic = Mnemonic::IncDec(IncDec::Dec);
-pub(crate) const DI: Mnemonic = Mnemonic::Nullary(0xf3);
-pub(crate) const EI: Mnemonic = Mnemonic::Nullary(0xfb);
-pub(crate) const HALT: Mnemonic = Mnemonic::Nullary(0x76);
-pub(crate) const INC: Mnemonic = Mnemonic::IncDec(IncDec::Inc);
-pub(crate) const JP: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jp));
-pub(crate) const JR: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jr));
-pub(crate) const LD: Mnemonic = Mnemonic::Ld;
-pub(crate) const LDHL: Mnemonic = Mnemonic::Ldhl;
-pub(crate) const NOP: Mnemonic = Mnemonic::Nullary(0x00);
-pub(crate) const OR: Mnemonic = Mnemonic::Alu(AluOperation::Or);
-pub(crate) const POP: Mnemonic = Mnemonic::Stack(StackOperation::Pop);
-pub(crate) const PUSH: Mnemonic = Mnemonic::Stack(StackOperation::Push);
-pub(crate) const RES: Mnemonic = Mnemonic::Bit(BitOperation::Res);
-pub(crate) const RET: Mnemonic = Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Ret));
-pub(crate) const RETI: Mnemonic = Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Reti));
-pub(crate) const RL: Mnemonic = Mnemonic::Misc(MiscOperation::Rl);
-pub(crate) const RLA: Mnemonic = Mnemonic::Nullary(0x17);
-pub(crate) const RLC: Mnemonic = Mnemonic::Misc(MiscOperation::Rlc);
-pub(crate) const RLCA: Mnemonic = Mnemonic::Nullary(0x07);
-pub(crate) const RR: Mnemonic = Mnemonic::Misc(MiscOperation::Rr);
-pub(crate) const RRA: Mnemonic = Mnemonic::Nullary(0x1f);
-pub(crate) const RRC: Mnemonic = Mnemonic::Misc(MiscOperation::Rrc);
-pub(crate) const RRCA: Mnemonic = Mnemonic::Nullary(0x0f);
-pub(crate) const RST: Mnemonic = Mnemonic::Rst;
-pub(crate) const SBC: Mnemonic = Mnemonic::Alu(AluOperation::Sbc);
-pub(crate) const SET: Mnemonic = Mnemonic::Bit(BitOperation::Set);
-pub(crate) const SLA: Mnemonic = Mnemonic::Misc(MiscOperation::Sla);
-pub(crate) const SRA: Mnemonic = Mnemonic::Misc(MiscOperation::Sra);
-pub(crate) const SRL: Mnemonic = Mnemonic::Misc(MiscOperation::Srl);
-pub(crate) const STOP: Mnemonic = Mnemonic::Stop;
-pub(crate) const SUB: Mnemonic = Mnemonic::Alu(AluOperation::Sub);
-pub(crate) const SWAP: Mnemonic = Mnemonic::Misc(MiscOperation::Swap);
-pub(crate) const XOR: Mnemonic = Mnemonic::Alu(AluOperation::Xor);
+pub(super) const ADC: Mnemonic = Mnemonic::Alu(AluOperation::Adc);
+pub(super) const ADD: Mnemonic = Mnemonic::Alu(AluOperation::Add);
+pub(super) const AND: Mnemonic = Mnemonic::Alu(AluOperation::And);
+pub(super) const BIT: Mnemonic = Mnemonic::Bit(BitOperation::Bit);
+pub(super) const CALL: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Call));
+pub(super) const CP: Mnemonic = Mnemonic::Alu(AluOperation::Cp);
+pub(super) const CPL: Mnemonic = Mnemonic::Nullary(0x2f);
+pub(super) const DAA: Mnemonic = Mnemonic::Nullary(0x27);
+pub(super) const DEC: Mnemonic = Mnemonic::IncDec(IncDec::Dec);
+pub(super) const DI: Mnemonic = Mnemonic::Nullary(0xf3);
+pub(super) const EI: Mnemonic = Mnemonic::Nullary(0xfb);
+pub(super) const HALT: Mnemonic = Mnemonic::Nullary(0x76);
+pub(super) const INC: Mnemonic = Mnemonic::IncDec(IncDec::Inc);
+pub(super) const JP: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jp));
+pub(super) const JR: Mnemonic = Mnemonic::Branch(BranchKind::Explicit(ExplicitBranch::Jr));
+pub(super) const LD: Mnemonic = Mnemonic::Ld;
+pub(super) const LDHL: Mnemonic = Mnemonic::Ldhl;
+pub(super) const NOP: Mnemonic = Mnemonic::Nullary(0x00);
+pub(super) const OR: Mnemonic = Mnemonic::Alu(AluOperation::Or);
+pub(super) const POP: Mnemonic = Mnemonic::Stack(StackOperation::Pop);
+pub(super) const PUSH: Mnemonic = Mnemonic::Stack(StackOperation::Push);
+pub(super) const RES: Mnemonic = Mnemonic::Bit(BitOperation::Res);
+pub(super) const RET: Mnemonic = Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Ret));
+pub(super) const RETI: Mnemonic = Mnemonic::Branch(BranchKind::Implicit(ImplicitBranch::Reti));
+pub(super) const RL: Mnemonic = Mnemonic::Misc(MiscOperation::Rl);
+pub(super) const RLA: Mnemonic = Mnemonic::Nullary(0x17);
+pub(super) const RLC: Mnemonic = Mnemonic::Misc(MiscOperation::Rlc);
+pub(super) const RLCA: Mnemonic = Mnemonic::Nullary(0x07);
+pub(super) const RR: Mnemonic = Mnemonic::Misc(MiscOperation::Rr);
+pub(super) const RRA: Mnemonic = Mnemonic::Nullary(0x1f);
+pub(super) const RRC: Mnemonic = Mnemonic::Misc(MiscOperation::Rrc);
+pub(super) const RRCA: Mnemonic = Mnemonic::Nullary(0x0f);
+pub(super) const RST: Mnemonic = Mnemonic::Rst;
+pub(super) const SBC: Mnemonic = Mnemonic::Alu(AluOperation::Sbc);
+pub(super) const SET: Mnemonic = Mnemonic::Bit(BitOperation::Set);
+pub(super) const SLA: Mnemonic = Mnemonic::Misc(MiscOperation::Sla);
+pub(super) const SRA: Mnemonic = Mnemonic::Misc(MiscOperation::Sra);
+pub(super) const SRL: Mnemonic = Mnemonic::Misc(MiscOperation::Srl);
+pub(super) const STOP: Mnemonic = Mnemonic::Stop;
+pub(super) const SUB: Mnemonic = Mnemonic::Alu(AluOperation::Sub);
+pub(super) const SWAP: Mnemonic = Mnemonic::Misc(MiscOperation::Swap);
+pub(super) const XOR: Mnemonic = Mnemonic::Alu(AluOperation::Xor);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchKind {

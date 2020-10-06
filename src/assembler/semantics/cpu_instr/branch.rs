@@ -1,7 +1,6 @@
-use super::{Analysis, AtomKind, Condition, Expr, Fragment, Operand, Width, M};
+use super::{Analysis, AtomKind, Backend, Condition, Expr, Fragment, Operand, Width, M};
 
 use crate::assembler::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
-use crate::assembler::session::builder::Backend;
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
 use crate::span::WithSpan;
