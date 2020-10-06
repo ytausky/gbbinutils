@@ -90,7 +90,7 @@ impl<'a> Session<'a> {
             builder: ObjectBuilder::new(),
             diagnostics,
         };
-        for (string, name) in crate::object::eval::BUILTIN_SYMBOLS {
+        for (string, name) in crate::eval::BUILTIN_SYMBOLS {
             let string = session.interner.intern(string);
             session.define_name_with_visibility(
                 string,

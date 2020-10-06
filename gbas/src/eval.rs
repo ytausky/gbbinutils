@@ -1,5 +1,3 @@
-use super::{Expr, LinkageContext, VarTable};
-
 use crate::diagnostics::{BackendDiagnostics, Message, ValueKind};
 use crate::expr::{Atom, BinOp, ExprOp, ParamId};
 use crate::object::num::Num;

@@ -18,6 +18,7 @@ use crate::session::{CompositeSession, Interner, Session};
 pub mod diagnostics;
 
 mod codebase;
+mod eval;
 mod expr;
 mod link;
 mod object;

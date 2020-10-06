@@ -4,7 +4,6 @@ use crate::expr::{Atom, ExprOp};
 
 use std::ops::{Index, IndexMut};
 
-pub mod eval;
 pub mod num;
 
 pub struct Object<S> {
@@ -44,7 +43,7 @@ pub enum BuiltinDefId {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UserDefId(usize);
+pub struct UserDefId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarId(pub usize);
@@ -65,7 +64,7 @@ pub enum Width {
     Word,
 }
 
-pub struct SymbolTable<S>(Vec<Option<UserDef<Closure<S>, SectionId>>>);
+pub struct SymbolTable<S>(pub Vec<Option<UserDef<Closure<S>, SectionId>>>);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum UserDef<F, S> {
@@ -82,7 +81,7 @@ pub struct Closure<S> {
 #[derive(Debug, PartialEq)]
 pub struct SectionId(pub usize);
 
-pub struct VarTable(Vec<Var>);
+pub struct VarTable(pub Vec<Var>);
 
 #[derive(Clone, Default)]
 pub struct Var {
