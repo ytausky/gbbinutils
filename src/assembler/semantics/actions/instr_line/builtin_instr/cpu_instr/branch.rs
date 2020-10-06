@@ -1,6 +1,6 @@
 use super::{Analysis, AtomKind, Condition, Expr, Fragment, Operand, Width, M};
 
-use crate::assembler::semantics::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
+use crate::assembler::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::assembler::session::builder::Backend;
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
@@ -197,7 +197,7 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
-    use crate::assembler::semantics::keywords::*;
+    use crate::assembler::keywords::*;
     use crate::diagnostics::Merge;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
 

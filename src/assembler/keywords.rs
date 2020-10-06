@@ -1,9 +1,9 @@
 use self::BuiltinMnemonic::*;
 use self::Directive::*;
 
-use super::arg::OperandSymbol::*;
-use super::Keyword;
-use super::Keyword::*;
+use super::semantics::arg::OperandSymbol::*;
+use super::semantics::Keyword;
+use super::semantics::Keyword::*;
 
 use crate::assembler::session::builder::*;
 

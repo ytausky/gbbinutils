@@ -373,7 +373,7 @@ mod tests {
     use super::super::tests::*;
     use super::*;
 
-    use crate::assembler::semantics::keywords::LD;
+    use crate::assembler::keywords::LD;
     use crate::diagnostics::Merge;
 
     #[test]

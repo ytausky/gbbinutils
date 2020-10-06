@@ -4,7 +4,7 @@ use self::macros::{MacroId, MacroSource, MacroTable, VecMacroTable};
 use self::reentrancy::ReentrancyActions;
 use self::resolve::*;
 
-use crate::assembler::semantics::keywords::KEYWORDS;
+use crate::assembler::keywords::KEYWORDS;
 use crate::assembler::syntax::{Sigil, Token};
 use crate::codebase::{BufId, FileCodebase, FileSystem};
 use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};

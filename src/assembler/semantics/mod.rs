@@ -1,5 +1,6 @@
 use self::arg::{Arg, OperandSymbol, ParsedArg};
-use self::keywords::BuiltinMnemonic;
+
+use super::keywords::BuiltinMnemonic;
 
 use crate::assembler::session::builder::*;
 use crate::assembler::session::lex::{StringSource, TokenSeq};
@@ -21,8 +22,7 @@ macro_rules! set_state {
 }
 
 pub mod actions;
-mod arg;
-pub mod keywords;
+pub mod arg;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {

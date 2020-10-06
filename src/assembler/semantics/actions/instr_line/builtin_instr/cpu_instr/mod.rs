@@ -1,6 +1,6 @@
 use self::operand::{AtomKind, Context, Operand, OperandCounter};
 
-use crate::assembler::semantics::keywords::{Mnemonic, StackOperation};
+use crate::assembler::keywords::{Mnemonic, StackOperation};
 use crate::assembler::session::builder::*;
 use crate::diagnostics::*;
 use crate::expr::Expr;
@@ -464,8 +464,8 @@ mod tests {
 
     use super::*;
 
+    use crate::assembler::keywords::*;
     use crate::assembler::semantics::arg::*;
-    use crate::assembler::semantics::keywords::*;
     use crate::assembler::session::builder::mock::BackendEvent;
     use crate::assembler::session::lex::Literal;
     use crate::expr::Atom;

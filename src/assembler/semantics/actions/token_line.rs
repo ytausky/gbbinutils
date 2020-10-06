@@ -1,6 +1,6 @@
 use super::{Keyword, TokenStreamSemantics};
 
-use crate::assembler::semantics::keywords::Directive;
+use crate::assembler::keywords::Directive;
 use crate::assembler::semantics::*;
 use crate::assembler::session::lex::{Literal, SemanticToken};
 use crate::assembler::session::resolve::ResolvedName;

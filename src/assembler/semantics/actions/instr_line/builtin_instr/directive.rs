@@ -1,5 +1,5 @@
+use crate::assembler::keywords::Directive;
 use crate::assembler::semantics::arg::*;
-use crate::assembler::semantics::keywords::Directive;
 use crate::assembler::semantics::Semantics;
 use crate::assembler::semantics::*;
 use crate::diagnostics::*;
