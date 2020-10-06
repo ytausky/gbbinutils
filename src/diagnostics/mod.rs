@@ -448,7 +448,7 @@ impl ExpandedDiagnosticClause<StrippedBufSpan<BufId, BufRange>, BufId, BufRange>
 }
 
 #[cfg(test)]
-mod mock {
+pub(crate) mod mock {
     use super::*;
 
     use crate::log::Log;
