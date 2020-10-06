@@ -1,7 +1,6 @@
 use super::BuiltinInstrSemantics;
 
-use crate::assembler::semantics::arg::ParsedArg;
-use crate::assembler::semantics::{ArgSemantics, Semantics};
+use crate::assembler::semantics::{ArgSemantics, ParsedArg, Semantics};
 use crate::assembler::session::lex::Literal;
 use crate::assembler::session::Analysis;
 use crate::assembler::syntax::actions::*;

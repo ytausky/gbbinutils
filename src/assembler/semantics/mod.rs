@@ -1,6 +1,4 @@
-use self::arg::{Arg, OperandSymbol, ParsedArg};
-
-use super::keywords::BuiltinMnemonic;
+use super::keywords::{BuiltinMnemonic, OperandSymbol};
 
 use crate::assembler::session::builder::*;
 use crate::assembler::session::lex::{StringSource, TokenSeq};
@@ -10,6 +8,7 @@ use crate::assembler::session::resolve::{NameTable, ResolvedName, Visibility};
 use crate::assembler::session::{Analysis, Interner};
 use crate::assembler::syntax::actions::{LexerOutput, LineRule};
 use crate::diagnostics::Diagnostics;
+use crate::expr::Expr;
 use crate::span::{SpanSource, Spanned};
 
 macro_rules! set_state {
@@ -22,7 +21,6 @@ macro_rules! set_state {
 }
 
 pub mod actions;
-pub mod arg;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
@@ -143,6 +141,26 @@ impl<R, S, P> ExprBuilder<R, S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }
+}
+
+enum ParsedArg<R, S> {
+    Bare(Expr<R, S>),
+    Parenthesized(Expr<R, S>, S),
+    String(R, S),
+    Error,
+}
+
+enum Arg<N, R, S> {
+    Bare(BareArg<N, S>),
+    Deref(BareArg<N, S>, S),
+    String(R, S),
+    Error,
+}
+
+#[derive(Clone)]
+enum BareArg<N, S> {
+    Const(Expr<N, S>),
+    Symbol(OperandSymbol, S),
 }
 
 trait NameVisibility<R> {

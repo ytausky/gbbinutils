@@ -2,8 +2,7 @@ use super::*;
 
 use crate::assembler::keywords::{Directive, Mnemonic};
 use crate::assembler::semantics::actions::TokenStreamState;
-use crate::assembler::semantics::arg::*;
-use crate::assembler::semantics::ResolveName;
+use crate::assembler::semantics::*;
 use crate::assembler::session::builder::SymbolSource;
 use crate::assembler::session::resolve::NameTable;
 use crate::assembler::syntax::actions::{BuiltinInstrContext, InstrFinalizer};

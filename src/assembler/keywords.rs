@@ -1,7 +1,7 @@
 use self::BuiltinMnemonic::*;
 use self::Directive::*;
+use self::OperandSymbol::*;
 
-use super::semantics::arg::OperandSymbol::*;
 use super::semantics::Keyword;
 use super::semantics::Keyword::*;
 
@@ -132,6 +132,27 @@ pub enum Mnemonic {
 pub enum StackOperation {
     Push,
     Pop,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OperandSymbol {
+    A,
+    Af,
+    B,
+    Bc,
+    C,
+    D,
+    De,
+    E,
+    H,
+    Hl,
+    Hld,
+    Hli,
+    L,
+    Nc,
+    Nz,
+    Sp,
+    Z,
 }
 
 pub(crate) const ADC: Mnemonic = Mnemonic::Alu(AluOperation::Adc);
