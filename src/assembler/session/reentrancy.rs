@@ -67,16 +67,11 @@ where
 mod mock {
     use super::*;
 
-    use crate::assembler::session::macros::mock::MockMacroId;
     use crate::assembler::session::macros::MacroSource;
+    use crate::assembler::session::mock::{MockMacroId, ReentrancyEvent};
     use crate::log::Log;
 
     use std::marker::PhantomData;
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) enum ReentrancyEvent {
-        AnalyzeFile(String),
-    }
 
     pub struct MockCodebase<T, S> {
         log: Log<T>,

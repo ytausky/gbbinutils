@@ -20,7 +20,7 @@ macro_rules! set_state {
     };
 }
 
-pub mod actions;
+mod actions;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Keyword {
@@ -215,9 +215,7 @@ where
 mod tests {
     use super::*;
 
-    use super::actions::tests::TestOperation;
-
-    use crate::assembler::session::mock::MockSession;
+    use crate::assembler::session::mock::{MockSession, TestOperation};
     use crate::log::Log;
 
     #[test]

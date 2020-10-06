@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::actions::tests::*;
-    use crate::assembler::session::builder::mock::MockSymbolId;
+    use crate::assembler::session::mock::MockSymbolId;
     use crate::assembler::syntax::actions::*;
     use crate::diagnostics::{DiagnosticsEvent, Message, MockSpan};
 

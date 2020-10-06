@@ -229,24 +229,14 @@ impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
 pub mod mock {
     use super::*;
 
+    use crate::assembler::session::mock::BackendEvent;
     use crate::expr::{Atom, Expr, ExprOp};
     use crate::log::Log;
-    use crate::span::{Source, Spanned};
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub(crate) struct MockSymbolId(pub usize);
+    use crate::span::Spanned;
 
     pub(crate) struct MockBackend<A, T> {
         alloc: A,
         pub log: Log<T>,
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub enum BackendEvent<N, V: Source> {
-        EmitFragment(Fragment<V>),
-        SetOrigin(V),
-        DefineSymbol((N, V::Span), V),
-        StartSection(N, V::Span),
     }
 
     impl<A, T> MockBackend<A, T> {

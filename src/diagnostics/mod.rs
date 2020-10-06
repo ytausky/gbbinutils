@@ -503,7 +503,7 @@ mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub(crate) enum DiagnosticsEvent<S> {
+    pub enum DiagnosticsEvent<S> {
         EmitDiag(CompactDiag<S>),
     }
 

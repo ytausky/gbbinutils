@@ -119,14 +119,12 @@ impl<'a, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, S> {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
-    use crate::assembler::session::builder::mock::*;
     use crate::assembler::session::lex::SemanticToken;
-    use crate::assembler::session::macros::mock::{MacroTableEvent, MockMacroId};
-    use crate::assembler::session::mock::MockSession;
-    use crate::assembler::session::reentrancy::ReentrancyEvent;
+    use crate::assembler::session::mock::Expr;
+    use crate::assembler::session::mock::*;
     use crate::assembler::session::resolve::*;
     use crate::assembler::syntax::{Sigil, Token};
     use crate::diagnostics::{DiagnosticsEvent, Merge, Message, MockSpan};
@@ -136,17 +134,6 @@ pub mod tests {
 
     use std::borrow::Borrow;
     use std::fmt::Debug;
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) enum TestOperation<S: Clone> {
-        Backend(BackendEvent<MockSymbolId, Expr<S>>),
-        Diagnostics(DiagnosticsEvent<S>),
-        MacroTable(MacroTableEvent),
-        NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
-        Reentrancy(ReentrancyEvent),
-    }
-
-    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
 
     impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
         fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {

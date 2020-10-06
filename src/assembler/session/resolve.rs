@@ -8,9 +8,6 @@ use crate::span::SpanSource;
 use std::collections::HashMap;
 
 #[cfg(test)]
-pub use self::mock::*;
-
-#[cfg(test)]
 use crate::expr::{Atom, ExprOp};
 
 pub(crate) trait NameTable<I>: MacroSource + SymbolSource {
@@ -171,10 +168,11 @@ where
 }
 
 #[cfg(test)]
-mod mock {
+pub mod mock {
     use super::*;
 
     use crate::assembler::session::lex::StringSource;
+    use crate::assembler::session::mock::NameTableEvent;
     use crate::log::Log;
 
     pub(crate) struct MockNameTable<N, T> {
@@ -269,21 +267,13 @@ mod mock {
             self.names.log.push(NameTableEvent::StartScope)
         }
     }
-
-    #[derive(Debug, PartialEq)]
-    pub enum NameTableEvent<MacroId, SymbolId> {
-        Insert(String, ResolvedName<MacroId, SymbolId>),
-        StartScope,
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::assembler::semantics::actions::tests::TestOperation;
-    use crate::assembler::session::builder::mock::MockSymbolId;
-    use crate::assembler::session::mock::MockSession;
+    use crate::assembler::session::mock::{MockSession, MockSymbolId, TestOperation};
     use crate::log::Log;
 
     #[test]

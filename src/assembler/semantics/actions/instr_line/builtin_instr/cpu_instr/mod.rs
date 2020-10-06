@@ -455,7 +455,7 @@ pub(super) enum Condition {
 #[cfg(test)]
 mod tests {
     pub use crate::assembler::keywords::OperandSymbol::*;
-    pub(crate) use crate::assembler::session::builder::mock::MockSymbolId;
+    pub(crate) use crate::assembler::session::mock::MockSymbolId;
     pub(crate) use crate::diagnostics::Message;
     pub(crate) use crate::object::Fragment;
     pub(crate) use crate::span::{Spanned, WithSpan};
@@ -466,8 +466,8 @@ mod tests {
 
     use crate::assembler::keywords::*;
     use crate::assembler::semantics::*;
-    use crate::assembler::session::builder::mock::BackendEvent;
     use crate::assembler::session::lex::Literal;
+    use crate::assembler::session::mock::BackendEvent;
     use crate::expr::Atom;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

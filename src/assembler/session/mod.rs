@@ -282,13 +282,57 @@ impl Interner for HashInterner {
 pub mod mock {
     use super::*;
 
-    use super::builder::mock::{MockBackend, MockSymbolId, SerialIdAllocator};
-    use super::macros::mock::{MockMacroId, MockMacroTable};
+    use super::builder::mock::{MockBackend, SerialIdAllocator};
+    use super::macros::mock::MockMacroTable;
     use super::reentrancy::MockCodebase;
+    use super::resolve::mock::MockNameTable;
 
     use crate::codebase::CodebaseError;
-    use crate::diagnostics::{MockDiagnostics, TestDiagnosticsListener};
+    use crate::diagnostics::{DiagnosticsEvent, MockDiagnostics, TestDiagnosticsListener};
     use crate::log::Log;
+    use crate::object::Fragment;
+
+    #[derive(Debug, PartialEq)]
+    pub enum TestOperation<S: Clone> {
+        Backend(BackendEvent<MockSymbolId, Expr<S>>),
+        Diagnostics(DiagnosticsEvent<S>),
+        MacroTable(MacroTableEvent),
+        NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
+        Reentrancy(ReentrancyEvent),
+    }
+
+    pub type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
+
+    #[derive(Debug, PartialEq)]
+    pub enum BackendEvent<N, V: Source> {
+        EmitFragment(Fragment<V>),
+        SetOrigin(V),
+        DefineSymbol((N, V::Span), V),
+        StartSection(N, V::Span),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum MacroTableEvent {
+        DefineMacro(Box<[String]>, Box<[Token<String, Literal<String>>]>),
+        ExpandMacro(MockMacroId, Box<[Box<[Token<String, Literal<String>>]>]>),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum ReentrancyEvent {
+        AnalyzeFile(String),
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum NameTableEvent<MacroId, SymbolId> {
+        Insert(String, ResolvedName<MacroId, SymbolId>),
+        StartScope,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct MockMacroId(pub usize);
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub struct MockSymbolId(pub usize);
 
     pub(crate) type MockSession<T, S> = CompositeSession<
         MockCodebase<T, S>,

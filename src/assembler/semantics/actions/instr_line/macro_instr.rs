@@ -98,7 +98,7 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::actions::tests::*;
-    use crate::assembler::session::macros::mock::{MacroTableEvent, MockMacroId};
+    use crate::assembler::session::mock::{MacroTableEvent, MockMacroId};
     use crate::assembler::session::resolve::ResolvedName;
     use crate::assembler::syntax::actions::{InstrContext, LineFinalizer, TokenStreamContext};
     use crate::assembler::syntax::Token;

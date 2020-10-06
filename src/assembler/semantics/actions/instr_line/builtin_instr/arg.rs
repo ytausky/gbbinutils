@@ -79,8 +79,8 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
 #[cfg(test)]
 mod tests {
     use crate::assembler::semantics::actions::tests::collect_semantic_actions;
-    use crate::assembler::session::builder::mock::{BackendEvent, MockSymbolId};
-    use crate::assembler::session::resolve::{NameTableEvent, ResolvedName};
+    use crate::assembler::session::mock::{BackendEvent, MockSymbolId, NameTableEvent};
+    use crate::assembler::session::resolve::ResolvedName;
     use crate::assembler::syntax::actions::*;
     use crate::diagnostics::{DiagnosticsEvent, Message, MockSpan};
     use crate::expr::{Atom, BinOp, Expr, ExprOp, ParamId};

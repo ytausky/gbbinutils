@@ -269,14 +269,9 @@ pub mod mock {
     use super::*;
 
     use crate::assembler::session::lex::Literal;
+    use crate::assembler::session::mock::{MacroTableEvent, MockMacroId};
     use crate::assembler::syntax::Token;
     use crate::log::Log;
-
-    #[derive(Debug, PartialEq)]
-    pub enum MacroTableEvent {
-        DefineMacro(Box<[String]>, Box<[Token<String, Literal<String>>]>),
-        ExpandMacro(MockMacroId, Box<[Box<[Token<String, Literal<String>>]>]>),
-    }
 
     pub struct MockMacroTable<T> {
         log: Log<T>,
@@ -287,9 +282,6 @@ pub mod mock {
             Self { log }
         }
     }
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub struct MockMacroId(pub usize);
 
     impl<T> MacroSource for MockMacroTable<T> {
         type MacroId = MockMacroId;
