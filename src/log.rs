@@ -21,20 +21,10 @@ impl<T> Log<T> {
     pub fn push(&self, datum: impl Into<T>) {
         self.0.borrow_mut().push(datum.into())
     }
-
-    pub fn clear(&self) {
-        self.0.borrow_mut().clear()
-    }
 }
 
 impl<T> Clone for Log<T> {
     fn clone(&self) -> Self {
         Log(Rc::clone(&self.0))
     }
-}
-
-pub fn with_log<T: Debug>(f: impl FnOnce(Log<T>)) -> Vec<T> {
-    let log = Log::default();
-    f(log.clone());
-    log.into_inner()
 }

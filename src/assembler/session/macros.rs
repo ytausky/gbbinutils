@@ -1,5 +1,5 @@
 use super::lex::Lex;
-use super::{CompositeSession, MacroSource, NextToken, StringSource};
+use super::{CompositeSession, Event, Log, MacroSource, NextToken, StringSource, SymbolSource};
 
 use crate::assembler::semantics::{Semantics, TokenStreamState};
 use crate::assembler::session::resolve::StartScope;
@@ -31,21 +31,21 @@ pub(crate) type VecMacroTable<D, R> = Vec<Rc<MacroDef<D, R>>>;
 pub type MacroArgs<T, S> = (Box<[Box<[T]>]>, Box<[Box<[S]>]>);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MacroId(usize);
+pub struct MacroId(pub usize);
 
 impl<D, R> MacroSource for VecMacroTable<D, R> {
     type MacroId = MacroId;
 }
 
-impl<'a, C, R: SpanSource, II: StringSource, M: MacroSource, N, B, D> MacroSource
-    for CompositeSession<C, R, II, M, N, B, D>
+impl<'a, C, R: SpanSource, I: StringSource, M: MacroSource, N, B, D, L> MacroSource
+    for CompositeSession<C, R, I, M, N, B, D, L>
 {
     type MacroId = M::MacroId;
 }
 
-impl<'a, C, R, I, N, B, D>
+impl<'a, C, R, I, N, B, D, L>
     MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
-    for CompositeSession<C, R, I, VecMacroTable<R::MacroDefMetadataId, I::StringRef>, N, B, D>
+    for CompositeSession<C, R, I, VecMacroTable<R::MacroDefMetadataId, I::StringRef>, N, B, D, L>
 where
     Self: Lex<R, I, Span = R::Span, StringRef = I::StringRef>,
     C: Codebase,
@@ -57,6 +57,7 @@ where
     Self: StartScope + NameTable<I::StringRef>,
     Self: Backend<R::Span>,
     Self: MacroSource<MacroId = MacroId>,
+    Self: Log<<Self as SymbolSource>::SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
@@ -70,6 +71,12 @@ where
             Box<[R::Span]>,
         ),
     ) -> Self::MacroId {
+        self.log(|| Event::DefineMacro {
+            name_span: name_span.clone(),
+            params: (params.clone(), param_spans.clone()),
+            body: (body.clone(), body_spans.clone()),
+        });
+
         let id = MacroId(self.macros.len());
         let metadata = self.registry.add_macro_def(MacroDefMetadata {
             name_span,
@@ -89,6 +96,11 @@ where
         (MacroId(id), name_span): (Self::MacroId, R::Span),
         (args, arg_spans): MacroArgs<Token<I::StringRef, Literal<I::StringRef>>, R::Span>,
     ) {
+        self.log(|| Event::ExpandMacro {
+            name: (MacroId(id), name_span.clone()),
+            args: (args.clone(), arg_spans.clone()),
+        });
+
         let def = &self.macros[id];
         let metadata = self.registry.add_macro_expansion(MacroExpansionMetadata {
             def: def.metadata.clone(),
@@ -258,57 +270,12 @@ where
     }
 }
 
-#[cfg(test)]
-pub mod mock {
-    use super::*;
-
-    use crate::assembler::session::mock::{MacroTableEvent, MockMacroId};
-    use crate::assembler::syntax::{Literal, Token};
-    use crate::log::Log;
-
-    pub struct MockMacroTable<T> {
-        log: Log<T>,
-    }
-
-    impl<T> MockMacroTable<T> {
-        pub fn new(log: Log<T>) -> Self {
-            Self { log }
-        }
-    }
-
-    impl<T> MacroSource for MockMacroTable<T> {
-        type MacroId = MockMacroId;
-    }
-
-    impl<C, R, I: StringSource, N, B, D, T> MacroTable<String, Literal<String>, D::Span>
-        for CompositeSession<C, R, I, MockMacroTable<T>, N, B, D>
-    where
-        R: SpanSource,
-        D: SpanSource,
-        T: From<MacroTableEvent>,
-    {
-        fn define_macro(
-            &mut self,
-            _name_span: D::Span,
-            (params, _): (Box<[String]>, Box<[D::Span]>),
-            (body, _): (Box<[Token<String, Literal<String>>]>, Box<[D::Span]>),
-        ) -> Self::MacroId {
-            self.macros
-                .log
-                .push(MacroTableEvent::DefineMacro(params, body));
-            MockMacroId(0)
-        }
-
-        fn expand_macro(
-            &mut self,
-            name: (Self::MacroId, D::Span),
-            args: MacroArgs<Token<String, Literal<String>>, D::Span>,
-        ) {
-            self.macros
-                .log
-                .push(MacroTableEvent::ExpandMacro(name.0, args.0))
-        }
-    }
+impl<C, R, I, N, B, D, L> MacroSource for CompositeSession<C, R, I, (), N, B, D, L>
+where
+    R: SpanSource,
+    I: StringSource,
+{
+    type MacroId = ();
 }
 
 #[cfg(test)]

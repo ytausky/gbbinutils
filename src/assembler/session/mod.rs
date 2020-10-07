@@ -1,10 +1,10 @@
 use self::builder::ObjectBuilder;
-use self::macros::{MacroId, MacroTable, VecMacroTable};
+use self::macros::{MacroArgs, MacroId, MacroTable, VecMacroTable};
 use self::resolve::*;
 
 use super::keywords::KEYWORDS;
 use super::semantics::Keyword;
-use super::syntax::{LexItem, Literal, Sigil, Token};
+use super::syntax::{LexItem, Literal, SemanticToken, Sigil, Token};
 
 use crate::codebase::{BufId, CodebaseError, FileCodebase, FileSystem};
 use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};
@@ -19,7 +19,7 @@ use std::rc::Rc;
 
 mod builder;
 mod lex;
-mod macros;
+pub mod macros;
 mod reentrancy;
 mod resolve;
 
@@ -97,13 +97,13 @@ pub(super) trait NameTable<I>: MacroSource + SymbolSource {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum Visibility {
+pub(crate) enum Visibility {
     Global,
     Local,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum ResolvedName<MacroId, SymbolId> {
+pub(crate) enum ResolvedName<MacroId, SymbolId> {
     Keyword(&'static Keyword),
     Macro(MacroId),
     Symbol(SymbolId),
@@ -117,7 +117,7 @@ pub trait SymbolSource {
     type SymbolId: Clone;
 }
 
-pub(super) trait MacroSource {
+pub(crate) trait MacroSource {
     type MacroId: Clone;
 }
 
@@ -132,6 +132,7 @@ pub(super) type Session<'a> = CompositeSession<
     BiLevelNameTable<MacroId, SymbolId, StringId>,
     ObjectBuilder<Span<RcFileInclusion<BufId>, RcMacroExpansion<BufId>>>,
     OutputForwarder<'a>,
+    (),
 >;
 
 impl<'a> Session<'a> {
@@ -148,6 +149,7 @@ impl<'a> Session<'a> {
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
             diagnostics,
+            log: (),
         };
         for (string, name) in crate::eval::BUILTIN_SYMBOLS {
             let string = session.interner.intern(string);
@@ -177,7 +179,7 @@ pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
     ) -> Option<LexItem<I::StringRef, R::Span>>;
 }
 
-pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D> {
+pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D, L> {
     pub codebase: C,
     pub registry: R,
     interner: I,
@@ -186,28 +188,30 @@ pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D
     names: N,
     pub builder: B,
     pub diagnostics: D,
+    #[allow(dead_code)]
+    log: L,
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D> SpanSource
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> SpanSource
+    for CompositeSession<C, R, I, M, N, B, D, L>
 {
     type Span = R::Span;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D> StringSource
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> StringSource
+    for CompositeSession<C, R, I, M, N, B, D, L>
 {
     type StringRef = I::StringRef;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B: SymbolSource, D> SymbolSource
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B: SymbolSource, D, L> SymbolSource
+    for CompositeSession<C, R, I, M, N, B, D, L>
 {
     type SymbolId = B::SymbolId;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D> NextToken
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> NextToken
+    for CompositeSession<C, R, I, M, N, B, D, L>
 {
     fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>> {
         let token = self
@@ -223,17 +227,29 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D> NextToken
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, S, Stripped> EmitDiag<S, Stripped>
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S, Stripped> EmitDiag<S, Stripped>
+    for CompositeSession<C, R, I, M, N, B, D, L>
 where
+    Self: SymbolSource + MacroSource,
+    Self: Log<
+        <Self as SymbolSource>::SymbolId,
+        <Self as MacroSource>::MacroId,
+        I::StringRef,
+        S,
+        Stripped,
+    >,
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<S, Stripped>,
+    S: Clone,
+    Stripped: Clone,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, Stripped>>) {
+        let diag = diag.into();
+        self.log(|| Event::EmitDiag { diag: diag.clone() });
         self.diagnostics().emit_diag(diag)
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D> CompositeSession<C, R, I, M, N, B, D> {
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> CompositeSession<C, R, I, M, N, B, D, L> {
     fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
@@ -243,8 +259,8 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D> CompositeSession<C, R, I, M,
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, S> MergeSpans<S>
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S> MergeSpans<S>
+    for CompositeSession<C, R, I, M, N, B, D, L>
 where
     R: MergeSpans<S>,
     S: Clone,
@@ -254,8 +270,8 @@ where
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, S> StripSpan<S>
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S> StripSpan<S>
+    for CompositeSession<C, R, I, M, N, B, D, L>
 where
     R: StripSpan<S>,
     S: Clone,
@@ -267,7 +283,9 @@ where
     }
 }
 
-impl<C, R: SpanSource, I: Interner, M, N, B, D> Interner for CompositeSession<C, R, I, M, N, B, D> {
+impl<C, R: SpanSource, I: Interner, M, N, B, D, L> Interner
+    for CompositeSession<C, R, I, M, N, B, D, L>
+{
     fn intern(&mut self, string: &str) -> Self::StringRef {
         self.interner.intern(string)
     }
@@ -338,73 +356,97 @@ impl Interner for HashInterner {
 }
 
 #[cfg(test)]
+impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T>
+    CompositeSession<C, R, I, M, N, B, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
+{
+    pub fn log(&self) -> &[Event<BB, MM, I::StringRef, S, T>] {
+        &self.log
+    }
+}
+
+pub(crate) trait Log<B, M, R, S, T> {
+    fn log<F: FnOnce() -> Event<B, M, R, S, T>>(&mut self, f: F);
+}
+
+impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
+    for CompositeSession<C, R, I, M, N, B, D, ()>
+{
+    fn log<F: FnOnce() -> Event<BB, MM, I::StringRef, S, T>>(&mut self, _: F) {}
+}
+
+#[cfg(test)]
+impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
+    for CompositeSession<C, R, I, M, N, B, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
+{
+    fn log<F: FnOnce() -> Event<BB, MM, I::StringRef, S, T>>(&mut self, f: F) {
+        self.log.push(f())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Event<B, M, R, S, T> {
+    AnalyzeFile {
+        path: R,
+        from: Option<S>,
+    },
+    DefineMacro {
+        name_span: S,
+        params: (Box<[R]>, Box<[S]>),
+        body: (Box<[SemanticToken<R>]>, Box<[S]>),
+    },
+    DefineNameWithVisibility {
+        ident: R,
+        visibility: Visibility,
+        entry: ResolvedName<M, B>,
+    },
+    DefineSymbol {
+        name: B,
+        span: S,
+        expr: Expr<B, S>,
+    },
+    EmitDiag {
+        diag: CompactDiag<S, T>,
+    },
+    EmitFragment {
+        fragment: Fragment<Expr<B, S>>,
+    },
+    ExpandMacro {
+        name: (M, S),
+        args: MacroArgs<SemanticToken<R>, S>,
+    },
+    SetOrigin {
+        addr: Expr<B, S>,
+    },
+    StartScope,
+    StartSection {
+        name: B,
+        span: S,
+    },
+}
+
+#[cfg(test)]
 pub mod mock {
     use super::*;
 
-    use super::builder::mock::{MockBackend, SerialIdAllocator};
-    use super::macros::mock::MockMacroTable;
-    use super::reentrancy::MockCodebase;
-    use super::resolve::mock::MockNameTable;
+    use crate::codebase::fake::FakeCodebase;
+    use crate::diagnostics::{IgnoreDiagnostics, TestDiagnosticsListener};
+    use crate::span::fake::FakeSpanSystem;
 
-    use crate::codebase::CodebaseError;
-    use crate::diagnostics::{DiagnosticsEvent, MockDiagnostics, TestDiagnosticsListener};
-    use crate::log::Log;
-    use crate::object::Fragment;
+    pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
-    #[derive(Debug, PartialEq)]
-    pub(in crate::assembler) enum TestOperation<S: Clone> {
-        Backend(BackendEvent<MockSymbolId, Expr<S>>),
-        Diagnostics(DiagnosticsEvent<S>),
-        MacroTable(MacroTableEvent),
-        NameTable(NameTableEvent<MockMacroId, MockSymbolId>),
-        Reentrancy(ReentrancyEvent),
-    }
-
-    pub type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
-
-    #[derive(Debug, PartialEq)]
-    pub enum BackendEvent<N, V: Source> {
-        EmitFragment(Fragment<V>),
-        SetOrigin(V),
-        DefineSymbol((N, V::Span), V),
-        StartSection(N, V::Span),
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub enum MacroTableEvent {
-        DefineMacro(Box<[String]>, Box<[Token<String, Literal<String>>]>),
-        ExpandMacro(MockMacroId, Box<[Box<[Token<String, Literal<String>>]>]>),
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub enum ReentrancyEvent {
-        AnalyzeFile(String),
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub(in crate::assembler) enum NameTableEvent<MacroId, SymbolId> {
-        Insert(String, ResolvedName<MacroId, SymbolId>),
-        StartScope,
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub struct MockMacroId(pub usize);
-
-    #[derive(Clone, Copy, Debug, PartialEq)]
-    pub struct MockSymbolId(pub usize);
-
-    pub(in crate::assembler) type MockSession<T, S> = CompositeSession<
-        MockCodebase<T, S>,
-        MockDiagnostics<T, S>,
+    pub(in crate::assembler) type MockSession<S> = CompositeSession<
+        FakeCodebase,
+        FakeSpanSystem<BufId, S>,
         MockInterner,
-        MockMacroTable<T>,
-        MockNameTable<BiLevelNameTable<MockMacroId, MockSymbolId, String>, T>,
-        MockBackend<SerialIdAllocator<MockSymbolId>, T>,
-        MockDiagnostics<T, S>,
+        VecMacroTable<(), String>,
+        BiLevelNameTable<MacroId, SymbolId, String>,
+        ObjectBuilder<S>,
+        IgnoreDiagnostics,
+        Vec<Event<SymbolId, MacroId, String, S, S>>,
     >;
 
-    impl<T, S: Clone> MockSession<T, S> {
-        pub fn new(log: Log<T>) -> Self {
+    impl<S: Clone> MockSession<S> {
+        pub fn new() -> Self {
             let mut names = BiLevelNameTable::new();
             for (ident, keyword) in KEYWORDS {
                 names
@@ -412,14 +454,15 @@ pub mod mock {
                     .insert((*ident).into(), ResolvedName::Keyword(keyword));
             }
             CompositeSession {
-                codebase: MockCodebase::with_log(log.clone()),
-                registry: MockDiagnostics::new(log.clone()),
+                codebase: FakeCodebase::default(),
+                registry: FakeSpanSystem::default(),
                 interner: MockInterner,
                 tokens: Vec::new(),
-                macros: MockMacroTable::new(log.clone()),
-                names: MockNameTable::new(names, log.clone()),
-                builder: MockBackend::new(SerialIdAllocator::new(MockSymbolId), log.clone()),
-                diagnostics: MockDiagnostics::new(log),
+                macros: Vec::new(),
+                names,
+                builder: ObjectBuilder::new(),
+                diagnostics: IgnoreDiagnostics,
+                log: Vec::new(),
             }
         }
 
@@ -436,6 +479,7 @@ pub mod mock {
         (),
         ObjectBuilder<S>,
         TestDiagnosticsListener<S>,
+        (),
     >;
 
     impl<S: Clone> StandaloneBackend<S> {
@@ -449,6 +493,7 @@ pub mod mock {
                 names: (),
                 builder: ObjectBuilder::new(),
                 diagnostics: TestDiagnosticsListener::new(),
+                log: (),
             }
         }
     }

@@ -282,6 +282,63 @@ impl<F: Clone + 'static> SpanSystem<F> for RcContextFactory<F> {
 }
 
 #[cfg(test)]
+pub mod fake {
+    use super::*;
+
+    use crate::diagnostics::mock::Merge;
+
+    pub struct FakeSpanSystem<F, S>(PhantomData<(F, S)>);
+
+    impl<F, S> Default for FakeSpanSystem<F, S> {
+        fn default() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    impl<F, S: Clone> SpanSource for FakeSpanSystem<F, S> {
+        type Span = S;
+    }
+
+    impl<F, S: Clone + Merge> MergeSpans<S> for FakeSpanSystem<F, S> {
+        fn merge_spans(&mut self, left: &S, right: &S) -> S {
+            S::merge(left.clone(), right.clone())
+        }
+    }
+
+    impl<F, S: Clone> StripSpan<S> for FakeSpanSystem<F, S> {
+        type Stripped = S;
+
+        fn strip_span(&mut self, span: &S) -> Self::Stripped {
+            span.clone()
+        }
+    }
+
+    impl<F, S: Clone + Default + Merge> SpanSystem<F> for FakeSpanSystem<F, S> {
+        type FileInclusionMetadataId = ();
+        type MacroDefMetadataId = ();
+        type MacroExpansionMetadataId = ();
+
+        fn add_file_inclusion(
+            &mut self,
+            _: FileInclusionMetadata<F, Self::Span>,
+        ) -> Self::FileInclusionMetadataId {
+        }
+
+        fn add_macro_def(&mut self, _: MacroDefMetadata<Self::Span>) -> Self::MacroDefMetadataId {}
+
+        fn add_macro_expansion(
+            &mut self,
+            _: MacroExpansionMetadata<Self::MacroDefMetadataId, Self::Span>,
+        ) -> Self::MacroExpansionMetadataId {
+        }
+
+        fn encode_span(&mut self, _: Span<(), ()>) -> Self::Span {
+            S::default()
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

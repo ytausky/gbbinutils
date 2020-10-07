@@ -206,12 +206,14 @@ fn single_arg<T, D: Diagnostics<S>, S>(
 mod tests {
     use super::*;
 
+    use crate::assembler::semantics::tests::Event;
     use crate::assembler::semantics::tests::*;
     use crate::assembler::session::mock::*;
     use crate::assembler::session::ResolvedName;
     use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
+    use crate::object::{Symbol, SymbolId, UserDefId};
 
     use std::borrow::Borrow;
     use std::io;
@@ -224,7 +226,10 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [ReentrancyEvent::AnalyzeFile(filename.to_string()).into()]
+            [Event::AnalyzeFile {
+                path: filename.to_string(),
+                from: Some(())
+            }]
         )
     }
 
@@ -232,7 +237,12 @@ mod tests {
     fn set_origin() {
         let origin = 0x3000;
         let actions = unary_directive("ORG", |arg| arg.act_on_atom(mk_literal(origin), ()));
-        assert_eq!(actions, [BackendEvent::SetOrigin(origin.into()).into()])
+        assert_eq!(
+            actions,
+            [Event::SetOrigin {
+                addr: origin.into()
+            }]
+        )
     }
 
     #[test]
@@ -245,17 +255,17 @@ mod tests {
         test_data_items_emission("DW", mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Fragment<Expr<MockSymbolId, ()>> {
+    fn mk_byte(byte: i32) -> Fragment<Expr<SymbolId, ()>> {
         Fragment::Immediate((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Fragment<Expr<MockSymbolId, ()>> {
+    fn mk_word(word: i32) -> Fragment<Expr<SymbolId, ()>> {
         Fragment::Immediate((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: &str,
-        mk_item: impl Fn(i32) -> Fragment<Expr<MockSymbolId, ()>>,
+        mk_item: impl Fn(i32) -> Fragment<Expr<SymbolId, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let actions = with_directive(directive, |mut command| {
@@ -272,8 +282,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .map(mk_item)
-                .map(BackendEvent::EmitFragment)
-                .map(Into::into)
+                .map(|fragment| Event::EmitFragment { fragment })
                 .collect::<Vec<_>>()
         )
     }
@@ -283,7 +292,9 @@ mod tests {
         let actions = ds(|arg| arg.act_on_atom(mk_literal(3), ()));
         assert_eq!(
             actions,
-            [BackendEvent::EmitFragment(Fragment::Reserved(3.into())).into()]
+            [Event::EmitFragment {
+                fragment: Fragment::Reserved(3.into())
+            }]
         )
     }
 
@@ -296,10 +307,9 @@ mod tests {
         let actions = ds(|arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
         assert_eq!(
             actions,
-            [
-                DiagnosticsEvent::EmitDiag(Message::KeywordInExpr { keyword: () }.at(()).into())
-                    .into()
-            ]
+            [Event::EmitDiag {
+                diag: Message::KeywordInExpr { keyword: () }.at(()).into()
+            }]
         )
     }
 
@@ -323,7 +333,9 @@ mod tests {
         let actions = unary_directive("INCLUDE", |arg| arg.act_on_atom(mk_literal(7), ()));
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiag(Message::ExpectedString.at(()).into()).into()]
+            [Event::EmitDiag {
+                diag: Message::ExpectedString.at(()).into()
+            }]
         )
     }
 
@@ -332,10 +344,9 @@ mod tests {
         let actions = unary_directive("DB", |arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
         assert_eq!(
             actions,
-            [
-                DiagnosticsEvent::EmitDiag(Message::KeywordInExpr { keyword: () }.at(()).into())
-                    .into()
-            ]
+            [Event::EmitDiag {
+                diag: Message::KeywordInExpr { keyword: () }.at(()).into()
+            }]
         )
     }
 
@@ -356,8 +367,13 @@ mod tests {
         assert_eq!(
             log,
             [
-                ReentrancyEvent::AnalyzeFile(name.into()).into(),
-                DiagnosticsEvent::EmitDiag(Message::InvalidUtf8.at(()).into()).into()
+                Event::AnalyzeFile {
+                    path: name.into(),
+                    from: Some(())
+                },
+                Event::EmitDiag {
+                    diag: Message::InvalidUtf8.at(()).into()
+                }
             ]
         )
     }
@@ -383,15 +399,17 @@ mod tests {
         assert_eq!(
             log,
             [
-                ReentrancyEvent::AnalyzeFile(name.into()).into(),
-                DiagnosticsEvent::EmitDiag(
-                    Message::IoError {
+                Event::AnalyzeFile {
+                    path: name.into(),
+                    from: Some(())
+                },
+                Event::EmitDiag {
+                    diag: Message::IoError {
                         string: message.to_string()
                     }
                     .at(())
                     .into()
-                )
-                .into()
+                }
             ]
         )
     }
@@ -406,8 +424,16 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(symbol.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::DefineSymbol((MockSymbolId(0), ()), value.into()).into()
+                Event::DefineNameWithVisibility {
+                    ident: symbol.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                },
+                Event::DefineSymbol {
+                    name: Symbol::UserDef(UserDefId(0)),
+                    span: (),
+                    expr: value.into()
+                }
             ]
         )
     }
@@ -437,9 +463,16 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::DefineSymbol((MockSymbolId(0), ()), Atom::from(ParamId(0)).into())
-                    .into()
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                },
+                Event::DefineSymbol {
+                    name: Symbol::UserDef(UserDefId(0)),
+                    span: (),
+                    expr: Atom::from(ParamId(0)).into()
+                },
             ]
         )
     }
@@ -462,8 +495,15 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::StartSection(MockSymbolId(0), ()).into()
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                },
+                Event::StartSection {
+                    name: Symbol::UserDef(UserDefId(0)),
+                    span: ()
+                }
             ]
         )
     }
@@ -508,13 +548,13 @@ mod tests {
         });
     }
 
-    fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<TestOperation<()>> {
+    fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<Event<()>> {
         unary_directive("DS", f)
     }
 
-    type TestExprContext<'a, S> = ArgSemantics<'a, MockSession<TestOperation<S>, S>>;
+    type TestExprContext<'a, S> = ArgSemantics<'a, MockSession<S>>;
 
-    fn unary_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
+    fn unary_directive<F>(directive: &str, f: F) -> Vec<Event<()>>
     where
         F: FnOnce(&mut TestExprContext<()>),
     {
@@ -529,22 +569,20 @@ mod tests {
         let actions = with_directive(directive, |command| command);
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiag(
-                Message::OperandCount {
+            [Event::EmitDiag {
+                diag: Message::OperandCount {
                     actual: 0,
                     expected: 1
                 }
                 .at(())
                 .into()
-            )
-            .into()]
+            }]
         )
     }
 
-    type TestBuiltinInstrSemantics<'a, S> =
-        BuiltinInstrSemantics<'a, MockSession<TestOperation<S>, S>>;
+    type TestBuiltinInstrSemantics<'a, S> = BuiltinInstrSemantics<'a, MockSession<S>>;
 
-    fn with_directive<F>(directive: &str, f: F) -> Vec<TestOperation<()>>
+    fn with_directive<F>(directive: &str, f: F) -> Vec<Event<()>>
     where
         F: for<'a, 'b> FnOnce(
             TestBuiltinInstrSemantics<'a, ()>,
@@ -563,7 +601,7 @@ mod tests {
         })
     }
 
-    fn with_labeled_directive<F>(label: &str, directive: &str, f: F) -> Vec<TestOperation<()>>
+    fn with_labeled_directive<F>(label: &str, directive: &str, f: F) -> Vec<Event<()>>
     where
         F: FnOnce(&mut TestExprContext<()>),
     {

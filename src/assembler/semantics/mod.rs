@@ -20,7 +20,7 @@ mod cpu_instr;
 mod directive;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Keyword {
+pub(crate) enum Keyword {
     BuiltinMnemonic(BuiltinMnemonic),
     Operand(OperandSymbol),
 }
@@ -996,20 +996,22 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
 mod tests {
     use super::*;
 
+    use crate::assembler::session::macros::MacroId;
     use crate::assembler::session::mock::Expr;
     use crate::assembler::session::mock::*;
     use crate::assembler::syntax::{SemanticToken, Sigil, Token};
-    use crate::diagnostics::mock::{DiagnosticsEvent, Merge, MockSpan};
+    use crate::diagnostics::mock::{Merge, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
-    use crate::log::Log;
-    use crate::object::{Fragment, Width};
+    use crate::object::{Fragment, Symbol, SymbolId, UserDefId, Width};
 
     use std::borrow::Borrow;
     use std::fmt::Debug;
 
+    pub(crate) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+
     #[test]
     fn ident_with_underscore_prefix_is_local() {
-        let session = MockSession::<TestOperation<()>, ()>::new(Log::default());
+        let session = MockSession::<()>::new();
         assert_eq!(
             session.name_visibility(&"_loop".to_owned()),
             Visibility::Local
@@ -1018,41 +1020,11 @@ mod tests {
 
     #[test]
     fn ident_without_underscore_prefix_is_global() {
-        let session = MockSession::<TestOperation<()>, ()>::new(Log::default());
+        let session = MockSession::<()>::new();
         assert_eq!(
             session.name_visibility(&"start".to_owned()),
             Visibility::Global
         )
-    }
-
-    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for TestOperation<S> {
-        fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
-            TestOperation::Backend(event)
-        }
-    }
-
-    impl<S: Clone> From<DiagnosticsEvent<S>> for TestOperation<S> {
-        fn from(event: DiagnosticsEvent<S>) -> Self {
-            TestOperation::Diagnostics(event)
-        }
-    }
-
-    impl<S: Clone> From<MacroTableEvent> for TestOperation<S> {
-        fn from(event: MacroTableEvent) -> Self {
-            TestOperation::MacroTable(event)
-        }
-    }
-
-    impl<S: Clone> From<NameTableEvent<MockMacroId, MockSymbolId>> for TestOperation<S> {
-        fn from(event: NameTableEvent<MockMacroId, MockSymbolId>) -> Self {
-            TestOperation::NameTable(event)
-        }
-    }
-
-    impl<S: Clone> From<ReentrancyEvent> for TestOperation<S> {
-        fn from(event: ReentrancyEvent) -> Self {
-            TestOperation::Reentrancy(event)
-        }
     }
 
     #[test]
@@ -1076,7 +1048,9 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitFragment(Fragment::Byte(0x46)).into()]
+            [Event::EmitFragment {
+                fragment: Fragment::Byte(0x46)
+            }]
         )
     }
 
@@ -1110,11 +1084,12 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::EmitFragment(Fragment::Embedded(
-                0b11_000_111,
-                Expr::from_items(&[1.into(), 1.into(), op.into()])
-            ))
-            .into()]
+            [Event::EmitFragment {
+                fragment: Fragment::Embedded(
+                    0b11_000_111,
+                    Expr::from_items(&[1.into(), 1.into(), op.into()])
+                )
+            }]
         )
     }
 
@@ -1139,17 +1114,21 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(name.to_owned(), ResolvedName::Symbol(MockSymbolId(0)))
-                    .into(),
-                BackendEvent::EmitFragment(Fragment::Embedded(
-                    0b11_000_111,
-                    Expr::from_items(&[
-                        Atom::Name(MockSymbolId(0)).into(),
-                        1.into(),
-                        ExprOp::FnCall(1).into()
-                    ])
-                ))
-                .into()
+                Event::DefineNameWithVisibility {
+                    ident: name.to_owned(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                },
+                Event::EmitFragment {
+                    fragment: Fragment::Embedded(
+                        0b11_000_111,
+                        Expr::from_items(&[
+                            Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
+                            1.into(),
+                            ExprOp::FnCall(1).into()
+                        ])
+                    )
+                }
             ]
         )
     }
@@ -1173,12 +1152,17 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::EmitFragment(Fragment::Immediate(
-                    Atom::Name(MockSymbolId(0)).into(),
-                    Width::Word
-                ))
-                .into()
+                Event::DefineNameWithVisibility {
+                    ident: label.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                },
+                Event::EmitFragment {
+                    fragment: Fragment::Immediate(
+                        Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
+                        Width::Word
+                    )
+                }
             ]
         );
     }
@@ -1198,9 +1182,17 @@ mod tests {
         assert_eq!(
             actions,
             [
-                NameTableEvent::StartScope.into(),
-                NameTableEvent::Insert(label.into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-                BackendEvent::DefineSymbol((MockSymbolId(0), ()), LocationCounter.into()).into()
+                Event::StartScope,
+                Event::DefineNameWithVisibility {
+                    ident: label.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                },
+                Event::DefineSymbol {
+                    name: Symbol::UserDef(UserDefId(0)),
+                    span: (),
+                    expr: LocationCounter.into()
+                }
             ]
         )
     }
@@ -1223,7 +1215,9 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [BackendEvent::SetOrigin(LocationCounter.into()).into()]
+            [Event::SetOrigin {
+                addr: LocationCounter.into()
+            }]
         );
     }
 
@@ -1265,7 +1259,9 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiag(Message::MacroRequiresName.at(()).into()).into()]
+            [Event::EmitDiag {
+                diag: Message::MacroRequiresName.at(()).into()
+            }]
         )
     }
 
@@ -1299,17 +1295,30 @@ mod tests {
                 .did_parse_line(())
                 .act_on_eos(())
         });
+        let params = params
+            .borrow()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let param_spans = vec![(); params.len()].into_boxed_slice();
         let mut body = body.borrow().to_vec();
         body.push(Sigil::Eos.into());
+        let body_spans = vec![(); body.len()].into_boxed_slice();
         assert_eq!(
             actions,
             [
-                MacroTableEvent::DefineMacro(
-                    params.borrow().iter().cloned().map(Into::into).collect(),
-                    body.into_boxed_slice(),
-                )
-                .into(),
-                NameTableEvent::Insert(name.into(), ResolvedName::Macro(MockMacroId(0))).into(),
+                Event::DefineMacro {
+                    name_span: (),
+                    params: (params, param_spans),
+                    body: (body.into_boxed_slice(), body_spans),
+                },
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Macro(MacroId(0))
+                },
             ]
         )
     }
@@ -1323,7 +1332,9 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiag(diagnostic.into()).into()]
+            [Event::EmitDiag {
+                diag: diagnostic.into()
+            }]
         )
     }
 
@@ -1346,7 +1357,9 @@ mod tests {
         });
         assert_eq!(
             actions,
-            [DiagnosticsEvent::EmitDiag(diagnostic.into()).into()]
+            [Event::EmitDiag {
+                diag: diagnostic.into()
+            }]
         )
     }
 
@@ -1369,39 +1382,38 @@ mod tests {
         });
         assert_eq!(
             log,
-            [DiagnosticsEvent::EmitDiag(Message::UnexpectedEof.at("eos".into()).into()).into()]
+            [Event::EmitDiag {
+                diag: Message::UnexpectedEof.at("eos".into()).into()
+            }]
         )
     }
 
-    pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<TestOperation<S>>
+    pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<Event<S>>
     where
-        F: for<'a, 'b> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
-        S: Clone + Debug + Merge,
+        F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
+        S: Clone + Default + Debug + Merge,
     {
         log_with_predefined_names(std::iter::empty(), f)
     }
 
-    pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<TestOperation<S>>
+    pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<Event<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedName<MockMacroId, MockSymbolId>)>,
-        F: for<'a, 'b> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
-        S: Clone + Debug + Merge,
+        I: IntoIterator<Item = (String, ResolvedName<MacroId, SymbolId>)>,
+        F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
+        S: Clone + Default + Debug + Merge,
     {
-        crate::log::with_log(|log| {
-            let mut session = MockSession::new(log.clone());
-            for (ident, resolution) in entries {
-                session.define_name(ident.as_str().into(), resolution)
-            }
-            log.clear();
-            f(Semantics {
-                session: &mut session,
-                state: TokenStreamState::new(),
-            });
-        })
+        let mut session = MockSession::new();
+        for (ident, resolution) in entries {
+            session.define_name(ident, resolution)
+        }
+        f(Semantics {
+            session: &mut session,
+            state: TokenStreamState::new(),
+        });
+        session.log().to_vec()
     }
 
-    pub(super) type TestTokenStreamSemantics<'a, S> =
-        TokenStreamSemantics<'a, MockSession<TestOperation<S>, S>>;
+    pub(super) type TestTokenStreamSemantics<'a, S> = TokenStreamSemantics<'a, MockSession<S>>;
 
     #[test]
     fn diagnose_unknown_mnemonic() {
@@ -1419,12 +1431,11 @@ mod tests {
         });
         assert_eq!(
             log,
-            [DiagnosticsEvent::EmitDiag(
-                Message::NotAMnemonic { name: name.into() }
+            [Event::EmitDiag {
+                diag: Message::NotAMnemonic { name: name.into() }
                     .at(name.into())
                     .into()
-            )
-            .into()]
+            }]
         )
     }
 
@@ -1444,12 +1455,11 @@ mod tests {
         });
         assert_eq!(
             log,
-            [DiagnosticsEvent::EmitDiag(
-                Message::NotAMnemonic { name: name.into() }
+            [Event::EmitDiag {
+                diag: Message::NotAMnemonic { name: name.into() }
                     .at(name.into())
                     .into()
-            )
-            .into()]
+            }]
         )
     }
 
@@ -1457,7 +1467,10 @@ mod tests {
     fn diagnose_symbol_as_mnemonic() {
         let name = "symbol";
         let log = log_with_predefined_names::<_, _, MockSpan<_>>(
-            vec![(name.into(), ResolvedName::Symbol(MockSymbolId(42)))],
+            vec![(
+                name.into(),
+                ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
+            )],
             |session| {
                 session
                     .will_parse_line()
@@ -1471,35 +1484,66 @@ mod tests {
         );
         assert_eq!(
             log,
-            [DiagnosticsEvent::EmitDiag(
-                Message::CannotUseSymbolNameAsMacroName { name: name.into() }
-                    .at(name.into())
-                    .into()
-            )
-            .into()]
+            [
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
+                },
+                Event::EmitDiag {
+                    diag: Message::CannotUseSymbolNameAsMacroName { name: name.into() }
+                        .at(name.into())
+                        .into()
+                }
+            ]
         )
     }
 
     #[test]
     fn call_nullary_macro() {
         let name = "my_macro";
-        let macro_id = MockMacroId(0);
-        let log = log_with_predefined_names(
-            vec![(name.into(), ResolvedName::Macro(macro_id))],
-            |actions| {
-                actions
-                    .will_parse_line()
-                    .into_instr_line()
-                    .will_parse_instr(name.into(), ())
-                    .into_macro_instr()
-                    .did_parse_instr()
-                    .did_parse_line(())
-                    .act_on_eos(())
-            },
-        );
+        let macro_id = MacroId(0);
+        let log = collect_semantic_actions(|actions| {
+            actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((name.into(), ()))
+                .did_parse_label()
+                .will_parse_instr("MACRO".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_token_line()
+                .act_on_mnemonic("ENDM".into(), ())
+                .into_line_end()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(name.into(), ())
+                .into_macro_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .act_on_eos(())
+        });
         assert_eq!(
             log,
-            [MacroTableEvent::ExpandMacro(macro_id, Box::new([])).into()]
+            [
+                Event::DefineMacro {
+                    name_span: (),
+                    params: (Box::new([]), Box::new([])),
+                    body: (Box::new([Token::Sigil(Sigil::Eos)]), Box::new([()])),
+                },
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Macro(macro_id),
+                },
+                Event::ExpandMacro {
+                    name: (macro_id, ()),
+                    args: (Box::new([]), Box::new([]))
+                }
+            ]
         )
     }
 
@@ -1507,30 +1551,56 @@ mod tests {
     fn call_unary_macro() {
         let name = "my_macro";
         let arg_token = Token::Ident("A".into());
-        let macro_id = MockMacroId(0);
-        let log = log_with_predefined_names(
-            vec![(name.into(), ResolvedName::Macro(macro_id))],
-            |actions| {
-                let mut call = actions
-                    .will_parse_line()
-                    .into_instr_line()
-                    .will_parse_instr(name.into(), ())
-                    .into_macro_instr();
-                call = {
-                    let mut arg = call.will_parse_macro_arg();
-                    arg.act_on_token((arg_token.clone(), ()));
-                    arg.did_parse_macro_arg()
-                };
-                call.did_parse_instr().did_parse_line(()).act_on_eos(())
-            },
-        );
+        let macro_id = MacroId(0);
+        let log = collect_semantic_actions(|actions| {
+            let mut params = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((name.into(), ()));
+            params.act_on_param("param".into(), ());
+            let mut call = params
+                .did_parse_label()
+                .will_parse_instr("MACRO".into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_token_line()
+                .act_on_mnemonic("ENDM".into(), ())
+                .into_line_end()
+                .did_parse_line(())
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(name.into(), ())
+                .into_macro_instr();
+            call = {
+                let mut arg = call.will_parse_macro_arg();
+                arg.act_on_token((arg_token.clone(), ()));
+                arg.did_parse_macro_arg()
+            };
+            call.did_parse_instr().did_parse_line(()).act_on_eos(())
+        });
         assert_eq!(
             log,
-            [MacroTableEvent::ExpandMacro(
-                macro_id,
-                vec![vec![arg_token].into_boxed_slice()].into_boxed_slice()
-            )
-            .into()]
+            [
+                Event::DefineMacro {
+                    name_span: (),
+                    params: (Box::new(["param".into()]), Box::new([()])),
+                    body: (Box::new([Token::Sigil(Sigil::Eos)]), Box::new([()])),
+                },
+                Event::DefineNameWithVisibility {
+                    ident: name.into(),
+                    visibility: Visibility::Global,
+                    entry: ResolvedName::Macro(macro_id),
+                },
+                Event::ExpandMacro {
+                    name: (macro_id, ()),
+                    args: (
+                        vec![vec![arg_token].into_boxed_slice()].into_boxed_slice(),
+                        Box::new([Box::new([()])])
+                    ),
+                }
+            ]
         )
     }
 
@@ -1553,10 +1623,9 @@ mod tests {
                     .did_parse_line("eol".into())
                     .act_on_eos("eos".into())
             }),
-            [DiagnosticsEvent::EmitDiag(
-                Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
-            )
-            .into()]
+            [Event::EmitDiag {
+                diag: Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
+            }]
         );
     }
 
@@ -1577,14 +1646,13 @@ mod tests {
                     .did_parse_line("eol".into())
                     .act_on_eos("eos".into())
             }),
-            [DiagnosticsEvent::EmitDiag(
-                Message::KeywordInExpr {
+            [Event::EmitDiag {
+                diag: Message::KeywordInExpr {
                     keyword: "keyword".into()
                 }
                 .at("keyword".into())
                 .into()
-            )
-            .into()]
+            }]
         )
     }
 
@@ -1605,12 +1673,17 @@ mod tests {
                 .act_on_eos("eos".into())
         });
         let expected = [
-            NameTableEvent::Insert("f".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-            BackendEvent::EmitFragment(Fragment::Immediate(
-                Expr::from_atom(Atom::Name(MockSymbolId(0)), "f".into()),
-                Width::Byte,
-            ))
-            .into(),
+            Event::DefineNameWithVisibility {
+                ident: "f".into(),
+                visibility: Visibility::Global,
+                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+            },
+            Event::EmitFragment {
+                fragment: Fragment::Immediate(
+                    Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), "f".into()),
+                    Width::Byte,
+                ),
+            },
         ];
         assert_eq!(actual, expected)
     }
@@ -1634,16 +1707,23 @@ mod tests {
                 .act_on_eos("eos".into())
         });
         let expected = [
-            NameTableEvent::Insert("f".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-            BackendEvent::EmitFragment(Fragment::Immediate(
-                Expr(vec![
-                    ExprOp::Atom(Atom::Name(MockSymbolId(0))).with_span("f1".into()),
-                    ExprOp::Atom(Atom::Name(MockSymbolId(0))).with_span("f2".into()),
-                    ExprOp::Binary(BinOp::Plus).with_span("plus".into()),
-                ]),
-                Width::Byte,
-            ))
-            .into(),
+            Event::DefineNameWithVisibility {
+                ident: "f".into(),
+                visibility: Visibility::Global,
+                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+            },
+            Event::EmitFragment {
+                fragment: Fragment::Immediate(
+                    Expr(vec![
+                        ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
+                            .with_span("f1".into()),
+                        ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
+                            .with_span("f2".into()),
+                        ExprOp::Binary(BinOp::Plus).with_span("plus".into()),
+                    ]),
+                    Width::Byte,
+                ),
+            },
         ];
         assert_eq!(actual, expected)
     }
@@ -1668,12 +1748,17 @@ mod tests {
                 .act_on_eos("eos".into())
         });
         let expected = [
-            NameTableEvent::Insert("const".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-            BackendEvent::EmitFragment(Fragment::LdInlineAddr(
-                0xf0,
-                Expr::from_atom(Atom::Name(MockSymbolId(0)), "const".into()),
-            ))
-            .into(),
+            Event::DefineNameWithVisibility {
+                ident: "const".into(),
+                visibility: Visibility::Global,
+                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+            },
+            Event::EmitFragment {
+                fragment: Fragment::LdInlineAddr(
+                    0xf0,
+                    Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), "const".into()),
+                ),
+            },
         ];
         assert_eq!(actual, expected)
     }
@@ -1698,12 +1783,16 @@ mod tests {
                 .did_parse_line("eol".into())
         });
         let expected = [
-            NameTableEvent::Insert("label".into(), ResolvedName::Symbol(MockSymbolId(0))).into(),
-            BackendEvent::DefineSymbol(
-                (MockSymbolId(0), "label".into()),
-                Expr::from_atom(Atom::Param(ParamId(0)), "param2".into()),
-            )
-            .into(),
+            Event::DefineNameWithVisibility {
+                ident: "label".into(),
+                visibility: Visibility::Global,
+                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+            },
+            Event::DefineSymbol {
+                name: Symbol::UserDef(UserDefId(0)),
+                span: "label".into(),
+                expr: Expr::from_atom(Atom::Param(ParamId(0)), "param2".into()),
+            },
         ];
         assert_eq!(actual, expected)
     }

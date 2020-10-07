@@ -189,11 +189,13 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::{BackendEvent, MockSession, MockSymbolId};
+    use crate::assembler::session::macros::MacroId;
+    use crate::assembler::session::mock::MockSession;
+    use crate::object::SymbolId;
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
+    type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
     #[test]
     fn analyze_deref_bc() {
@@ -223,39 +225,17 @@ pub mod tests {
         )
     }
 
+    pub(crate) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+
     type OperandResult<S> = Result<Operand<Expr<S>, S>, Vec<Event<S>>>;
-
-    #[derive(Debug, PartialEq)]
-    pub(crate) enum Event<S: Clone> {
-        Backend(BackendEvent<MockSymbolId, Expr<S>>),
-        Diagnostics(DiagnosticsEvent<S>),
-    }
-
-    impl<S: Clone> From<BackendEvent<MockSymbolId, Expr<S>>> for Event<S> {
-        fn from(event: BackendEvent<MockSymbolId, Expr<S>>) -> Self {
-            Event::Backend(event)
-        }
-    }
-
-    impl<S: Clone> From<DiagnosticsEvent<S>> for Event<S> {
-        fn from(event: DiagnosticsEvent<S>) -> Self {
-            Event::Diagnostics(event)
-        }
-    }
 
     fn analyze_operand<S: Clone + Debug>(
         expr: Arg<Expr<MockSpan<S>>, String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
-        let mut result = None;
-        let log = crate::log::with_log(|log| {
-            result = Some(super::analyze_operand(
-                expr,
-                context,
-                &mut MockSession::new(log),
-            ))
-        });
-        result.unwrap().map_err(|_| log)
+        let mut session = MockSession::new();
+        let result = super::analyze_operand(expr, context, &mut session);
+        result.map_err(|_| session.log().iter().cloned().collect())
     }
 
     #[test]
@@ -263,8 +243,8 @@ pub mod tests {
         let parsed_expr = Arg::Deref(BareArg::Symbol(OperandSymbol::Af, 0.into()), 1.into());
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Event::Diagnostics(
-                CompactDiag::from(
+            Err(vec![Event::EmitDiag {
+                diag: CompactDiag::from(
                     Message::CannotDereference {
                         category: KeywordOperandCategory::RegPair,
                         operand: 0.into(),
@@ -272,7 +252,7 @@ pub mod tests {
                     .at(1.into())
                 )
                 .into()
-            )])
+            }])
         )
     }
 
@@ -282,9 +262,9 @@ pub mod tests {
         let parsed_expr = Arg::String("some_string".into(), span.into());
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
-            Err(vec![Event::Diagnostics(
-                CompactDiag::from(Message::StringInInstruction.at(span.into())).into()
-            )])
+            Err(vec![Event::EmitDiag {
+                diag: CompactDiag::from(Message::StringInInstruction.at(span.into())).into()
+            }])
         )
     }
 
@@ -303,15 +283,15 @@ pub mod tests {
         let expr = Arg::Bare(BareArg::Symbol(symbol, span.clone()));
         assert_eq!(
             analyze_operand(expr, Context::Other),
-            Err(vec![Event::Diagnostics(
-                CompactDiag::from(
+            Err(vec![Event::EmitDiag {
+                diag: CompactDiag::from(
                     Message::MustBeDeref {
                         operand: span.clone()
                     }
                     .at(span)
                 )
                 .into()
-            )])
+            }])
         )
     }
 }

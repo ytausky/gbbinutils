@@ -199,10 +199,11 @@ mod tests {
     use crate::assembler::keywords::*;
     use crate::diagnostics::Merge;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
+    use crate::object::{Symbol, UserDefId};
 
     #[test]
     fn jp_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JP, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc3),
             Fragment::Immediate(name(nn, TokenId::Operand(0, 0)), Width::Word),
@@ -211,7 +212,7 @@ mod tests {
 
     #[test]
     fn jp_nz_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JP, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc2),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -220,7 +221,7 @@ mod tests {
 
     #[test]
     fn jp_z_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JP, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xca),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -229,7 +230,7 @@ mod tests {
 
     #[test]
     fn jp_nc_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JP, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xd2),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -238,7 +239,7 @@ mod tests {
 
     #[test]
     fn jp_c_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JP, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xda),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -247,7 +248,7 @@ mod tests {
 
     #[test]
     fn jr_e() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JR, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x18),
             Fragment::Immediate(
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn jr_nz_e() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JR, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x20),
             Fragment::Immediate(
@@ -279,7 +280,7 @@ mod tests {
 
     #[test]
     fn jr_z_e() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JR, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x28),
             Fragment::Immediate(
@@ -295,7 +296,7 @@ mod tests {
 
     #[test]
     fn jr_nc_e() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JR, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x30),
             Fragment::Immediate(
@@ -311,7 +312,7 @@ mod tests {
 
     #[test]
     fn jr_c_e() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(JR, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x38),
             Fragment::Immediate(
@@ -332,7 +333,7 @@ mod tests {
 
     #[test]
     fn call_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(CALL, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xcd),
             Fragment::Immediate(
@@ -346,7 +347,7 @@ mod tests {
 
     #[test]
     fn call_nz_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(CALL, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc4),
             Fragment::Immediate(
@@ -360,7 +361,7 @@ mod tests {
 
     #[test]
     fn call_z_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(CALL, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xcc),
             Fragment::Immediate(
@@ -374,7 +375,7 @@ mod tests {
 
     #[test]
     fn call_nc_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(CALL, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xd4),
             Fragment::Immediate(
@@ -388,7 +389,7 @@ mod tests {
 
     #[test]
     fn call_c_nn() {
-        let nn = MockSymbolId(7);
+        let nn = Symbol::UserDef(UserDefId(7));
         analyze(CALL, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xdc),
             Fragment::Immediate(
@@ -460,14 +461,14 @@ mod tests {
 
     #[test]
     fn reti_ident() {
-        analyze(RETI, vec![MockSymbolId(7).into()]).expect_diag(
+        analyze(RETI, vec![Symbol::UserDef(UserDefId(7)).into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ret_z_ident() {
-        analyze(RET, vec![literal(Z), MockSymbolId(7).into()]).expect_diag(
+        analyze(RET, vec![literal(Z), Symbol::UserDef(UserDefId(7)).into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(1, 0)),
         )
     }

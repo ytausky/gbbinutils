@@ -9,15 +9,12 @@ use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{SpanSource, SpanSystem};
 
-#[cfg(test)]
-pub(crate) use self::mock::*;
-
-impl<C, R, I, M, N, B, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
-    for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R, I, M, N, B, D, L> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
+    for CompositeSession<C, R, I, M, N, B, D, L>
 where
     C: Codebase,
     Self: Lex<R, I, Span = R::Span>,
-    Self: Interner,
+    Self: Interner<StringRef = I::StringRef>,
     Self: NextToken,
     Self: MacroTable<
         <Self as StringSource>::StringRef,
@@ -29,6 +26,13 @@ where
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<<Self as StringSource>::StringRef>,
     Self: Backend<R::Span>,
+    Self: Log<
+        <Self as SymbolSource>::SymbolId,
+        <Self as MacroSource>::MacroId,
+        I::StringRef,
+        R::Span,
+        R::Stripped,
+    >,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
@@ -38,6 +42,11 @@ where
         path: <Self as StringSource>::StringRef,
         from: Option<R::Span>,
     ) -> Result<(), CodebaseError> {
+        self.log(|| Event::AnalyzeFile {
+            path: path.clone(),
+            from: from.clone(),
+        });
+
         let tokens = self.lex_file(path, from)?;
         self.tokens.push(Box::new(tokens));
         let mut parser = <DefaultParserFactory as ParserFactory<
@@ -52,61 +61,5 @@ where
         };
         parser.parse_token_stream(semantics);
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod mock {
-    use super::*;
-
-    use crate::assembler::session::mock::ReentrancyEvent;
-    use crate::log::Log;
-
-    use std::marker::PhantomData;
-
-    pub struct MockCodebase<T, S> {
-        log: Log<T>,
-        error: Option<CodebaseError>,
-        _span: PhantomData<S>,
-    }
-
-    impl<T, S: Clone> SpanSource for MockCodebase<T, S> {
-        type Span = S;
-    }
-
-    impl<T, S> MockCodebase<T, S> {
-        fn with_name_table(log: Log<T>) -> Self {
-            MockCodebase {
-                log,
-                error: None,
-                _span: PhantomData,
-            }
-        }
-
-        pub fn fail(&mut self, error: CodebaseError) {
-            self.error = Some(error)
-        }
-    }
-
-    impl<T, S> MockCodebase<T, S> {
-        pub fn with_log(log: Log<T>) -> Self {
-            Self::with_name_table(log)
-        }
-    }
-
-    impl<T, S> StringSource for MockCodebase<T, S> {
-        type StringRef = String;
-    }
-
-    impl<T, S, R: SpanSource, I, M, N, B, D> ReentrancyActions<String, S>
-        for CompositeSession<MockCodebase<T, S>, R, I, M, N, B, D>
-    where
-        T: From<ReentrancyEvent>,
-        I: StringSource,
-    {
-        fn analyze_file(&mut self, path: String, _from: Option<S>) -> Result<(), CodebaseError> {
-            self.codebase.log.push(ReentrancyEvent::AnalyzeFile(path));
-            self.codebase.error.take().map_or(Ok(()), Err)
-        }
     }
 }

@@ -1,4 +1,4 @@
-use super::{AllocSymbol, Backend, CompositeSession, StringSource, SymbolSource};
+use super::*;
 
 use crate::diagnostics::{Diagnostics, DiagnosticsContext};
 use crate::expr::Expr;
@@ -52,15 +52,22 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<C, R, I, M, N, D, S> Backend<S> for CompositeSession<C, R, I, M, N, ObjectBuilder<S>, D>
+impl<C, R, I, M, N, D, L, S> Backend<S> for CompositeSession<C, R, I, M, N, ObjectBuilder<S>, D, L>
 where
-    R: SpanSource + MergeSpans<S> + StripSpan<S>,
+    R: SpanSource<Span = S> + MergeSpans<S> + StripSpan<S>,
     I: StringSource,
-    Self: Diagnostics<S>,
+    Self: MacroSource + Diagnostics<S>,
+    Self: Log<Self::SymbolId, <Self as MacroSource>::MacroId, I::StringRef, R::Span, R::Stripped>,
     S: Clone,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<S>,
 {
-    fn define_symbol(&mut self, name: Self::SymbolId, _span: S, expr: Expr<Self::SymbolId, S>) {
+    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>) {
+        self.log(|| Event::DefineSymbol {
+            name: name.clone(),
+            span,
+            expr: expr.clone(),
+        });
+
         let location = self.builder.object.vars.alloc();
         self.builder.push(Fragment::Reloc(location));
         self.builder.object.content.symbols.define(
@@ -70,6 +77,9 @@ where
     }
 
     fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>) {
+        self.log(|| Event::EmitFragment {
+            fragment: fragment.clone(),
+        });
         self.builder.push(fragment)
     }
 
@@ -91,6 +101,7 @@ where
     }
 
     fn set_origin(&mut self, addr: Expr<Self::SymbolId, S>) {
+        self.log(|| Event::SetOrigin { addr: addr.clone() });
         match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
                 self.builder.object.content.sections[index].constraints.addr = Some(addr);
@@ -100,14 +111,19 @@ where
         }
     }
 
-    fn start_section(&mut self, name: SymbolId, _: S) {
+    fn start_section(&mut self, name: SymbolId, span: S) {
+        self.log(|| Event::StartSection {
+            name: name.clone(),
+            span,
+        });
+
         let index = self.builder.object.content.sections.len();
         self.builder.state = Some(BuilderState::SectionPrelude(index));
         self.builder.add_section(Some(name.content().unwrap()))
     }
 }
 
-impl<C, R, I, M, N, B, D, Span> AllocSymbol<Span> for CompositeSession<C, R, I, M, N, B, D>
+impl<C, R, I, M, N, B, D, L, Span> AllocSymbol<Span> for CompositeSession<C, R, I, M, N, B, D, L>
 where
     Self: SymbolSource<SymbolId = B::SymbolId>,
     R: SpanSource,
@@ -127,106 +143,6 @@ impl<S: Clone> SymbolSource for ObjectBuilder<S> {
 impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
     fn alloc_symbol(&mut self, _span: S) -> Self::SymbolId {
         self.object.content.symbols.alloc().into()
-    }
-}
-
-#[cfg(test)]
-pub mod mock {
-    use super::*;
-
-    use crate::assembler::session::mock::BackendEvent;
-    use crate::expr::{Atom, Expr, ExprOp};
-    use crate::log::Log;
-    use crate::span::Spanned;
-
-    pub(crate) struct MockBackend<A, T> {
-        alloc: A,
-        pub log: Log<T>,
-    }
-
-    impl<A, T> MockBackend<A, T> {
-        pub fn new(alloc: A, log: Log<T>) -> Self {
-            MockBackend { alloc, log }
-        }
-    }
-
-    impl From<usize> for Atom<usize> {
-        fn from(n: usize) -> Self {
-            Atom::Name(n)
-        }
-    }
-
-    impl<A: SymbolSource, T> SymbolSource for MockBackend<A, T> {
-        type SymbolId = A::SymbolId;
-    }
-
-    impl<A: AllocSymbol<S>, T, S: Clone> AllocSymbol<S> for MockBackend<A, T> {
-        fn alloc_symbol(&mut self, span: S) -> Self::SymbolId {
-            self.alloc.alloc_symbol(span)
-        }
-    }
-
-    impl<C, R, I, M, N, D, A, T, S> Backend<S> for CompositeSession<C, R, I, M, N, MockBackend<A, T>, D>
-    where
-        R: SpanSource,
-        I: StringSource,
-        A: AllocSymbol<S>,
-        T: From<BackendEvent<A::SymbolId, Expr<A::SymbolId, S>>>,
-        S: Clone,
-    {
-        fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>) {
-            self.builder
-                .log
-                .push(BackendEvent::DefineSymbol((name, span), expr));
-        }
-
-        fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>) {
-            self.builder.log.push(BackendEvent::EmitFragment(fragment))
-        }
-
-        fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool> {
-            match value.0.as_slice() {
-                [Spanned {
-                    item: ExprOp::Atom(Atom::Const(n)),
-                    ..
-                }] => Some(*n != 0),
-                _ => None,
-            }
-        }
-
-        fn set_origin(&mut self, origin: Expr<Self::SymbolId, S>) {
-            self.builder.log.push(BackendEvent::SetOrigin(origin))
-        }
-
-        fn start_section(&mut self, name: A::SymbolId, span: S) {
-            self.builder
-                .log
-                .push(BackendEvent::StartSection(name, span))
-        }
-    }
-
-    pub struct SerialIdAllocator<T>(usize, fn(usize) -> T);
-
-    impl<T> SerialIdAllocator<T> {
-        pub fn new(wrapper: fn(usize) -> T) -> Self {
-            Self(0, wrapper)
-        }
-
-        pub fn gen(&mut self) -> T {
-            let id = self.0;
-            self.0 += 1;
-            (self.1)(id)
-        }
-    }
-
-    impl<T: Clone> SymbolSource for SerialIdAllocator<T> {
-        type SymbolId = T;
-    }
-
-    impl<T: Clone, S: Clone> AllocSymbol<S> for SerialIdAllocator<T> {
-        fn alloc_symbol(&mut self, _: S) -> Self::SymbolId {
-            self.gen()
-        }
     }
 }
 

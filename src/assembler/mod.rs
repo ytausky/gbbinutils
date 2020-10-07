@@ -69,35 +69,8 @@ fn try_assemble<'a>(
 mod tests {
     use super::*;
 
+    use crate::codebase::fake::MockFileSystem;
     use crate::diagnostics::{Clause, Tag};
-
-    use std::collections::HashMap;
-    use std::io;
-
-    struct MockFileSystem {
-        files: HashMap<String, Vec<u8>>,
-    }
-
-    impl MockFileSystem {
-        fn new() -> MockFileSystem {
-            MockFileSystem {
-                files: HashMap::new(),
-            }
-        }
-
-        fn add(&mut self, name: impl Into<String>, data: &[u8]) {
-            self.files.insert(name.into(), data.into());
-        }
-    }
-
-    impl FileSystem for MockFileSystem {
-        fn read_file(&self, filename: &str) -> io::Result<Vec<u8>> {
-            self.files
-                .get(filename)
-                .cloned()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file does not exist"))
-        }
-    }
 
     #[test]
     fn invalid_utf8() {

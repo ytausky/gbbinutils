@@ -66,24 +66,33 @@ impl<M, S: Clone, R> SymbolSource for BiLevelNameTable<M, S, R> {
     type SymbolId = S;
 }
 
-impl<C, R: SpanSource, II, M, B, D> NameTable<II::StringRef>
+impl<C, R: SpanSource, I, M, B, D, L> NameTable<I::StringRef>
     for CompositeSession<
         C,
         R,
-        II,
+        I,
         M,
-        BiLevelNameTable<M::MacroId, B::SymbolId, II::StringRef>,
+        BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>,
         B,
         D,
+        L,
     >
 where
-    II: Interner,
+    Self: Log<
+        <Self as SymbolSource>::SymbolId,
+        <Self as MacroSource>::MacroId,
+        I::StringRef,
+        R::Span,
+        R::Stripped,
+    >,
+    R: SpanSource + StripSpan<<R as SpanSource>::Span>,
+    I: Interner,
     M: MacroSource,
     B: SymbolSource,
 {
     fn resolve_name_with_visibility(
         &mut self,
-        ident: &II::StringRef,
+        ident: &I::StringRef,
         visibility: Visibility,
     ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
         let table = self.names.select_table_mut(visibility);
@@ -107,133 +116,48 @@ where
 
     fn define_name_with_visibility(
         &mut self,
-        ident: II::StringRef,
+        ident: I::StringRef,
         visibility: Visibility,
         entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     ) {
+        self.log(|| Event::DefineNameWithVisibility {
+            ident: ident.clone(),
+            visibility,
+            entry: entry.clone(),
+        });
+
         let table = self.names.select_table_mut(visibility);
         table.insert(ident, entry);
     }
 }
 
-impl<C, R: SpanSource, II, M, B, D> StartScope
+impl<C, R, I, M, B, D, L> StartScope
     for CompositeSession<
         C,
         R,
-        II,
+        I,
         M,
-        BiLevelNameTable<M::MacroId, B::SymbolId, II::StringRef>,
+        BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>,
         B,
         D,
+        L,
     >
 where
-    II: Interner,
+    Self: Log<
+        <Self as SymbolSource>::SymbolId,
+        <Self as MacroSource>::MacroId,
+        I::StringRef,
+        R::Span,
+        R::Stripped,
+    >,
+    R: SpanSource + StripSpan<<R as SpanSource>::Span>,
+    I: Interner,
     M: MacroSource,
     B: SymbolSource,
 {
     fn start_scope(&mut self) {
+        self.log(|| Event::StartScope);
         self.names.local = HashMap::new();
-    }
-}
-
-#[cfg(test)]
-pub mod mock {
-    use super::*;
-
-    use crate::assembler::session::mock::NameTableEvent;
-    use crate::log::Log;
-
-    pub(crate) struct MockNameTable<N, T> {
-        names: N,
-        log: Log<T>,
-    }
-
-    impl<N, T> MockNameTable<N, T> {
-        pub fn new(names: N, log: Log<T>) -> Self {
-            Self { names, log }
-        }
-    }
-
-    impl<N: MacroSource, T> MacroSource for MockNameTable<N, T> {
-        type MacroId = N::MacroId;
-    }
-
-    impl<N: SymbolSource, T> SymbolSource for MockNameTable<N, T> {
-        type SymbolId = N::SymbolId;
-    }
-
-    impl<C, R, I, M, B, D, T> NameTable<String>
-        for CompositeSession<
-            C,
-            R,
-            I,
-            M,
-            MockNameTable<BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>, T>,
-            B,
-            D,
-        >
-    where
-        R: SpanSource,
-        I: StringSource<StringRef = String>,
-        M: MacroSource,
-        B: SymbolSource,
-        T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
-    {
-        fn resolve_name_with_visibility(
-            &mut self,
-            ident: &String,
-            visibility: Visibility,
-        ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
-            let table = self.names.names.select_table_mut(visibility);
-            table.get(ident).cloned().map_or_else(
-                || {
-                    let representative = ident.to_ascii_uppercase();
-                    if let Some(keyword @ ResolvedName::Keyword(_)) =
-                        table.get(&representative).cloned()
-                    {
-                        table.insert(ident.clone(), keyword.clone());
-                        Some(keyword)
-                    } else {
-                        None
-                    }
-                },
-                Some,
-            )
-        }
-
-        fn define_name_with_visibility(
-            &mut self,
-            ident: String,
-            visibility: Visibility,
-            entry: ResolvedName<Self::MacroId, Self::SymbolId>,
-        ) {
-            let table = self.names.names.select_table_mut(visibility);
-            table.insert(ident.clone(), entry.clone());
-            self.names.log.push(NameTableEvent::Insert(ident, entry))
-        }
-    }
-
-    impl<C, R, I, M, B, D, T> StartScope
-        for CompositeSession<
-            C,
-            R,
-            I,
-            M,
-            MockNameTable<BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>, T>,
-            B,
-            D,
-        >
-    where
-        R: SpanSource,
-        I: StringSource,
-        M: MacroSource,
-        B: SymbolSource,
-        T: From<NameTableEvent<M::MacroId, B::SymbolId>>,
-    {
-        fn start_scope(&mut self) {
-            self.names.names.local = HashMap::new();
-            self.names.log.push(NameTableEvent::StartScope)
-        }
     }
 }
 
@@ -241,47 +165,41 @@ pub mod mock {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::{MockSession, MockSymbolId, TestOperation};
-    use crate::log::Log;
+    use crate::assembler::session::mock::MockSession;
+    use crate::object::{Symbol, UserDefId};
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::default());
-        session.define_name_with_visibility(
-            name.into(),
-            Visibility::Global,
-            ResolvedName::Symbol(MockSymbolId(42)),
-        );
+        let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
+        let mut session = MockSession::<()>::new();
+        session.define_name_with_visibility(name.into(), Visibility::Global, entry.clone());
         assert_eq!(
             session.resolve_name_with_visibility(&name.into(), Visibility::Global),
-            Some(ResolvedName::Symbol(MockSymbolId(42)))
+            Some(entry)
         )
     }
 
     #[test]
     fn retrieve_local_name() {
-        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::default());
+        let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
+        let mut session = MockSession::<()>::new();
         session.start_scope();
-        session.define_name_with_visibility(
-            "_local".into(),
-            Visibility::Local,
-            ResolvedName::Symbol(MockSymbolId(42)),
-        );
+        session.define_name_with_visibility("_local".into(), Visibility::Local, entry.clone());
         assert_eq!(
             session.resolve_name_with_visibility(&"_local".into(), Visibility::Local),
-            Some(ResolvedName::Symbol(MockSymbolId(42)))
+            Some(entry)
         )
     }
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut session = MockSession::<TestOperation<()>, ()>::new(Log::default());
+        let mut session = MockSession::<()>::new();
         session.start_scope();
         session.define_name_with_visibility(
             "_local".into(),
             Visibility::Local,
-            ResolvedName::Symbol(MockSymbolId(42)),
+            ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
         );
         session.start_scope();
         assert_eq!(

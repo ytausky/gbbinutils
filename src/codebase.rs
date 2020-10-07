@@ -190,7 +190,7 @@ impl FileSystem for StdFileSystem {
 }
 
 pub trait Codebase {
-    fn open(&self, path: &str) -> Result<BufId, CodebaseError>;
+    fn open(&mut self, path: &str) -> Result<BufId, CodebaseError>;
     fn buf(&self, buf_id: BufId) -> Rc<str>;
 }
 
@@ -227,7 +227,7 @@ impl<'a, FS: FileSystem + ?Sized> FileCodebase<'a, FS> {
 }
 
 impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
-    fn open(&self, path: &str) -> Result<BufId, CodebaseError> {
+    fn open(&mut self, path: &str) -> Result<BufId, CodebaseError> {
         let data = self.fs.read_file(path)?;
         Ok(self
             .cache
@@ -237,6 +237,63 @@ impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
 
     fn buf(&self, buf_id: BufId) -> Rc<str> {
         self.cache.borrow().buf(buf_id).text()
+    }
+}
+
+#[cfg(test)]
+pub mod fake {
+    use super::*;
+
+    use std::collections::HashMap;
+
+    #[derive(Default)]
+    pub struct FakeCodebase {
+        error: Option<CodebaseError>,
+    }
+
+    impl FakeCodebase {
+        pub fn fail(&mut self, error: CodebaseError) {
+            self.error = Some(error)
+        }
+    }
+
+    impl Codebase for FakeCodebase {
+        fn open(&mut self, _path: &str) -> Result<BufId, CodebaseError> {
+            if let Some(error) = self.error.take() {
+                Err(error)
+            } else {
+                Ok(BufId(0))
+            }
+        }
+
+        fn buf(&self, _: BufId) -> Rc<str> {
+            String::new().into()
+        }
+    }
+
+    pub struct MockFileSystem {
+        files: HashMap<String, Vec<u8>>,
+    }
+
+    impl MockFileSystem {
+        pub fn new() -> MockFileSystem {
+            MockFileSystem {
+                files: HashMap::new(),
+            }
+        }
+
+        pub fn add(&mut self, name: impl Into<String>, data: &[u8]) {
+            self.files.insert(name.into(), data.into());
+        }
+    }
+
+    impl FileSystem for MockFileSystem {
+        fn read_file(&self, filename: &str) -> io::Result<Vec<u8>> {
+            self.files
+                .get(filename)
+                .cloned()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file does not exist"))
+        }
     }
 }
 

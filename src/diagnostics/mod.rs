@@ -248,6 +248,10 @@ where
 
 pub(crate) struct IgnoreDiagnostics;
 
+impl<'a, C, R, S, T> EmitDiag<S, T> for DiagnosticsContext<'a, C, R, IgnoreDiagnostics> {
+    fn emit_diag(&mut self, _: impl Into<CompactDiag<S, T>>) {}
+}
+
 impl<S: Clone> StripSpan<S> for IgnoreDiagnostics {
     type Stripped = S;
 
@@ -464,6 +468,12 @@ pub(crate) mod mock {
     pub(crate) enum MockSpan<T> {
         Basic(T),
         Merge(Box<Self>, Box<Self>),
+    }
+
+    impl<T> Default for MockSpan<T> {
+        fn default() -> Self {
+            panic!()
+        }
     }
 
     impl<T> From<T> for MockSpan<T> {

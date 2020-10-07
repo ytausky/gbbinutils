@@ -81,7 +81,7 @@ pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
 ];
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum BuiltinMnemonic {
+pub(crate) enum BuiltinMnemonic {
     CpuInstr(Mnemonic),
     Directive(Directive),
 }
@@ -114,7 +114,7 @@ impl BuiltinMnemonic {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Mnemonic {
+pub(crate) enum Mnemonic {
     Alu(AluOperation),
     Bit(BitOperation),
     Branch(BranchKind),

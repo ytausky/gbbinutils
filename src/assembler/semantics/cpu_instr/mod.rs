@@ -492,7 +492,6 @@ pub enum PtrReg {
 #[cfg(test)]
 mod tests {
     pub use crate::assembler::keywords::OperandSymbol::*;
-    pub(crate) use crate::assembler::session::mock::MockSymbolId;
     pub(crate) use crate::diagnostics::Message;
     pub(crate) use crate::object::Fragment;
     pub(crate) use crate::span::{Spanned, WithSpan};
@@ -502,9 +501,9 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::*;
-    use crate::assembler::session::mock::BackendEvent;
     use crate::assembler::syntax::Literal;
     use crate::expr::Atom;
+    use crate::object::SymbolId;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -514,8 +513,8 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr<S> = crate::expr::Expr<MockSymbolId, S>;
-    type Input = Arg<MockSymbolId, String, ()>;
+    type Expr<S> = crate::expr::Expr<SymbolId, S>;
+    type Input = Arg<SymbolId, String, ()>;
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
@@ -534,7 +533,7 @@ mod tests {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub(super) fn name(symbol: MockSymbolId, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
+    pub(super) fn name(symbol: SymbolId, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
         Expr::from_atom(Atom::Name(symbol), span.into())
     }
 
@@ -542,7 +541,7 @@ mod tests {
         Arg::Deref(BareArg::Symbol(symbol.into(), ()), ())
     }
 
-    pub(super) fn deref_ident(ident: MockSymbolId) -> Input {
+    pub(super) fn deref_ident(ident: SymbolId) -> Input {
         Arg::Deref(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())), ())
     }
 
@@ -663,8 +662,8 @@ mod tests {
         }
     }
 
-    impl From<MockSymbolId> for Input {
-        fn from(ident: MockSymbolId) -> Self {
+    impl From<SymbolId> for Input {
+        fn from(ident: SymbolId) -> Self {
             Arg::Bare(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())))
         }
     }
@@ -1910,8 +1909,7 @@ mod tests {
                 self.0,
                 expected
                     .into_iter()
-                    .map(BackendEvent::EmitFragment)
-                    .map(Event::Backend)
+                    .map(|fragment| Event::EmitFragment { fragment })
                     .collect::<Vec<_>>()
             )
         }
@@ -1920,9 +1918,9 @@ mod tests {
             let expected = diag.into();
             assert_eq!(
                 self.0,
-                vec![DiagnosticsEvent::EmitDiag(
-                    expected.message.at(expected.highlight.unwrap()).into()
-                )
+                vec![Event::EmitDiag {
+                    diag: expected.message.at(expected.highlight.unwrap()).into()
+                }
                 .into()]
             )
         }
@@ -1935,24 +1933,22 @@ mod tests {
         use super::operand::analyze_operand;
         use crate::assembler::session::mock::MockSession;
 
-        let log = crate::log::with_log(|log| {
-            let mut session = MockSession::new(log);
-            let operands: Vec<_> = operands
-                .into_iter()
-                .enumerate()
-                .map(add_token_spans)
-                .map(|op| analyze_operand(op, mnemonic.context(), &mut session))
-                .collect();
-            analyze_instruction(
-                (&mnemonic, TokenId::Mnemonic.into()),
-                operands,
-                &mut session,
-            );
-        });
-        AnalysisResult(log)
+        let mut session = MockSession::new();
+        let operands: Vec<_> = operands
+            .into_iter()
+            .enumerate()
+            .map(add_token_spans)
+            .map(|op| analyze_operand(op, mnemonic.context(), &mut session))
+            .collect();
+        analyze_instruction(
+            (&mnemonic, TokenId::Mnemonic.into()),
+            operands,
+            &mut session,
+        );
+        AnalysisResult(session.log().iter().cloned().collect())
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<MockSymbolId, String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<SymbolId, String, TokenSpan> {
         match operand {
             Arg::Bare(BareArg::Const(value)) => Arg::Bare(BareArg::Const(crate::expr::Expr(
                 value
@@ -2012,15 +2008,17 @@ mod tests {
         assert_eq!(
             analyze(ADD, vec![A, A, A].into_iter().map(literal)).0,
             vec![
-                BackendEvent::EmitFragment(Fragment::Byte(0x87)).into(),
-                Event::Diagnostics(DiagnosticsEvent::EmitDiag(
-                    Message::OperandCount {
+                Event::EmitFragment {
+                    fragment: Fragment::Byte(0x87)
+                },
+                Event::EmitDiag {
+                    diag: Message::OperandCount {
                         actual: 3,
                         expected: 2,
                     }
                     .at(TokenId::Mnemonic.into())
                     .into()
-                ))
+                }
             ]
         )
     }

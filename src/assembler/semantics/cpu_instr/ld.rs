@@ -380,6 +380,7 @@ mod tests {
 
     use crate::assembler::keywords::LD;
     use crate::diagnostics::Merge;
+    use crate::object::{Symbol, UserDefId};
 
     #[test]
     fn ld_a_a() {
@@ -798,15 +799,17 @@ mod tests {
 
     #[test]
     fn ld_a_deref_expr() {
-        analyze(LD, vec![literal(A), deref_ident(MockSymbolId(7))]).expect_fragments(vec![
-            Fragment::LdInlineAddr(0xf0, name(MockSymbolId(7), TokenId::Operand(1, 1))),
+        let symbol = Symbol::UserDef(UserDefId(7));
+        analyze(LD, vec![literal(A), deref_ident(symbol.clone())]).expect_fragments(vec![
+            Fragment::LdInlineAddr(0xf0, name(symbol, TokenId::Operand(1, 1))),
         ])
     }
 
     #[test]
     fn ld_deref_expr_a() {
-        analyze(LD, vec![deref_ident(MockSymbolId(7)), literal(A)]).expect_fragments(vec![
-            Fragment::LdInlineAddr(0xe0, name(MockSymbolId(7), TokenId::Operand(0, 1))),
+        let symbol = Symbol::UserDef(UserDefId(7));
+        analyze(LD, vec![deref_ident(symbol.clone()), literal(A)]).expect_fragments(vec![
+            Fragment::LdInlineAddr(0xe0, name(symbol, TokenId::Operand(0, 1))),
         ])
     }
 
@@ -883,9 +886,10 @@ mod tests {
 
     #[test]
     fn ld_deref_nn_sp() {
-        analyze(LD, vec![deref_ident(MockSymbolId(0)), literal(Sp)]).expect_fragments(vec![
+        let symbol = Symbol::UserDef(UserDefId(0));
+        analyze(LD, vec![deref_ident(symbol.clone()), literal(Sp)]).expect_fragments(vec![
             Fragment::Byte(0x08),
-            Fragment::Immediate(name(MockSymbolId(0), TokenId::Operand(0, 1)), Width::Word),
+            Fragment::Immediate(name(symbol, TokenId::Operand(0, 1)), Width::Word),
         ])
     }
 

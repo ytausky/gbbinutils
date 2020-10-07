@@ -21,7 +21,7 @@ where
     ) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-impl<'a, C, R, I, M, N, B, D> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D>
+impl<'a, C, R, I, M, N, B, D, L> Lex<R, I> for CompositeSession<C, R, I, M, N, B, D, L>
 where
     C: Codebase,
     I: Interner,
