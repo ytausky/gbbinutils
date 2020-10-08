@@ -189,8 +189,8 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::assembler::session::macros::MacroId;
     use crate::assembler::session::mock::MockSession;
+    use crate::assembler::session::MacroId;
     use crate::object::SymbolId;
 
     use std::fmt::Debug;

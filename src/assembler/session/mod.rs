@@ -1,5 +1,5 @@
 use self::builder::ObjectBuilder;
-use self::macros::{MacroArgs, MacroId, MacroTable, VecMacroTable};
+use self::macros::{MacroArgs, MacroTable, VecMacroTable};
 use self::resolve::*;
 
 use super::keywords::KEYWORDS;
@@ -18,7 +18,7 @@ use std::hash::Hash;
 
 mod builder;
 mod lex;
-pub mod macros;
+mod macros;
 mod reentrancy;
 mod resolve;
 
@@ -94,6 +94,9 @@ pub(super) trait NameTable<I>: MacroSource + SymbolSource {
         entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     );
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MacroId(pub usize);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Visibility {

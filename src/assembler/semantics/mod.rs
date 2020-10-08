@@ -996,9 +996,9 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::macros::MacroId;
     use crate::assembler::session::mock::Expr;
     use crate::assembler::session::mock::*;
+    use crate::assembler::session::MacroId;
     use crate::assembler::syntax::{SemanticToken, Sigil, Token};
     use crate::diagnostics::mock::{Merge, MockSpan};
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};

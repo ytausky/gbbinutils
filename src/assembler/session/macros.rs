@@ -1,5 +1,5 @@
 use super::lex::Lex;
-use super::{CompositeSession, Event, Log, MacroSource, NextToken, StringSource, SymbolSource};
+use super::*;
 
 use crate::assembler::semantics::{Semantics, TokenStreamState};
 use crate::assembler::session::resolve::StartScope;
@@ -8,7 +8,6 @@ use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, P
 use crate::assembler::syntax::{LexError, LexItem, Literal, Token};
 use crate::codebase::{BufId, Codebase};
 use crate::diagnostics::EmitDiag;
-use crate::span::*;
 
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -29,9 +28,6 @@ pub(in crate::assembler) trait MacroTable<I, L, S: Clone>:
 pub(crate) type VecMacroTable<D, R> = Vec<Rc<MacroDef<D, R>>>;
 
 pub type MacroArgs<T, S> = (Box<[Box<[T]>]>, Box<[Box<[S]>]>);
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MacroId(pub usize);
 
 impl<D, R> MacroSource for VecMacroTable<D, R> {
     type MacroId = MacroId;
