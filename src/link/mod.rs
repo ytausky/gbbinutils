@@ -146,9 +146,8 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::StandaloneBackend;
-    use crate::assembler::session::{AllocSymbol, Backend};
     use crate::diagnostics::IgnoreDiagnostics;
+    use crate::expr::Expr;
     use crate::expr::*;
     use crate::span::WithSpan;
 
@@ -194,25 +193,49 @@ mod tests {
     fn resolve_origin_relative_to_previous_section() {
         let origin1 = 0x150;
         let skipped_bytes = 0x10;
-        let mut object_builder = StandaloneBackend::new();
 
-        // org $0150
-        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(origin1)).with_span(())]));
+        // ORG $0150
+        // NOP
+        // ORG . + $10
+        // HALT
+        let object = Object {
+            content: Content {
+                sections: vec![
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(Expr::from_atom(Atom::Const(0x0150), ())),
+                        },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Byte(0x00)],
+                    },
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(Expr(vec![
+                                ExprOp::Atom(Atom::Location).with_span(()),
+                                ExprOp::Atom(Atom::Const(0x10)).with_span(()),
+                                ExprOp::Binary(BinOp::Plus).with_span(()),
+                            ])),
+                        },
+                        addr: VarId(2),
+                        size: VarId(3),
+                        fragments: vec![Fragment::Byte(0x76)],
+                    },
+                ],
+                symbols: SymbolTable(vec![]),
+            },
+            vars: VarTable(vec![
+                Var {
+                    value: 0x0150.into(),
+                },
+                Var { value: 1.into() },
+                Var {
+                    value: (0x0150 + 1 + 0x10).into(),
+                },
+                Var { value: 1.into() },
+            ]),
+        };
 
-        // nop
-        object_builder.emit_fragment(Fragment::Byte(0x00));
-
-        // org . + $10
-        object_builder.set_origin(Expr(vec![
-            ExprOp::Atom(Atom::Location).with_span(()),
-            ExprOp::Atom(Atom::Const(skipped_bytes)).with_span(()),
-            ExprOp::Binary(BinOp::Plus).with_span(()),
-        ]));
-
-        // halt
-        object_builder.emit_fragment(Fragment::Byte(0x76));
-
-        let object = object_builder.builder.object;
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
@@ -223,27 +246,81 @@ mod tests {
     #[test]
     fn label_defined_as_section_origin_plus_offset() {
         let addr = 0xffe1;
-        let mut builder = StandaloneBackend::new();
-        builder.set_origin(addr.into());
-        let symbol_id = builder.alloc_symbol(());
-        builder.define_symbol(
-            symbol_id,
-            (),
-            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-        );
-        let mut linkable = builder.builder.object;
-        linkable.vars.resolve(&linkable.content);
-        assert_eq!(linkable.vars[VarId(0)].value, addr.into());
+
+        // ORG $ffe1
+        // LABEL
+        let mut object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Reloc(VarId(2))],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                    expr: Expr::from_atom(Atom::Location, ()),
+                    location: VarId(2),
+                }))]),
+            },
+            vars: VarTable(vec![
+                Var { value: addr.into() },
+                Var { value: 0.into() },
+                Var { value: addr.into() },
+            ]),
+        };
+
+        object.vars.resolve(&object.content);
+        assert_eq!(object.vars[VarId(0)].value, addr.into());
     }
 
     #[test]
     fn empty_section_has_size_zero() {
-        assert_section_size(0, |_| ())
+        assert_section_size(
+            0,
+            Object {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![],
+                    }],
+                    symbols: SymbolTable::new(),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x0000.into(),
+                    },
+                    Var { value: 0.into() },
+                ]),
+            },
+        )
     }
 
     #[test]
     fn section_with_one_byte_has_size_one() {
-        assert_section_size(1, |builder| builder.emit_fragment(Fragment::Byte(0x00)));
+        assert_section_size(
+            1,
+            Object {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Byte(0x00)],
+                    }],
+                    symbols: SymbolTable::new(),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x0000.into(),
+                    },
+                    Var { value: 1.into() },
+                ]),
+            },
+        );
     }
 
     #[test]
@@ -257,42 +334,96 @@ mod tests {
     }
 
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
-        assert_section_size(expected, |builder| {
-            builder.emit_fragment(Fragment::LdInlineAddr(0xf0, addr.into()))
-        });
+        assert_section_size(
+            expected,
+            Object {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::LdInlineAddr(0xf0, addr.into())],
+                    }],
+                    symbols: SymbolTable::new(),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x0000.into(),
+                    },
+                    Var {
+                        value: Num::Unknown,
+                    },
+                ]),
+            },
+        );
     }
 
     #[test]
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
-        assert_section_size(3, |builder| {
-            let name = builder.alloc_symbol(());
-            builder.emit_fragment(Fragment::LdInlineAddr(0xf0, Atom::Name(name).into()));
-            builder.define_symbol(
-                name,
-                (),
-                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-            );
-        })
+        assert_section_size(
+            3,
+            Object {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![
+                            Fragment::LdInlineAddr(
+                                0xf0,
+                                Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
+                            ),
+                            Fragment::Reloc(VarId(2)),
+                        ],
+                    }],
+                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
+                    }))]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x0000.into(),
+                    },
+                    Var {
+                        value: Num::Range { min: 2, max: 3 },
+                    },
+                    Var {
+                        value: Num::Range { min: 2, max: 3 },
+                    },
+                ]),
+            },
+        )
     }
 
     #[test]
     fn resolve_expr_with_section_addr() {
-        let mut object_builder = StandaloneBackend::new();
+        // my_section   SECTION
+        //              ORG     $1337
+        //              DW      my_section
+        let object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(0x1337), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
+            },
+            vars: VarTable(vec![
+                Var {
+                    value: 0x1337.into(),
+                },
+                Var { value: 2.into() },
+            ]),
+        };
 
-        // section my_section
-        let name = object_builder.alloc_symbol(());
-        object_builder.start_section(name, ());
-
-        // org $1337
-        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(0x1337)).with_span(())]));
-
-        // dw my_section
-        object_builder.emit_fragment(Fragment::Immediate(
-            Expr(vec![ExprOp::Atom(Atom::Name(name)).with_span(())]),
-            Width::Word,
-        ));
-
-        let object = object_builder.builder.object;
         let binary = Program::link(object, &mut IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
@@ -303,46 +434,51 @@ mod tests {
         let bytes = 10;
         let symbol = VarId(2);
 
-        let mut object_builder = StandaloneBackend::new();
+        //          ORG $0100
+        //          DS  10
+        // label    DW  label
+        let mut object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::Reserved(Expr::from_atom(Atom::Const(bytes), ())),
+                        Fragment::Reloc(VarId(2)),
+                        Fragment::Immediate(
+                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Width::Word,
+                        ),
+                    ],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                    expr: Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                    location: VarId(2),
+                }))]),
+            },
+            vars: VarTable(vec![
+                Var { value: addr.into() },
+                Var {
+                    value: (bytes + 2).into(),
+                },
+                Var {
+                    value: (addr + bytes).into(),
+                },
+            ]),
+        };
 
-        // org $0100
-        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
-
-        // ds 10
-        object_builder.emit_fragment(Fragment::Reserved(Expr(vec![ExprOp::Atom(Atom::Const(
-            bytes,
-        ))
-        .with_span(())])));
-
-        // label dw label
-        let label = object_builder.alloc_symbol(());
-        object_builder.define_symbol(
-            label,
-            (),
-            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-        );
-        object_builder.emit_fragment(Fragment::Immediate(
-            Expr(vec![ExprOp::Atom(Atom::Name(label)).with_span(())]),
-            Width::Word,
-        ));
-
-        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, f: impl FnOnce(&mut Session<()>)) {
-        let mut builder = StandaloneBackend::new();
-        let name = builder.alloc_symbol(());
-        builder.start_section(name, ());
-        f(&mut builder);
-        let mut object = builder.builder.object;
+    fn assert_section_size(expected: impl Into<Num>, mut object: Object<()>) {
         object.vars.resolve(&object.content);
         assert_eq!(
             object.vars[object.content.sections().next().unwrap().size].value,
             expected.into()
         );
     }
-
-    type Session<S> = StandaloneBackend<S>;
 }

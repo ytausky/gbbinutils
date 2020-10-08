@@ -157,13 +157,10 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::StandaloneBackend;
-    use crate::assembler::session::Backend;
     use crate::diagnostics::IgnoreDiagnostics;
-    use crate::expr::{Atom, BinOp, Expr, ExprOp};
+    use crate::expr::{Atom, BinOp, Expr};
     use crate::object::num::Num;
-    use crate::object::{Content, SymbolId};
-    use crate::span::WithSpan;
+    use crate::object::{Constraints, Content, Object, SymbolId, SymbolTable, Var, VarId};
 
     use std::borrow::Borrow;
 
@@ -229,15 +226,23 @@ mod tests {
     fn set_addr_of_translated_section() {
         let addr = 0x7ff0;
 
-        let mut object_builder = StandaloneBackend::new();
+        // ORG $7ff0
+        // NOP
+        let mut object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Byte(0x00)],
+                }],
+                symbols: SymbolTable::new(),
+            },
+            vars: VarTable(vec![Var { value: addr.into() }, Var { value: 1.into() }]),
+        };
 
-        // org $7ff0
-        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
-
-        // nop
-        object_builder.emit_fragment(Fragment::Byte(0x00));
-
-        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,
@@ -255,18 +260,24 @@ mod tests {
 
     #[test]
     fn translate_expr_with_location_counter() {
-        let mut object_builder = StandaloneBackend::new();
+        // NOP
+        // DB   .
+        let mut object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::Byte(0x00),
+                        Fragment::Immediate(Expr::from_atom(Atom::Location, ()), Width::Byte),
+                    ],
+                }],
+                symbols: SymbolTable::new(),
+            },
+            vars: VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
+        };
 
-        // nop
-        object_builder.emit_fragment(Fragment::Byte(0x00));
-
-        // db .
-        object_builder.emit_fragment(Fragment::Immediate(
-            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-            Width::Byte,
-        ));
-
-        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,
@@ -286,18 +297,26 @@ mod tests {
     fn location_counter_starts_from_section_origin() {
         let addr = 0xffe1;
 
-        let mut object_builder = StandaloneBackend::new();
+        // ORG  $ffe1
+        // DW   .
+        let mut object = Object {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Location, ()),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable::new(),
+            },
+            vars: VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
+        };
 
-        // org $ffe1
-        object_builder.set_origin(Expr(vec![ExprOp::Atom(Atom::Const(addr)).with_span(())]));
-
-        // dw .
-        object_builder.emit_fragment(Fragment::Immediate(
-            Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-            Width::Word,
-        ));
-
-        let mut object = object_builder.builder.object;
         object.vars.resolve(&object.content);
         let context = &mut LinkageContext {
             content: &object.content,

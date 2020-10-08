@@ -147,7 +147,7 @@ impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
 mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::StandaloneBackend;
+    use crate::assembler::session::mock::MockSession;
     use crate::diagnostics::*;
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
@@ -216,13 +216,11 @@ mod tests {
         assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
 
-    fn build_object<F: FnOnce(&mut Session<S>), S: Clone + Default + Merge>(f: F) -> Object<S> {
-        let mut session = StandaloneBackend::new();
+    fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(f: F) -> Object<S> {
+        let mut session = MockSession::new();
         f(&mut session);
         session.builder.object
     }
-
-    type Session<S> = StandaloneBackend<S>;
 
     fn emit_items_and_compare<I, B>(items: I, bytes: B)
     where
@@ -367,7 +365,7 @@ mod tests {
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
         S: Clone + Default + Merge + 'static,
-        F: FnOnce(&mut Session<S>),
+        F: FnOnce(&mut MockSession<S>),
     {
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = TestDiagnosticsListener::new();

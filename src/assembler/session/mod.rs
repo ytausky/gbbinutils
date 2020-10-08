@@ -412,7 +412,7 @@ pub mod mock {
 
     use crate::codebase::fake::FakeCodebase;
     use crate::diagnostics::mock::Merge;
-    use crate::diagnostics::{IgnoreDiagnostics, TestDiagnosticsListener};
+    use crate::diagnostics::IgnoreDiagnostics;
     use crate::span::fake::FakeSpanSystem;
 
     pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
@@ -448,30 +448,6 @@ pub mod mock {
 
         pub fn fail(&mut self, error: CodebaseError) {
             self.codebase.fail(error)
-        }
-    }
-
-    pub(crate) type StandaloneBackend<S> = CompositeSession<
-        (),
-        FakeSpanSystem<BufId, S>,
-        MockInterner,
-        TestDiagnosticsListener<S>,
-        (),
-    >;
-
-    impl<S: Clone + Default + Merge> StandaloneBackend<S> {
-        pub fn new() -> Self {
-            CompositeSession {
-                codebase: (),
-                registry: FakeSpanSystem::default(),
-                interner: MockInterner,
-                tokens: Vec::new(),
-                macros: Vec::new(),
-                names: BiLevelNameTable::new(),
-                builder: ObjectBuilder::new(),
-                diagnostics: TestDiagnosticsListener::new(),
-                log: (),
-            }
         }
     }
 }
