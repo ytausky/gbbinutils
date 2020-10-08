@@ -1007,7 +1007,7 @@ mod tests {
     use std::borrow::Borrow;
     use std::fmt::Debug;
 
-    pub(crate) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+    pub(super) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {

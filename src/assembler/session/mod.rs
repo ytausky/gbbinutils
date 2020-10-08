@@ -175,7 +175,7 @@ pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
     ) -> Option<LexItem<I::StringRef, R::Span>>;
 }
 
-pub(crate) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D, L> {
+pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D, L> {
     pub codebase: C,
     pub registry: R,
     interner: I,
@@ -349,7 +349,7 @@ impl<C, R: SpanSystem<BufId>, I: Interner, D, BB, MM, S, T>
     }
 }
 
-pub(crate) trait Log<B, M, R, S, T> {
+pub(super) trait Log<B, M, R, S, T> {
     fn log<F: FnOnce() -> Event<B, M, R, S, T>>(&mut self, f: F);
 }
 
@@ -369,7 +369,7 @@ impl<C, R: SpanSystem<BufId>, I: Interner, D, BB, MM, S, T> Log<BB, MM, I::Strin
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Event<B, M, R, S, T> {
+pub(super) enum Event<B, M, R, S, T> {
     AnalyzeFile {
         path: R,
         from: Option<S>,

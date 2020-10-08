@@ -225,7 +225,8 @@ pub mod tests {
         )
     }
 
-    pub(crate) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+    pub(in crate::assembler::semantics::cpu_instr) type Event<S> =
+        crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
 
     type OperandResult<S> = Result<Operand<Expr<S>, S>, Vec<Event<S>>>;
 
