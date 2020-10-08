@@ -800,7 +800,7 @@ mod tests {
     #[test]
     fn ld_a_deref_expr() {
         let symbol = Symbol::UserDef(UserDefId(7));
-        analyze(LD, vec![literal(A), deref_ident(symbol.clone())]).expect_fragments(vec![
+        analyze(LD, vec![literal(A), deref_ident(symbol)]).expect_fragments(vec![
             Fragment::LdInlineAddr(0xf0, name(symbol, TokenId::Operand(1, 1))),
         ])
     }
@@ -808,7 +808,7 @@ mod tests {
     #[test]
     fn ld_deref_expr_a() {
         let symbol = Symbol::UserDef(UserDefId(7));
-        analyze(LD, vec![deref_ident(symbol.clone()), literal(A)]).expect_fragments(vec![
+        analyze(LD, vec![deref_ident(symbol), literal(A)]).expect_fragments(vec![
             Fragment::LdInlineAddr(0xe0, name(symbol, TokenId::Operand(0, 1))),
         ])
     }
@@ -887,7 +887,7 @@ mod tests {
     #[test]
     fn ld_deref_nn_sp() {
         let symbol = Symbol::UserDef(UserDefId(0));
-        analyze(LD, vec![deref_ident(symbol.clone()), literal(Sp)]).expect_fragments(vec![
+        analyze(LD, vec![deref_ident(symbol), literal(Sp)]).expect_fragments(vec![
             Fragment::Byte(0x08),
             Fragment::Immediate(name(symbol, TokenId::Operand(0, 1)), Width::Word),
         ])

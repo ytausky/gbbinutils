@@ -235,7 +235,7 @@ pub mod tests {
     ) -> OperandResult<MockSpan<S>> {
         let mut session = MockSession::new();
         let result = super::analyze_operand(expr, context, &mut session);
-        result.map_err(|_| session.log().iter().cloned().collect())
+        result.map_err(|_| session.log().to_vec())
     }
 
     #[test]
@@ -251,7 +251,6 @@ pub mod tests {
                     }
                     .at(1.into())
                 )
-                .into()
             }])
         )
     }
@@ -263,7 +262,7 @@ pub mod tests {
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![Event::EmitDiag {
-                diag: CompactDiag::from(Message::StringInInstruction.at(span.into())).into()
+                diag: CompactDiag::from(Message::StringInInstruction.at(span.into()))
             }])
         )
     }
@@ -290,7 +289,6 @@ pub mod tests {
                     }
                     .at(span)
                 )
-                .into()
             }])
         )
     }

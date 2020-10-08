@@ -66,7 +66,7 @@ where
         expr: Expr<Self::SymbolId, R::Span>,
     ) {
         self.log(|| Event::DefineSymbol {
-            name: name.clone(),
+            name,
             span,
             expr: expr.clone(),
         });
@@ -115,10 +115,7 @@ where
     }
 
     fn start_section(&mut self, name: SymbolId, span: R::Span) {
-        self.log(|| Event::StartSection {
-            name: name.clone(),
-            span,
-        });
+        self.log(|| Event::StartSection { name, span });
 
         let index = self.builder.object.content.sections.len();
         self.builder.state = Some(BuilderState::SectionPrelude(index));

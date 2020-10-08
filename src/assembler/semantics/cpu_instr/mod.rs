@@ -1920,8 +1920,7 @@ mod tests {
                 self.0,
                 vec![Event::EmitDiag {
                     diag: expected.message.at(expected.highlight.unwrap()).into()
-                }
-                .into()]
+                }]
             )
         }
     }
@@ -1945,7 +1944,7 @@ mod tests {
             operands,
             &mut session,
         );
-        AnalysisResult(session.log().iter().cloned().collect())
+        AnalysisResult(session.log().to_vec())
     }
 
     fn add_token_spans((i, operand): (usize, Input)) -> Arg<SymbolId, String, TokenSpan> {
