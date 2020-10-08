@@ -37,15 +37,14 @@ impl<D, R> MacroSource for VecMacroTable<D, R> {
     type MacroId = MacroId;
 }
 
-impl<'a, C, R: SpanSource, I: StringSource, M: MacroSource, N, B, D, L> MacroSource
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<'a, C, R: SpanSystem<BufId>, I: StringSource, D, L> MacroSource
+    for CompositeSession<C, R, I, D, L>
 {
-    type MacroId = M::MacroId;
+    type MacroId = MacroId;
 }
 
-impl<'a, C, R, I, N, B, D, L>
-    MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
-    for CompositeSession<C, R, I, VecMacroTable<R::MacroDefMetadataId, I::StringRef>, N, B, D, L>
+impl<'a, C, R, I, D, L> MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
+    for CompositeSession<C, R, I, D, L>
 where
     Self: Lex<R, I, Span = R::Span, StringRef = I::StringRef>,
     C: Codebase,
@@ -268,14 +267,6 @@ where
             (Ok(token), span)
         })
     }
-}
-
-impl<C, R, I, N, B, D, L> MacroSource for CompositeSession<C, R, I, (), N, B, D, L>
-where
-    R: SpanSource,
-    I: StringSource,
-{
-    type MacroId = ();
 }
 
 #[cfg(test)]

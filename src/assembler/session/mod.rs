@@ -15,7 +15,6 @@ use crate::span::*;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::rc::Rc;
 
 mod builder;
 mod lex;
@@ -125,12 +124,6 @@ pub(super) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
     RcContextFactory<BufId>,
     HashInterner,
-    VecMacroTable<
-        Rc<MacroDefMetadata<Span<RcFileInclusion<BufId>, RcMacroExpansion<BufId>>>>,
-        StringId,
-    >,
-    BiLevelNameTable<MacroId, SymbolId, StringId>,
-    ObjectBuilder<Span<RcFileInclusion<BufId>, RcMacroExpansion<BufId>>>,
     OutputForwarder<'a>,
     (),
 >;
@@ -179,40 +172,38 @@ pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
     ) -> Option<LexItem<I::StringRef, R::Span>>;
 }
 
-pub(crate) struct CompositeSession<C, R: SpanSource, I: StringSource, M, N, B, D, L> {
+pub(crate) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D, L> {
     pub codebase: C,
     pub registry: R,
     interner: I,
     tokens: Vec<Box<dyn TokenStream<R, I>>>,
-    macros: M,
-    names: N,
-    pub builder: B,
+    macros: VecMacroTable<R::MacroDefMetadataId, I::StringRef>,
+    names: BiLevelNameTable<MacroId, SymbolId, I::StringRef>,
+    pub builder: ObjectBuilder<R::Span>,
     pub diagnostics: D,
     #[allow(dead_code)]
     log: L,
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> SpanSource
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> SpanSource
+    for CompositeSession<C, R, I, D, L>
 {
     type Span = R::Span;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> StringSource
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> StringSource
+    for CompositeSession<C, R, I, D, L>
 {
     type StringRef = I::StringRef;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B: SymbolSource, D, L> SymbolSource
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> SymbolSource
+    for CompositeSession<C, R, I, D, L>
 {
-    type SymbolId = B::SymbolId;
+    type SymbolId = SymbolId;
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> NextToken
-    for CompositeSession<C, R, I, M, N, B, D, L>
-{
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> NextToken for CompositeSession<C, R, I, D, L> {
     fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>> {
         let token = self
             .tokens
@@ -227,29 +218,28 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> NextToken
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S, Stripped> EmitDiag<S, Stripped>
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> EmitDiag<R::Span, R::Stripped>
+    for CompositeSession<C, R, I, D, L>
 where
     Self: SymbolSource + MacroSource,
     Self: Log<
         <Self as SymbolSource>::SymbolId,
         <Self as MacroSource>::MacroId,
         I::StringRef,
-        S,
-        Stripped,
+        R::Span,
+        R::Stripped,
     >,
-    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<S, Stripped>,
-    S: Clone,
-    Stripped: Clone,
+    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    R::Stripped: Clone,
 {
-    fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, Stripped>>) {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<R::Span, R::Stripped>>) {
         let diag = diag.into();
         self.log(|| Event::EmitDiag { diag: diag.clone() });
         self.diagnostics().emit_diag(diag)
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> CompositeSession<C, R, I, M, N, B, D, L> {
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> CompositeSession<C, R, I, D, L> {
     fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
@@ -259,33 +249,25 @@ impl<C, R: SpanSource, I: StringSource, M, N, B, D, L> CompositeSession<C, R, I,
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S> MergeSpans<S>
-    for CompositeSession<C, R, I, M, N, B, D, L>
-where
-    R: MergeSpans<S>,
-    S: Clone,
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> MergeSpans<R::Span>
+    for CompositeSession<C, R, I, D, L>
 {
-    fn merge_spans(&mut self, left: &S, right: &S) -> S {
+    fn merge_spans(&mut self, left: &R::Span, right: &R::Span) -> R::Span {
         self.registry.merge_spans(left, right)
     }
 }
 
-impl<C, R: SpanSource, I: StringSource, M, N, B, D, L, S> StripSpan<S>
-    for CompositeSession<C, R, I, M, N, B, D, L>
-where
-    R: StripSpan<S>,
-    S: Clone,
+impl<C, R: SpanSystem<BufId>, I: StringSource, D, L> StripSpan<R::Span>
+    for CompositeSession<C, R, I, D, L>
 {
     type Stripped = R::Stripped;
 
-    fn strip_span(&mut self, span: &S) -> Self::Stripped {
+    fn strip_span(&mut self, span: &R::Span) -> Self::Stripped {
         self.registry.strip_span(span)
     }
 }
 
-impl<C, R: SpanSource, I: Interner, M, N, B, D, L> Interner
-    for CompositeSession<C, R, I, M, N, B, D, L>
-{
+impl<C, R: SpanSystem<BufId>, I: Interner, D, L> Interner for CompositeSession<C, R, I, D, L> {
     fn intern(&mut self, string: &str) -> Self::StringRef {
         self.interner.intern(string)
     }
@@ -356,8 +338,8 @@ impl Interner for HashInterner {
 }
 
 #[cfg(test)]
-impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T>
-    CompositeSession<C, R, I, M, N, B, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
+impl<C, R: SpanSystem<BufId>, I: Interner, D, BB, MM, S, T>
+    CompositeSession<C, R, I, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
 {
     pub fn log(&self) -> &[Event<BB, MM, I::StringRef, S, T>] {
         &self.log
@@ -368,15 +350,15 @@ pub(crate) trait Log<B, M, R, S, T> {
     fn log<F: FnOnce() -> Event<B, M, R, S, T>>(&mut self, f: F);
 }
 
-impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
-    for CompositeSession<C, R, I, M, N, B, D, ()>
+impl<C, R: SpanSystem<BufId>, I: Interner, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
+    for CompositeSession<C, R, I, D, ()>
 {
     fn log<F: FnOnce() -> Event<BB, MM, I::StringRef, S, T>>(&mut self, _: F) {}
 }
 
 #[cfg(test)]
-impl<C, R: SpanSource, I: Interner, M, N, B, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
-    for CompositeSession<C, R, I, M, N, B, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
+impl<C, R: SpanSystem<BufId>, I: Interner, D, BB, MM, S, T> Log<BB, MM, I::StringRef, S, T>
+    for CompositeSession<C, R, I, D, Vec<Event<BB, MM, I::StringRef, S, T>>>
 {
     fn log<F: FnOnce() -> Event<BB, MM, I::StringRef, S, T>>(&mut self, f: F) {
         self.log.push(f())
@@ -429,6 +411,7 @@ pub mod mock {
     use super::*;
 
     use crate::codebase::fake::FakeCodebase;
+    use crate::diagnostics::mock::Merge;
     use crate::diagnostics::{IgnoreDiagnostics, TestDiagnosticsListener};
     use crate::span::fake::FakeSpanSystem;
 
@@ -438,14 +421,11 @@ pub mod mock {
         FakeCodebase,
         FakeSpanSystem<BufId, S>,
         MockInterner,
-        VecMacroTable<(), String>,
-        BiLevelNameTable<MacroId, SymbolId, String>,
-        ObjectBuilder<S>,
         IgnoreDiagnostics,
         Vec<Event<SymbolId, MacroId, String, S, S>>,
     >;
 
-    impl<S: Clone> MockSession<S> {
+    impl<S: Clone + Default + Merge> MockSession<S> {
         pub fn new() -> Self {
             let mut names = BiLevelNameTable::new();
             for (ident, keyword) in KEYWORDS {
@@ -473,24 +453,21 @@ pub mod mock {
 
     pub(crate) type StandaloneBackend<S> = CompositeSession<
         (),
-        TestDiagnosticsListener<S>,
+        FakeSpanSystem<BufId, S>,
         MockInterner,
-        (),
-        (),
-        ObjectBuilder<S>,
         TestDiagnosticsListener<S>,
         (),
     >;
 
-    impl<S: Clone> StandaloneBackend<S> {
+    impl<S: Clone + Default + Merge> StandaloneBackend<S> {
         pub fn new() -> Self {
             CompositeSession {
                 codebase: (),
-                registry: TestDiagnosticsListener::new(),
+                registry: FakeSpanSystem::default(),
                 interner: MockInterner,
                 tokens: Vec::new(),
-                macros: (),
-                names: (),
+                macros: Vec::new(),
+                names: BiLevelNameTable::new(),
                 builder: ObjectBuilder::new(),
                 diagnostics: TestDiagnosticsListener::new(),
                 log: (),

@@ -9,8 +9,8 @@ use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{SpanSource, SpanSystem};
 
-impl<C, R, I, M, N, B, D, L> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
-    for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R, I, D, L> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
+    for CompositeSession<C, R, I, D, L>
 where
     C: Codebase,
     Self: Lex<R, I, Span = R::Span>,

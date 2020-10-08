@@ -3,7 +3,6 @@ use super::*;
 use crate::diagnostics::{Diagnostics, DiagnosticsContext};
 use crate::expr::Expr;
 use crate::object::*;
-use crate::span::{MergeSpans, SpanSource, StripSpan};
 
 pub(crate) struct ObjectBuilder<S> {
     pub object: Object<S>,
@@ -52,16 +51,20 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<C, R, I, M, N, D, L, S> Backend<S> for CompositeSession<C, R, I, M, N, ObjectBuilder<S>, D, L>
+impl<C, R, I, D, L> Backend<R::Span> for CompositeSession<C, R, I, D, L>
 where
-    R: SpanSource<Span = S> + MergeSpans<S> + StripSpan<S>,
+    R: SpanSystem<BufId>,
     I: StringSource,
-    Self: MacroSource + Diagnostics<S>,
+    Self: MacroSource + Diagnostics<R::Span>,
     Self: Log<Self::SymbolId, <Self as MacroSource>::MacroId, I::StringRef, R::Span, R::Stripped>,
-    S: Clone,
-    for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<S>,
+    for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
-    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>) {
+    fn define_symbol(
+        &mut self,
+        name: Self::SymbolId,
+        span: R::Span,
+        expr: Expr<Self::SymbolId, R::Span>,
+    ) {
         self.log(|| Event::DefineSymbol {
             name: name.clone(),
             span,
@@ -76,14 +79,14 @@ where
         );
     }
 
-    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>) {
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, R::Span>>) {
         self.log(|| Event::EmitFragment {
             fragment: fragment.clone(),
         });
         self.builder.push(fragment)
     }
 
-    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool> {
+    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, R::Span>) -> Option<bool> {
         let context = LinkageContext {
             content: &self.builder.object.content,
             vars: &self.builder.object.vars,
@@ -100,7 +103,7 @@ where
             .map(|n| n != 0)
     }
 
-    fn set_origin(&mut self, addr: Expr<Self::SymbolId, S>) {
+    fn set_origin(&mut self, addr: Expr<Self::SymbolId, R::Span>) {
         self.log(|| Event::SetOrigin { addr: addr.clone() });
         match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
@@ -111,7 +114,7 @@ where
         }
     }
 
-    fn start_section(&mut self, name: SymbolId, span: S) {
+    fn start_section(&mut self, name: SymbolId, span: R::Span) {
         self.log(|| Event::StartSection {
             name: name.clone(),
             span,
@@ -123,15 +126,12 @@ where
     }
 }
 
-impl<C, R, I, M, N, B, D, L, Span> AllocSymbol<Span> for CompositeSession<C, R, I, M, N, B, D, L>
+impl<C, R, I, D, L> AllocSymbol<R::Span> for CompositeSession<C, R, I, D, L>
 where
-    Self: SymbolSource<SymbolId = B::SymbolId>,
-    R: SpanSource,
+    R: SpanSystem<BufId>,
     I: StringSource,
-    B: AllocSymbol<Span>,
-    Span: Clone,
 {
-    fn alloc_symbol(&mut self, span: Span) -> Self::SymbolId {
+    fn alloc_symbol(&mut self, span: R::Span) -> Self::SymbolId {
         self.builder.alloc_symbol(span)
     }
 }
@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
 
-    fn build_object<F: FnOnce(&mut Session<S>), S: Clone>(f: F) -> Object<S> {
+    fn build_object<F: FnOnce(&mut Session<S>), S: Clone + Default + Merge>(f: F) -> Object<S> {
         let mut session = StandaloneBackend::new();
         f(&mut session);
         session.builder.object
@@ -277,10 +277,10 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         let name = "ident";
-        let (_, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.alloc_symbol(name.into());
+        let (_, diagnostics) = with_object_builder::<MockSpan<String>, _>(|builder| {
+            let symbol_id = builder.alloc_symbol(name.to_string().into());
             builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(symbol_id)).with_span(name.into())
+                ExprOp::Atom(Atom::Name(symbol_id)).with_span(name.to_string().into())
             ])))
         });
         assert_eq!(*diagnostics, [unresolved(name)]);
@@ -290,13 +290,13 @@ mod tests {
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         let name1 = "ident1";
         let name2 = "ident2";
-        let (_, diagnostics) = with_object_builder(|builder| {
-            let id1 = builder.alloc_symbol(name1.into());
-            let id2 = builder.alloc_symbol(name2.into());
+        let (_, diagnostics) = with_object_builder::<MockSpan<String>, _>(|builder| {
+            let id1 = builder.alloc_symbol(name1.to_string().into());
+            let id2 = builder.alloc_symbol(name2.to_string().into());
             builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(id1)).with_span(name1.into()),
-                ExprOp::Atom(Atom::Name(id2)).with_span(name2.into()),
-                ExprOp::Binary(BinOp::Minus).with_span("diff".into()),
+                ExprOp::Atom(Atom::Name(id1)).with_span(name1.to_string().into()),
+                ExprOp::Atom(Atom::Name(id2)).with_span(name2.to_string().into()),
+                ExprOp::Binary(BinOp::Minus).with_span("diff".to_string().into()),
             ])))
         });
         assert_eq!(*diagnostics, [unresolved(name1), unresolved(name2)]);
@@ -369,7 +369,7 @@ mod tests {
 
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
-        S: Clone + 'static,
+        S: Clone + Default + Merge + 'static,
         F: FnOnce(&mut Session<S>),
     {
         let registry = &mut TestDiagnosticsListener::new();
@@ -388,12 +388,12 @@ mod tests {
         Fragment::Immediate(value, Width::Word)
     }
 
-    fn unresolved(symbol: impl Into<String>) -> CompactDiag<String, String> {
+    fn unresolved(symbol: impl Into<String>) -> CompactDiag<MockSpan<String>, MockSpan<String>> {
         let symbol = symbol.into();
         Message::UnresolvedSymbol {
-            symbol: symbol.clone(),
+            symbol: symbol.clone().into(),
         }
-        .at(symbol)
+        .at(symbol.into())
         .into()
     }
 }

@@ -66,17 +66,7 @@ impl<M, S: Clone, R> SymbolSource for BiLevelNameTable<M, S, R> {
     type SymbolId = S;
 }
 
-impl<C, R: SpanSource, I, M, B, D, L> NameTable<I::StringRef>
-    for CompositeSession<
-        C,
-        R,
-        I,
-        M,
-        BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>,
-        B,
-        D,
-        L,
-    >
+impl<C, R: SpanSystem<BufId>, I, D, L> NameTable<I::StringRef> for CompositeSession<C, R, I, D, L>
 where
     Self: Log<
         <Self as SymbolSource>::SymbolId,
@@ -87,8 +77,6 @@ where
     >,
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
     I: Interner,
-    M: MacroSource,
-    B: SymbolSource,
 {
     fn resolve_name_with_visibility(
         &mut self,
@@ -131,17 +119,7 @@ where
     }
 }
 
-impl<C, R, I, M, B, D, L> StartScope
-    for CompositeSession<
-        C,
-        R,
-        I,
-        M,
-        BiLevelNameTable<M::MacroId, B::SymbolId, I::StringRef>,
-        B,
-        D,
-        L,
-    >
+impl<C, R, I, D, L> StartScope for CompositeSession<C, R, I, D, L>
 where
     Self: Log<
         <Self as SymbolSource>::SymbolId,
@@ -150,10 +128,8 @@ where
         R::Span,
         R::Stripped,
     >,
-    R: SpanSource + StripSpan<<R as SpanSource>::Span>,
+    R: SpanSystem<BufId>,
     I: Interner,
-    M: MacroSource,
-    B: SymbolSource,
 {
     fn start_scope(&mut self) {
         self.log(|| Event::StartScope);
