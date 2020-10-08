@@ -4,13 +4,13 @@ use self::macros::MacroArgs;
 use self::macros::{MacroTable, VecMacroTable};
 use self::resolve::*;
 
-use super::keywords::KEYWORDS;
+use super::keywords::{BuiltinMnemonic, OperandSymbol, KEYWORDS};
 use super::semantics::Keyword;
 #[cfg(test)]
 use super::syntax::SemanticToken;
-use super::syntax::{LexItem, Literal, Sigil, Token};
+use super::syntax::{LexItem, Sigil, Token};
 
-use crate::codebase::{BufId, CodebaseError, FileCodebase, FileSystem};
+use crate::codebase::{BufId, Codebase, CodebaseError, FileCodebase, FileSystem};
 use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};
 use crate::expr::Expr;
 use crate::object::{Fragment, SymbolId};
@@ -29,7 +29,6 @@ mod resolve;
 pub(super) trait Analysis:
     SpanSource
     + StringSource
-    + MacroSource
     + NextToken
     + Interner
     + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
@@ -37,31 +36,9 @@ pub(super) trait Analysis:
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope
     + NameTable<<Self as StringSource>::StringRef>
-    + MacroTable<
-        <Self as StringSource>::StringRef,
-        Literal<<Self as StringSource>::StringRef>,
-        <Self as SpanSource>::Span,
-    >
+    + MacroTable<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
 {
-}
-
-impl<T> Analysis for T where
-    Self: SpanSource
-        + StringSource
-        + MacroSource
-        + NextToken
-        + Interner
-        + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
-        + Backend<<Self as SpanSource>::Span>
-        + Diagnostics<<Self as SpanSource>::Span>
-        + StartScope
-        + NameTable<<Self as StringSource>::StringRef>
-        + MacroTable<
-            <Self as StringSource>::StringRef,
-            Literal<<Self as StringSource>::StringRef>,
-            <Self as SpanSource>::Span,
-        >
-{
+    fn mnemonic_lookup(&mut self, mnemonic: &Self::StringRef) -> Option<MnemonicEntry>;
 }
 
 pub(crate) trait NextToken: StringSource + SpanSource {
@@ -73,29 +50,29 @@ pub(super) trait ReentrancyActions<R, S> {
 }
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
-    fn define_symbol(&mut self, name: Self::SymbolId, span: S, expr: Expr<Self::SymbolId, S>);
-    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, S>>);
-    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, S>) -> Option<bool>;
-    fn set_origin(&mut self, origin: Expr<Self::SymbolId, S>);
-    fn start_section(&mut self, name: Self::SymbolId, span: S);
+    fn define_symbol(&mut self, name: SymbolId, span: S, expr: Expr<SymbolId, S>);
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<SymbolId, S>>);
+    fn is_non_zero(&mut self, value: Expr<SymbolId, S>) -> Option<bool>;
+    fn set_origin(&mut self, origin: Expr<SymbolId, S>);
+    fn start_section(&mut self, name: SymbolId, span: S);
 }
 
-pub trait AllocSymbol<S: Clone>: SymbolSource {
-    fn alloc_symbol(&mut self, span: S) -> Self::SymbolId;
+pub trait AllocSymbol<S: Clone> {
+    fn alloc_symbol(&mut self, span: S) -> SymbolId;
 }
 
-pub(super) trait NameTable<I>: MacroSource + SymbolSource {
+pub(super) trait NameTable<I> {
     fn resolve_name_with_visibility(
         &mut self,
         ident: &I,
         visibility: Visibility,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+    ) -> Option<ResolvedName>;
 
     fn define_name_with_visibility(
         &mut self,
         ident: I,
         visibility: Visibility,
-        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+        entry: ResolvedName,
     );
 }
 
@@ -109,9 +86,8 @@ pub(crate) enum Visibility {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum ResolvedName<MacroId, SymbolId> {
-    Keyword(&'static Keyword),
-    Macro(MacroId),
+pub(crate) enum ResolvedName {
+    Keyword(OperandSymbol),
     Symbol(SymbolId),
 }
 
@@ -145,6 +121,7 @@ impl<'a> Session<'a> {
             interner: HashInterner::new(),
             tokens: Vec::new(),
             macros: VecMacroTable::new(),
+            mnemonics: HashMap::default(),
             names: BiLevelNameTable::new(),
             builder: ObjectBuilder::new(),
             diagnostics,
@@ -161,13 +138,53 @@ impl<'a> Session<'a> {
         }
         for (ident, keyword) in KEYWORDS {
             let string = session.interner.intern(ident);
-            session.define_name_with_visibility(
-                string,
-                Visibility::Global,
-                ResolvedName::Keyword(keyword),
-            )
+            match keyword {
+                Keyword::BuiltinMnemonic(mnemonic) => {
+                    session
+                        .mnemonics
+                        .insert(string, MnemonicEntry::Builtin(mnemonic));
+                }
+                Keyword::Operand(keyword) => session.define_name_with_visibility(
+                    string,
+                    Visibility::Global,
+                    ResolvedName::Keyword(*keyword),
+                ),
+            }
         }
         session
+    }
+}
+
+impl<C, R, I, D> Analysis for CompositeSession<C, R, I, D>
+where
+    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    C: Codebase,
+    R: SpanSystem<BufId>,
+    R::FileInclusionMetadataId: 'static,
+    R::Span: 'static,
+    R::Stripped: Clone,
+    I: Interner,
+    I::StringRef: 'static,
+{
+    fn mnemonic_lookup(&mut self, mnemonic: &Self::StringRef) -> Option<MnemonicEntry> {
+        if let Some(entry) = self.mnemonics.get(&mnemonic) {
+            Some(entry.clone())
+        } else {
+            let representative = self
+                .interner
+                .intern(&self.interner.get_string(mnemonic).to_ascii_uppercase());
+            if let Some(builtin @ MnemonicEntry::Builtin(_)) = self.mnemonics.get(&representative) {
+                let builtin = (*builtin).clone();
+                Some(
+                    self.mnemonics
+                        .entry(mnemonic.clone())
+                        .or_insert(builtin)
+                        .clone(),
+                )
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -185,11 +202,18 @@ pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D> 
     interner: I,
     tokens: Vec<Box<dyn TokenStream<R, I>>>,
     macros: VecMacroTable<R::MacroDefMetadataId, I::StringRef>,
-    names: BiLevelNameTable<MacroId, SymbolId, I::StringRef>,
+    mnemonics: HashMap<I::StringRef, MnemonicEntry>,
+    names: BiLevelNameTable<I::StringRef>,
     pub builder: ObjectBuilder<R::Span>,
     pub diagnostics: D,
     #[cfg(test)]
     log: Vec<Event<SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>>,
+}
+
+#[derive(Clone)]
+pub(super) enum MnemonicEntry {
+    Builtin(&'static BuiltinMnemonic),
+    Macro(MacroId),
 }
 
 impl<C, R: SpanSystem<BufId>, I: StringSource, D> SpanSource for CompositeSession<C, R, I, D> {
@@ -353,14 +377,14 @@ pub(super) enum Event<B, M, R, S, T> {
         from: Option<S>,
     },
     DefineMacro {
-        name_span: S,
+        name: (R, S),
         params: (Box<[R]>, Box<[S]>),
         body: (Box<[SemanticToken<R>]>, Box<[S]>),
     },
     DefineNameWithVisibility {
         ident: R,
         visibility: Visibility,
-        entry: ResolvedName<M, B>,
+        entry: ResolvedName,
     },
     DefineSymbol {
         name: B,
@@ -404,10 +428,18 @@ pub mod mock {
     impl<S: Clone + Default + Merge> MockSession<S> {
         pub fn new() -> Self {
             let mut names = BiLevelNameTable::new();
+            let mut mnemonics = HashMap::new();
             for (ident, keyword) in KEYWORDS {
-                names
-                    .global
-                    .insert((*ident).into(), ResolvedName::Keyword(keyword));
+                match keyword {
+                    Keyword::BuiltinMnemonic(mnemonic) => {
+                        mnemonics.insert((*ident).into(), MnemonicEntry::Builtin(mnemonic));
+                    }
+                    Keyword::Operand(keyword) => {
+                        names
+                            .global
+                            .insert((*ident).into(), ResolvedName::Keyword(*keyword));
+                    }
+                }
             }
             CompositeSession {
                 codebase: FakeCodebase::default(),
@@ -415,6 +447,7 @@ pub mod mock {
                 interner: MockInterner,
                 tokens: Vec::new(),
                 macros: Vec::new(),
+                mnemonics,
                 names,
                 builder: ObjectBuilder::new(),
                 diagnostics: IgnoreDiagnostics,

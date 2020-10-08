@@ -58,12 +58,7 @@ where
     Self: MacroSource + Diagnostics<R::Span>,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
-    fn define_symbol(
-        &mut self,
-        name: Self::SymbolId,
-        _span: R::Span,
-        expr: Expr<Self::SymbolId, R::Span>,
-    ) {
+    fn define_symbol(&mut self, name: SymbolId, _span: R::Span, expr: Expr<SymbolId, R::Span>) {
         #[cfg(test)]
         self.log_event(Event::DefineSymbol {
             name,
@@ -79,7 +74,7 @@ where
         );
     }
 
-    fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, R::Span>>) {
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<SymbolId, R::Span>>) {
         #[cfg(test)]
         self.log_event(Event::EmitFragment {
             fragment: fragment.clone(),
@@ -88,7 +83,7 @@ where
         self.builder.push(fragment)
     }
 
-    fn is_non_zero(&mut self, value: Expr<Self::SymbolId, R::Span>) -> Option<bool> {
+    fn is_non_zero(&mut self, value: Expr<SymbolId, R::Span>) -> Option<bool> {
         let context = LinkageContext {
             content: &self.builder.object.content,
             vars: &self.builder.object.vars,
@@ -105,7 +100,7 @@ where
             .map(|n| n != 0)
     }
 
-    fn set_origin(&mut self, addr: Expr<Self::SymbolId, R::Span>) {
+    fn set_origin(&mut self, addr: Expr<SymbolId, R::Span>) {
         #[cfg(test)]
         self.log_event(Event::SetOrigin { addr: addr.clone() });
 
@@ -133,7 +128,7 @@ where
     R: SpanSystem<BufId>,
     I: StringSource,
 {
-    fn alloc_symbol(&mut self, span: R::Span) -> Self::SymbolId {
+    fn alloc_symbol(&mut self, span: R::Span) -> SymbolId {
         self.builder.alloc_symbol(span)
     }
 }
@@ -143,7 +138,7 @@ impl<S: Clone> SymbolSource for ObjectBuilder<S> {
 }
 
 impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
-    fn alloc_symbol(&mut self, _span: S) -> Self::SymbolId {
+    fn alloc_symbol(&mut self, _span: S) -> SymbolId {
         self.object.content.symbols.alloc().into()
     }
 }

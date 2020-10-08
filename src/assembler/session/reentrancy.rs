@@ -16,11 +16,7 @@ where
     Self: Lex<R, I, Span = R::Span>,
     Self: Interner<StringRef = I::StringRef>,
     Self: NextToken,
-    Self: MacroTable<
-        <Self as StringSource>::StringRef,
-        Literal<<Self as StringSource>::StringRef>,
-        <Self as SpanSource>::Span,
-    >,
+    Self: MacroTable<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>,
     R: SpanSystem<BufId>,
     I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
@@ -29,6 +25,9 @@ where
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
+    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    R::Stripped: Clone,
+    R::FileInclusionMetadataId: 'static,
 {
     fn analyze_file(
         &mut self,

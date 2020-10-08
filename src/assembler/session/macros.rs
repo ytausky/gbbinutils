@@ -5,24 +5,22 @@ use crate::assembler::semantics::{Semantics, TokenStreamState};
 use crate::assembler::session::resolve::StartScope;
 use crate::assembler::session::{Backend, Interner, NameTable, TokenStream};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
-use crate::assembler::syntax::{LexError, LexItem, Literal, Token};
+use crate::assembler::syntax::{LexError, LexItem, Literal, SemanticToken, Token};
 use crate::codebase::{BufId, Codebase};
 use crate::diagnostics::EmitDiag;
 
 use std::fmt::Debug;
 use std::rc::Rc;
 
-pub(in crate::assembler) trait MacroTable<I, L, S: Clone>:
-    MacroSource
-{
+pub(in crate::assembler) trait MacroTable<R, S: Clone> {
     fn define_macro(
         &mut self,
-        name_span: S,
-        params: (Box<[I]>, Box<[S]>),
-        body: (Box<[Token<I, L>]>, Box<[S]>),
-    ) -> Self::MacroId;
+        name: (R, S),
+        params: (Box<[R]>, Box<[S]>),
+        body: (Box<[SemanticToken<R>]>, Box<[S]>),
+    );
 
-    fn expand_macro(&mut self, name: (Self::MacroId, S), args: MacroArgs<Token<I, L>, S>);
+    fn expand_macro(&mut self, name: (MacroId, S), args: MacroArgs<SemanticToken<R>, S>);
 }
 
 pub(crate) type VecMacroTable<D, R> = Vec<Rc<MacroDef<D, R>>>;
@@ -37,7 +35,7 @@ impl<'a, C, R: SpanSystem<BufId>, I: StringSource, D> MacroSource for CompositeS
     type MacroId = MacroId;
 }
 
-impl<'a, C, R, I, D> MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
+impl<C, R, I, D> MacroTable<I::StringRef, <Self as SpanSource>::Span>
     for CompositeSession<C, R, I, D>
 where
     Self: Lex<R, I, Span = R::Span, StringRef = I::StringRef>,
@@ -53,19 +51,22 @@ where
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
+    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    R::Stripped: Clone,
+    R::FileInclusionMetadataId: 'static,
 {
     fn define_macro(
         &mut self,
-        name_span: R::Span,
+        (name, name_span): (I::StringRef, R::Span),
         (params, param_spans): (Box<[I::StringRef]>, Box<[R::Span]>),
         (body, body_spans): (
             Box<[Token<I::StringRef, Literal<I::StringRef>>]>,
             Box<[R::Span]>,
         ),
-    ) -> Self::MacroId {
+    ) {
         #[cfg(test)]
         self.log_event(Event::DefineMacro {
-            name_span: name_span.clone(),
+            name: (name.clone(), name_span.clone()),
             params: (params.clone(), param_spans.clone()),
             body: (body.clone(), body_spans.clone()),
         });
@@ -81,12 +82,12 @@ where
             params,
             body,
         }));
-        id
+        self.mnemonics.insert(name, MnemonicEntry::Macro(id));
     }
 
     fn expand_macro(
         &mut self,
-        (MacroId(id), name_span): (Self::MacroId, R::Span),
+        (MacroId(id), name_span): (MacroId, R::Span),
         (args, arg_spans): MacroArgs<Token<I::StringRef, Literal<I::StringRef>>, R::Span>,
     ) {
         #[cfg(test)]

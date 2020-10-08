@@ -37,12 +37,12 @@ impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
     }
 }
 
-pub struct BiLevelNameTable<M, S, R> {
-    pub(super) global: HashMap<R, ResolvedName<M, S>>,
-    local: HashMap<R, ResolvedName<M, S>>,
+pub struct BiLevelNameTable<R> {
+    pub(super) global: HashMap<R, ResolvedName>,
+    local: HashMap<R, ResolvedName>,
 }
 
-impl<M, S, R> BiLevelNameTable<M, S, R> {
+impl<R> BiLevelNameTable<R> {
     pub fn new() -> Self {
         BiLevelNameTable {
             global: HashMap::new(),
@@ -50,20 +50,12 @@ impl<M, S, R> BiLevelNameTable<M, S, R> {
         }
     }
 
-    fn select_table_mut(&mut self, visibility: Visibility) -> &mut HashMap<R, ResolvedName<M, S>> {
+    fn select_table_mut(&mut self, visibility: Visibility) -> &mut HashMap<R, ResolvedName> {
         match visibility {
             Visibility::Global => &mut self.global,
             Visibility::Local => &mut self.local,
         }
     }
-}
-
-impl<M: Clone, S, R> MacroSource for BiLevelNameTable<M, S, R> {
-    type MacroId = M;
-}
-
-impl<M, S: Clone, R> SymbolSource for BiLevelNameTable<M, S, R> {
-    type SymbolId = S;
 }
 
 impl<C, R: SpanSystem<BufId>, I, D> NameTable<I::StringRef> for CompositeSession<C, R, I, D>
@@ -75,7 +67,7 @@ where
         &mut self,
         ident: &I::StringRef,
         visibility: Visibility,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+    ) -> Option<ResolvedName> {
         let table = self.names.select_table_mut(visibility);
         let interner = &mut self.interner;
         table.get(&ident).cloned().map_or_else(
@@ -99,7 +91,7 @@ where
         &mut self,
         ident: I::StringRef,
         visibility: Visibility,
-        entry: ResolvedName<Self::MacroId, Self::SymbolId>,
+        entry: ResolvedName,
     ) {
         #[cfg(test)]
         self.log_event(Event::DefineNameWithVisibility {

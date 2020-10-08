@@ -6,17 +6,17 @@ use crate::expr::Expr;
 use crate::span::{Source, SpanSource};
 
 #[derive(Debug, PartialEq)]
-pub(in super::super) enum Operand<N, S> {
+pub(in super::super) enum Operand<S> {
     Atom(AtomKind, S),
-    Const(Expr<N, S>),
-    Deref(Expr<N, S>),
+    Const(Expr<SymbolId, S>),
+    Deref(Expr<SymbolId, S>),
 }
 
-impl<N, S: Clone> SpanSource for Operand<N, S> {
+impl<S: Clone> SpanSource for Operand<S> {
     type Span = S;
 }
 
-impl<N, S: Clone> Source for Operand<N, S> {
+impl<S: Clone> Source for Operand<S> {
     fn span(&self) -> Self::Span {
         match self {
             Operand::Atom(_, span) => (*span).clone(),
@@ -42,11 +42,11 @@ pub enum Context {
     Other,
 }
 
-pub(in super::super) fn analyze_operand<D, N, R, S>(
-    expr: Arg<N, R, S>,
+pub(in super::super) fn analyze_operand<D, R, S>(
+    expr: Arg<R, S>,
     context: Context,
     diagnostics: &mut D,
-) -> Result<Operand<N, S>, ()>
+) -> Result<Operand<S>, ()>
 where
     D: Diagnostics<S>,
     R: Eq,
@@ -69,11 +69,11 @@ where
     }
 }
 
-fn analyze_deref_operand_keyword<D, E, S>(
+fn analyze_deref_operand_keyword<D, S>(
     keyword: (OperandSymbol, &S),
     deref: S,
     diagnostics: &mut D,
-) -> Result<Operand<E, S>, ()>
+) -> Result<Operand<S>, ()>
 where
     D: Diagnostics<S>,
 {
@@ -109,11 +109,11 @@ fn try_deref_operand_keyword(symbol: OperandSymbol) -> Result<AtomKind, KeywordO
     }
 }
 
-fn analyze_keyword_operand<D, E, S>(
+fn analyze_keyword_operand<D, S>(
     (symbol, span): (OperandSymbol, S),
     context: Context,
     diagnostics: &mut D,
-) -> Result<Operand<E, S>, ()>
+) -> Result<Operand<S>, ()>
 where
     D: Diagnostics<S>,
     S: Clone,
@@ -195,8 +195,6 @@ pub mod tests {
 
     use std::fmt::Debug;
 
-    type Expr<S> = crate::expr::Expr<SymbolId, S>;
-
     #[test]
     fn analyze_deref_bc() {
         analyze_deref_ptr_reg(PtrReg::Bc)
@@ -228,10 +226,10 @@ pub mod tests {
     pub(in crate::assembler::semantics::cpu_instr) type Event<S> =
         crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
 
-    type OperandResult<S> = Result<Operand<Expr<S>, S>, Vec<Event<S>>>;
+    type OperandResult<S> = Result<Operand<S>, Vec<Event<S>>>;
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: Arg<Expr<MockSpan<S>>, String, MockSpan<S>>,
+        expr: Arg<String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         let mut session = MockSession::new();

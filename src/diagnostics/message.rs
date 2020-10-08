@@ -18,9 +18,6 @@ pub(crate) enum Message<S> {
         operand: S,
     },
     CannotSpecifyTarget,
-    CannotUseSymbolNameAsMacroName {
-        name: S,
-    },
     ConditionOutsideBranch,
     DestCannotBeConst,
     DestMustBeA,
@@ -52,7 +49,6 @@ pub(crate) enum Message<S> {
         src: S,
         dest: S,
     },
-    MacroNameInExpr,
     MacroRequiresName,
     MissingTarget,
     MustBeBit {
@@ -142,10 +138,6 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                 codebase.snippet(operand),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
-            CannotUseSymbolNameAsMacroName { name } => format!(
-                "cannot use symbol name `{}` as macro name",
-                codebase.snippet(name)
-            ),
             ConditionOutsideBranch => {
                 "condition codes can only be used as operands for branching instructions".into()
             }
@@ -191,7 +183,6 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                     codebase.snippet(dest),
                 )
             }
-            MacroNameInExpr => "cannot use macro name in expression".into(),
             MacroRequiresName => "macro definition must be preceded by label".into(),
             MissingTarget => "branch instruction requires target".into(),
             MustBeBit { mnemonic } => format!(

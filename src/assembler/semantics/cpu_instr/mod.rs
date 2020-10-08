@@ -4,7 +4,7 @@ use crate::assembler::keywords::*;
 use crate::assembler::session::Backend;
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::{Fragment, Width};
+use crate::object::{Fragment, SymbolId, Width};
 use crate::span::Source;
 use crate::IncDec;
 
@@ -15,7 +15,7 @@ mod ld;
 
 pub(super) fn analyze_instruction<I, D, S>(mnemonic: (&Mnemonic, S), operands: I, session: &mut D)
 where
-    I: IntoIterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
+    I: IntoIterator<Item = Result<Operand<S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -40,7 +40,7 @@ where
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
+    I: Iterator<Item = Result<Operand<S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -135,7 +135,7 @@ where
     fn analyze_alu_instruction(
         &mut self,
         operation: AluOperation,
-        first_operand: Operand<D::SymbolId, S>,
+        first_operand: Operand<S>,
     ) -> Result<(), ()> {
         let src = if operation.implicit_dest() {
             first_operand
@@ -249,7 +249,7 @@ where
         Ok(())
     }
 
-    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<D::SymbolId, S>, ()> {
+    fn next_operand_of(&mut self, out_of: usize) -> Result<Operand<S>, ()> {
         let actual = self.operands.seen();
         self.next_operand()?.ok_or_else(|| {
             self.emit_diag(
@@ -262,7 +262,7 @@ where
         })
     }
 
-    fn next_operand(&mut self) -> Result<Option<Operand<D::SymbolId, S>>, ()> {
+    fn next_operand(&mut self) -> Result<Option<Operand<S>>, ()> {
         self.operands
             .next()
             .map_or(Ok(None), |result| result.map(Some))
@@ -390,7 +390,7 @@ fn encode_inc_dec(mode: IncDec) -> u8 {
     }
 }
 
-impl<N, S: Clone> Operand<N, S> {
+impl<S: Clone> Operand<S> {
     fn expect_specific_atom<D>(
         self,
         expected: AtomKind,
@@ -416,7 +416,7 @@ impl<N, S: Clone> Operand<N, S> {
         }
     }
 
-    fn expect_const<D>(self, diagnostics: &mut D) -> Result<Expr<N, S>, ()>
+    fn expect_const<D>(self, diagnostics: &mut D) -> Result<Expr<SymbolId, S>, ()>
     where
         D: Diagnostics<S>,
     {
@@ -466,10 +466,7 @@ impl AluOperation {
 
     fn implicit_dest(self) -> bool {
         use self::AluOperation::*;
-        match self {
-            Add | Adc | Sbc => false,
-            _ => true,
-        }
+        !matches!(self, Add | Adc | Sbc)
     }
 }
 
@@ -514,7 +511,7 @@ mod tests {
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
     type Expr<S> = crate::expr::Expr<SymbolId, S>;
-    type Input = Arg<SymbolId, String, ()>;
+    type Input = Arg<String, ()>;
 
     impl From<Literal<String>> for Input {
         fn from(literal: Literal<String>) -> Input {
@@ -1947,7 +1944,7 @@ mod tests {
         AnalysisResult(session.log().to_vec())
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<SymbolId, String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, TokenSpan> {
         match operand {
             Arg::Bare(BareArg::Const(value)) => Arg::Bare(BareArg::Const(crate::expr::Expr(
                 value

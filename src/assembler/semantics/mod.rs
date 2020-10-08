@@ -5,6 +5,7 @@ use super::syntax::{LexError, Literal, SemanticToken, Sigil, Token};
 
 use crate::diagnostics::{CompactDiag, Diagnostics, Message};
 use crate::expr::{Atom, Expr, ExprOp, ParamId};
+use crate::object::SymbolId;
 use crate::span::{SpanSource, Spanned, StripSpan, WithSpan};
 
 macro_rules! set_state {
@@ -150,16 +151,16 @@ enum ParsedArg<R, S> {
     Error,
 }
 
-enum Arg<N, R, S> {
-    Bare(BareArg<N, S>),
-    Deref(BareArg<N, S>, S),
+enum Arg<R, S> {
+    Bare(BareArg<S>),
+    Deref(BareArg<S>, S),
     String(R, S),
     Error,
 }
 
 #[derive(Clone)]
-enum BareArg<N, S> {
-    Const(Expr<N, S>),
+enum BareArg<S> {
+    Const(Expr<SymbolId, S>),
     Symbol(OperandSymbol, S),
 }
 
@@ -180,32 +181,29 @@ where
     }
 }
 
-trait DefineName<R, M, S> {
-    fn define_name(&mut self, name: R, entry: ResolvedName<M, S>);
+trait DefineName<R> {
+    fn define_name(&mut self, name: R, entry: ResolvedName);
 }
 
-impl<S> DefineName<S::StringRef, S::MacroId, S::SymbolId> for S
+impl<S> DefineName<S::StringRef> for S
 where
-    S: Interner + NameTable<<S as StringSource>::StringRef> + MacroSource + SymbolSource,
+    S: Interner + NameTable<<S as StringSource>::StringRef>,
 {
-    fn define_name(&mut self, name: S::StringRef, entry: ResolvedName<S::MacroId, S::SymbolId>) {
+    fn define_name(&mut self, name: S::StringRef, entry: ResolvedName) {
         let visibility = self.name_visibility(&name);
         self.define_name_with_visibility(name, visibility, entry)
     }
 }
 
-trait ResolveName<R>: MacroSource + SymbolSource {
-    fn resolve_name(&mut self, name: &R) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>>;
+trait ResolveName<R> {
+    fn resolve_name(&mut self, name: &R) -> Option<ResolvedName>;
 }
 
 impl<S> ResolveName<S::StringRef> for S
 where
     S: Interner + NameTable<<S as StringSource>::StringRef>,
 {
-    fn resolve_name(
-        &mut self,
-        name: &S::StringRef,
-    ) -> Option<ResolvedName<Self::MacroId, Self::SymbolId>> {
+    fn resolve_name(&mut self, name: &S::StringRef) -> Option<ResolvedName> {
         let visibility = self.name_visibility(name);
         self.resolve_name_with_visibility(name, visibility)
     }
@@ -331,9 +329,7 @@ impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
         ident: S::StringRef,
         span: S::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        if let Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) =
-            self.session.resolve_name(&ident)
-        {
+        if let Some(MnemonicEntry::Builtin(mnemonic)) = self.session.mnemonic_lookup(&ident) {
             if let TokenLineRule::LineEnd(()) =
                 self.state.context.act_on_mnemonic(&mnemonic, span.clone())
             {
@@ -439,14 +435,11 @@ impl<'a, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, S>
             TokenContext::MacroDef(state) => {
                 if let Some((name, params)) = state.label {
                     let tokens = state.tokens;
-                    let id = self.parent.session.define_macro(
-                        name.1,
+                    self.parent.session.define_macro(
+                        name,
                         (params.0.into_boxed_slice(), params.1.into_boxed_slice()),
                         (tokens.0.into_boxed_slice(), tokens.1.into_boxed_slice()),
                     );
-                    self.parent
-                        .session
-                        .define_name(name.0, ResolvedName::Macro(id));
                 }
             }
         }
@@ -483,30 +476,24 @@ where
         ident: S::StringRef,
         span: S::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
-        match self.session.resolve_name(&ident) {
-            Some(ResolvedName::Keyword(Keyword::BuiltinMnemonic(mnemonic))) => {
+        match self.session.mnemonic_lookup(&ident) {
+            Some(MnemonicEntry::Builtin(mnemonic)) => {
                 if !mnemonic.binds_to_label() {
                     self.flush_label();
                 }
                 InstrRule::BuiltinInstr(set_state!(
                     self,
-                    BuiltinInstrState::new(self.state.label, mnemonic.clone().with_span(span))
+                    BuiltinInstrState::new(self.state.label, (*mnemonic).clone().with_span(span))
                 ))
             }
-            Some(ResolvedName::Macro(id)) => {
+            Some(MnemonicEntry::Macro(id)) => {
                 self.flush_label();
                 InstrRule::MacroInstr(set_state!(
                     self,
                     MacroInstrState::new(self.state, (id, span))
                 ))
             }
-            Some(ResolvedName::Symbol(_)) => {
-                let name = self.session.strip_span(&span);
-                self.session
-                    .emit_diag(Message::CannotUseSymbolNameAsMacroName { name }.at(span));
-                InstrRule::Error(self)
-            }
-            Some(ResolvedName::Keyword(Keyword::Operand(_))) | None => {
+            None => {
                 let name = self.session.strip_span(&span);
                 self.session
                     .emit_diag(Message::NotAMnemonic { name }.at(span));
@@ -536,20 +523,14 @@ impl<'a, S, T> Semantics<'a, S, T>
 where
     S: Analysis,
 {
-    fn reloc_lookup(&mut self, name: S::StringRef, span: S::Span) -> S::SymbolId {
+    fn reloc_lookup(&mut self, name: S::StringRef, span: S::Span) -> SymbolId {
         match self.session.resolve_name(&name) {
             Some(ResolvedName::Keyword(_)) => unimplemented!(),
             Some(ResolvedName::Symbol(id)) => id,
             None => {
                 let id = self.session.alloc_symbol(span);
-                self.session
-                    .define_name(name, ResolvedName::Symbol(id.clone()));
+                self.session.define_name(name, ResolvedName::Symbol(id));
                 id
-            }
-            Some(ResolvedName::Macro(_)) => {
-                self.session
-                    .emit_diag(Message::MacroNameInExpr.at(span.clone()));
-                self.session.alloc_symbol(span)
             }
         }
     }
@@ -595,12 +576,12 @@ pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>
 
 pub(super) struct MacroInstrState<S: Analysis> {
     parent: InstrLineState<S::StringRef, S::Span>,
-    name: (S::MacroId, S::Span),
+    name: (MacroId, S::Span),
     args: (Vec<Box<[SemanticToken<S::StringRef>]>>, Vec<Box<[S::Span]>>),
 }
 
 impl<S: Analysis> MacroInstrState<S> {
-    pub fn new(parent: InstrLineState<S::StringRef, S::Span>, name: (S::MacroId, S::Span)) -> Self {
+    pub fn new(parent: InstrLineState<S::StringRef, S::Span>, name: (MacroId, S::Span)) -> Self {
         Self {
             parent,
             name,
@@ -736,7 +717,7 @@ impl<'a, S: Analysis, T> Semantics<'a, S, T> {
     fn expect_const(
         &mut self,
         arg: ParsedArg<S::StringRef, S::Span>,
-    ) -> Result<Expr<S::SymbolId, S::Span>, ()> {
+    ) -> Result<Expr<SymbolId, S::Span>, ()> {
         match self.session.resolve_names(arg)? {
             Arg::Bare(BareArg::Const(value)) => Ok(value),
             Arg::Bare(BareArg::Symbol(_, span)) => {
@@ -794,12 +775,12 @@ fn analyze_mnemonic<S: Analysis>(
     }
 }
 
-trait Resolve<R, S>: SymbolSource {
-    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<Self::SymbolId, R, S>, ()>;
+trait Resolve<R, S> {
+    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<R, S>, ()>;
 }
 
-trait ClassifyExpr<I, S>: SymbolSource {
-    fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<Self::SymbolId, S>, ()>;
+trait ClassifyExpr<I, S> {
+    fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<S>, ()>;
 }
 
 impl<T, S> Resolve<T::StringRef, S> for T
@@ -810,7 +791,7 @@ where
     fn resolve_names(
         &mut self,
         arg: ParsedArg<T::StringRef, S>,
-    ) -> Result<Arg<Self::SymbolId, T::StringRef, S>, ()> {
+    ) -> Result<Arg<T::StringRef, S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
                 BareArg::Symbol(symbol, span) => Ok(Arg::Bare(BareArg::Symbol(symbol, span))),
@@ -833,36 +814,25 @@ where
     T: Interner + NameTable<<T as StringSource>::StringRef> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn classify_expr(
-        &mut self,
-        mut expr: Expr<T::StringRef, S>,
-    ) -> Result<BareArg<Self::SymbolId, S>, ()> {
+    fn classify_expr(&mut self, mut expr: Expr<T::StringRef, S>) -> Result<BareArg<S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {
-                ExprOp::Atom(Atom::Name(name)) => {
-                    match self.resolve_name(&name) {
-                        Some(ResolvedName::Keyword(Keyword::Operand(operand))) => {
-                            Ok(BareArg::Symbol(*operand, node.span))
-                        }
-                        Some(ResolvedName::Keyword(_)) => {
-                            let keyword = self.strip_span(&node.span);
-                            self.emit_diag(Message::KeywordInExpr { keyword }.at(node.span));
-                            Err(())
-                        }
-                        Some(ResolvedName::Symbol(id)) => Ok(BareArg::Const(Expr(vec![
-                            ExprOp::Atom(Atom::Name(id)).with_span(node.span),
-                        ]))),
-                        None => {
-                            let id = self.alloc_symbol(node.span.clone());
-                            self.define_name(name, ResolvedName::Symbol(id.clone()));
-                            Ok(BareArg::Const(Expr(vec![
-                                ExprOp::Atom(Atom::Name(id)).with_span(node.span)
-                            ])))
-                        }
-                        Some(ResolvedName::Macro(_)) => todo!(),
+                ExprOp::Atom(Atom::Name(name)) => match self.resolve_name(&name) {
+                    Some(ResolvedName::Keyword(operand)) => Ok(BareArg::Symbol(operand, node.span)),
+                    Some(ResolvedName::Symbol(id)) => {
+                        Ok(BareArg::Const(Expr(vec![
+                            ExprOp::Atom(Atom::Name(id)).with_span(node.span)
+                        ])))
                     }
-                }
+                    None => {
+                        let id = self.alloc_symbol(node.span.clone());
+                        self.define_name(name, ResolvedName::Symbol(id));
+                        Ok(BareArg::Const(Expr(vec![
+                            ExprOp::Atom(Atom::Name(id)).with_span(node.span)
+                        ])))
+                    }
+                },
                 ExprOp::Atom(Atom::Const(n)) => {
                     Ok(BareArg::Const(Expr(vec![
                         ExprOp::Atom(Atom::Const(n)).with_span(node.span)
@@ -896,10 +866,9 @@ where
                         }
                         None => {
                             let id = self.alloc_symbol(node.span.clone());
-                            self.define_name(name, ResolvedName::Symbol(id.clone()));
+                            self.define_name(name, ResolvedName::Symbol(id));
                             nodes.push(ExprOp::Atom(Atom::Name(id)).with_span(node.span))
                         }
-                        Some(ResolvedName::Macro(_)) => todo!(),
                     },
                     ExprOp::Atom(Atom::Const(n)) => {
                         nodes.push(ExprOp::Atom(Atom::Const(n)).with_span(node.span))
@@ -1308,18 +1277,11 @@ mod tests {
         let body_spans = vec![(); body.len()].into_boxed_slice();
         assert_eq!(
             actions,
-            [
-                Event::DefineMacro {
-                    name_span: (),
-                    params: (params, param_spans),
-                    body: (body.into_boxed_slice(), body_spans),
-                },
-                Event::DefineNameWithVisibility {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: ResolvedName::Macro(MacroId(0))
-                },
-            ]
+            [Event::DefineMacro {
+                name: (name.into(), ()),
+                params: (params, param_spans),
+                body: (body.into_boxed_slice(), body_spans),
+            }]
         )
     }
 
@@ -1398,7 +1360,7 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<Event<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedName<MacroId, SymbolId>)>,
+        I: IntoIterator<Item = (String, ResolvedName)>,
         F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Default + Debug + Merge,
     {
@@ -1464,42 +1426,6 @@ mod tests {
     }
 
     #[test]
-    fn diagnose_symbol_as_mnemonic() {
-        let name = "symbol";
-        let log = log_with_predefined_names::<_, _, MockSpan<_>>(
-            vec![(
-                name.into(),
-                ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
-            )],
-            |session| {
-                session
-                    .will_parse_line()
-                    .into_instr_line()
-                    .will_parse_instr(name.into(), name.into())
-                    .error()
-                    .unwrap()
-                    .did_parse_line("eol".into())
-                    .act_on_eos("eos".into())
-            },
-        );
-        assert_eq!(
-            log,
-            [
-                Event::DefineNameWithVisibility {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
-                },
-                Event::EmitDiag {
-                    diag: Message::CannotUseSymbolNameAsMacroName { name: name.into() }
-                        .at(name.into())
-                        .into()
-                }
-            ]
-        )
-    }
-
-    #[test]
     fn call_nullary_macro() {
         let name = "my_macro";
         let macro_id = MacroId(0);
@@ -1530,14 +1456,9 @@ mod tests {
             log,
             [
                 Event::DefineMacro {
-                    name_span: (),
+                    name: (name.into(), ()),
                     params: (Box::new([]), Box::new([])),
                     body: (Box::new([Token::Sigil(Sigil::Eos)]), Box::new([()])),
-                },
-                Event::DefineNameWithVisibility {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: ResolvedName::Macro(macro_id),
                 },
                 Event::ExpandMacro {
                     name: (macro_id, ()),
@@ -1584,14 +1505,9 @@ mod tests {
             log,
             [
                 Event::DefineMacro {
-                    name_span: (),
+                    name: (name.into(), ()),
                     params: (Box::new(["param".into()]), Box::new([()])),
                     body: (Box::new([Token::Sigil(Sigil::Eos)]), Box::new([()])),
-                },
-                Event::DefineNameWithVisibility {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: ResolvedName::Macro(macro_id),
                 },
                 Event::ExpandMacro {
                     name: (macro_id, ()),
@@ -1639,7 +1555,9 @@ mod tests {
                     .will_parse_instr("DB".into(), "db".into())
                     .into_builtin_instr()
                     .will_parse_arg();
-                actions.act_on_atom(ExprAtom::Ident("DB".into()), "keyword".into());
+                actions.act_on_atom(ExprAtom::Ident("A".into()), "keyword".into());
+                actions.act_on_atom(ExprAtom::Literal(Literal::Number(1)), "one".into());
+                actions.act_on_operator(Operator::Binary(BinOp::Plus), "plus".into());
                 actions
                     .did_parse_arg()
                     .did_parse_instr()

@@ -3,12 +3,13 @@ use super::{Analysis, AtomKind, Backend, Condition, Expr, Fragment, Operand, Wid
 use crate::assembler::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
+use crate::object::SymbolId;
 use crate::span::WithSpan;
 use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
+    I: Iterator<Item = Result<Operand<S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -70,7 +71,7 @@ where
         }
     }
 
-    fn collect_branch_operands(&mut self) -> Result<BranchOperands<D::SymbolId, S>, ()> {
+    fn collect_branch_operands(&mut self) -> Result<BranchOperands<S>, ()> {
         let first_operand = self.next_operand()?;
         Ok(
             if let Some(Operand::Atom(AtomKind::Condition(condition), range)) = first_operand {
@@ -95,18 +96,18 @@ fn encode_condition(condition: Condition) -> u8 {
     }) << 3
 }
 
-type BranchOperands<N, S> = (Option<(Condition, S)>, Option<BranchTarget<N, S>>);
+type BranchOperands<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
 
-enum BranchTarget<N, S> {
+enum BranchTarget<S> {
     DerefHl(S),
-    Expr(Expr<N, S>),
+    Expr(Expr<SymbolId, S>),
 }
 
-impl<N, S: Clone> SpanSource for BranchTarget<N, S> {
+impl<S: Clone> SpanSource for BranchTarget<S> {
     type Span = S;
 }
 
-impl<N, S: Clone> Source for BranchTarget<N, S> {
+impl<S: Clone> Source for BranchTarget<S> {
     fn span(&self) -> Self::Span {
         match self {
             BranchTarget::DerefHl(span) => span.clone(),
@@ -115,10 +116,10 @@ impl<N, S: Clone> Source for BranchTarget<N, S> {
     }
 }
 
-fn analyze_branch_target<N, D, S>(
-    target: Option<Operand<N, S>>,
+fn analyze_branch_target<D, S>(
+    target: Option<Operand<S>>,
     diagnostics: &mut D,
-) -> Result<Option<BranchTarget<N, S>>, ()>
+) -> Result<Option<BranchTarget<S>>, ()>
 where
     D: Diagnostics<S>,
     S: Clone,
@@ -137,14 +138,14 @@ where
     }
 }
 
-enum BranchVariant<N, S> {
-    PotentiallyConditional(Branch<N, S>),
+enum BranchVariant<S> {
+    PotentiallyConditional(Branch<S>),
     Unconditional(UnconditionalBranch),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Branch<N, S> {
-    Explicit(ExplicitBranch, Expr<N, S>),
+enum Branch<S> {
+    Explicit(ExplicitBranch, Expr<SymbolId, S>),
     Ret,
 }
 
@@ -153,11 +154,11 @@ enum UnconditionalBranch {
     Reti,
 }
 
-fn analyze_branch_variant<N, D, S>(
+fn analyze_branch_variant<D, S>(
     kind: (BranchKind, &S),
-    target: Option<BranchTarget<N, S>>,
+    target: Option<BranchTarget<S>>,
     diagnostics: &mut D,
-) -> Result<BranchVariant<N, S>, ()>
+) -> Result<BranchVariant<S>, ()>
 where
     D: Diagnostics<S>,
     S: Clone,

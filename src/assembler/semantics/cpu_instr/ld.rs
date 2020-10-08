@@ -6,7 +6,7 @@ use crate::span::{Source, SpanSource};
 
 impl<'a, 'b, I, D, S> Analysis<'a, 'b, I, D, S>
 where
-    I: Iterator<Item = Result<Operand<D::SymbolId, S>, ()>>,
+    I: Iterator<Item = Result<Operand<S>, ()>>,
     D: Backend<S> + Diagnostics<S>,
     S: Clone,
 {
@@ -68,8 +68,8 @@ where
 
     fn analyze_8_bit_ld(
         &mut self,
-        dest: LdDest8<D::SymbolId, S>,
-        src: impl Into<LdOperand<D::SymbolId, LdDest8<D::SymbolId, S>, S>>,
+        dest: LdDest8<S>,
+        src: impl Into<LdOperand<LdDest8<S>, S>>,
     ) -> Result<(), ()> {
         match (dest, src.into()) {
             (
@@ -112,8 +112,8 @@ where
 
     fn analyze_16_bit_ld(
         &mut self,
-        dest: LdDest16<D::SymbolId, S>,
-        src: impl Into<LdOperand<D::SymbolId, LdDest16<D::SymbolId, S>, S>>,
+        dest: LdDest16<S>,
+        src: impl Into<LdOperand<LdDest16<S>, S>>,
     ) -> Result<(), ()> {
         match (dest, src.into()) {
             (LdDest16::Reg16(Reg16::Sp, _), LdOperand::Other(LdDest16::Reg16(Reg16::Hl, _))) => {
@@ -143,11 +143,7 @@ where
         }
     }
 
-    fn analyze_special_ld(
-        &mut self,
-        other: LdSpecial<D::SymbolId, S>,
-        direction: Direction,
-    ) -> Result<(), ()> {
+    fn analyze_special_ld(&mut self, other: LdSpecial<S>, direction: Direction) -> Result<(), ()> {
         match other {
             LdSpecial::DerefPtrReg(ptr_reg, _) => self.session.emit_fragment(Fragment::Byte(
                 0x02 | encode_ptr_reg(ptr_reg) | (encode_direction(direction) >> 1),
@@ -164,8 +160,8 @@ where
     }
 }
 
-impl<N, S: Clone> Operand<N, S> {
-    fn into_ld_dest<D>(self, diagnostics: &mut D) -> Result<LdDest<N, S>, ()>
+impl<S: Clone> Operand<S> {
+    fn into_ld_dest<D>(self, diagnostics: &mut D) -> Result<LdDest<S>, ()>
     where
         D: Diagnostics<S>,
     {
@@ -191,7 +187,7 @@ impl<N, S: Clone> Operand<N, S> {
         })
     }
 
-    fn into_ld_src<D>(self, diagnostics: &mut D) -> Result<LdOperand<N, LdDest<N, S>, S>, ()>
+    fn into_ld_src<D>(self, diagnostics: &mut D) -> Result<LdOperand<LdDest<S>, S>, ()>
     where
         D: Diagnostics<S>,
     {
@@ -202,62 +198,62 @@ impl<N, S: Clone> Operand<N, S> {
     }
 }
 
-enum LdOperand<N, T, S> {
-    Const(Expr<N, S>),
+enum LdOperand<T, S> {
+    Const(Expr<SymbolId, S>),
     Other(T),
 }
 
-impl<N, S> From<LdDest8<N, S>> for LdOperand<N, LdDest8<N, S>, S> {
-    fn from(dest: LdDest8<N, S>) -> Self {
+impl<S> From<LdDest8<S>> for LdOperand<LdDest8<S>, S> {
+    fn from(dest: LdDest8<S>) -> Self {
         LdOperand::Other(dest)
     }
 }
 
-impl<N, S> From<LdDest16<N, S>> for LdOperand<N, LdDest16<N, S>, S> {
-    fn from(dest: LdDest16<N, S>) -> Self {
+impl<S> From<LdDest16<S>> for LdOperand<LdDest16<S>, S> {
+    fn from(dest: LdDest16<S>) -> Self {
         LdOperand::Other(dest)
     }
 }
 
-enum LdDest<N, S> {
-    Byte(LdDest8<N, S>),
-    Word(LdDest16<N, S>),
-    DerefExpr(Expr<N, S>),
+enum LdDest<S> {
+    Byte(LdDest8<S>),
+    Word(LdDest16<S>),
+    DerefExpr(Expr<SymbolId, S>),
 }
 
-enum LdDest8<N, S> {
+enum LdDest8<S> {
     Simple(M, S),
-    Special(LdSpecial<N, S>),
+    Special(LdSpecial<S>),
 }
 
-enum LdSpecial<N, S> {
-    Deref(Expr<N, S>),
+enum LdSpecial<S> {
+    Deref(Expr<SymbolId, S>),
     DerefC(S),
     DerefPtrReg(PtrReg, S),
 }
 
-enum LdDest16<N, S> {
+enum LdDest16<S> {
     Reg16(Reg16, S),
-    DerefNn(Expr<N, S>),
+    DerefNn(Expr<SymbolId, S>),
 }
 
 trait DataWidth {
     fn width(&self) -> Width;
 }
 
-impl<N, S> DataWidth for LdDest8<N, S> {
+impl<S> DataWidth for LdDest8<S> {
     fn width(&self) -> Width {
         Width::Byte
     }
 }
 
-impl<N, S> DataWidth for LdDest16<N, S> {
+impl<S> DataWidth for LdDest16<S> {
     fn width(&self) -> Width {
         Width::Word
     }
 }
 
-impl<N, S: Clone> LdOperand<N, LdDest8<N, S>, S> {
+impl<S: Clone> LdOperand<LdDest8<S>, S> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
         D: Diagnostics<S>,
@@ -269,7 +265,7 @@ impl<N, S: Clone> LdOperand<N, LdDest8<N, S>, S> {
     }
 }
 
-impl<N, S: Clone> LdDest8<N, S> {
+impl<S: Clone> LdDest8<S> {
     fn expect_a<D>(self, diagnostics: &mut D) -> Result<(), ()>
     where
         D: Diagnostics<S>,
@@ -286,11 +282,11 @@ fn diagnose_not_a<T, D: EmitDiag<S, T>, S>(span: S, diagnostics: &mut D) -> Resu
     Err(())
 }
 
-impl<N, T: Source<Span = S>, S: Clone> SpanSource for LdOperand<N, T, S> {
+impl<T: Source<Span = S>, S: Clone> SpanSource for LdOperand<T, S> {
     type Span = S;
 }
 
-impl<N, T: Source<Span = S>, S: Clone> Source for LdOperand<N, T, S> {
+impl<T: Source<Span = S>, S: Clone> Source for LdOperand<T, S> {
     fn span(&self) -> Self::Span {
         match self {
             LdOperand::Const(expr) => expr.span(),
@@ -299,11 +295,11 @@ impl<N, T: Source<Span = S>, S: Clone> Source for LdOperand<N, T, S> {
     }
 }
 
-impl<N, S: Clone> SpanSource for LdDest8<N, S> {
+impl<S: Clone> SpanSource for LdDest8<S> {
     type Span = S;
 }
 
-impl<N, S: Clone> Source for LdDest8<N, S> {
+impl<S: Clone> Source for LdDest8<S> {
     fn span(&self) -> Self::Span {
         use self::LdDest8::*;
         match self {
@@ -313,11 +309,11 @@ impl<N, S: Clone> Source for LdDest8<N, S> {
     }
 }
 
-impl<N, S: Clone> SpanSource for LdSpecial<N, S> {
+impl<S: Clone> SpanSource for LdSpecial<S> {
     type Span = S;
 }
 
-impl<N, S: Clone> Source for LdSpecial<N, S> {
+impl<S: Clone> Source for LdSpecial<S> {
     fn span(&self) -> Self::Span {
         use self::LdSpecial::*;
         match self {
@@ -327,11 +323,11 @@ impl<N, S: Clone> Source for LdSpecial<N, S> {
     }
 }
 
-impl<N, S: Clone> SpanSource for LdDest16<N, S> {
+impl<S: Clone> SpanSource for LdDest16<S> {
     type Span = S;
 }
 
-impl<N, S: Clone> Source for LdDest16<N, S> {
+impl<S: Clone> Source for LdDest16<S> {
     fn span(&self) -> Self::Span {
         match self {
             LdDest16::Reg16(_, span) => span.clone(),

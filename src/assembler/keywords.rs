@@ -104,10 +104,10 @@ pub enum Directive {
 impl BuiltinMnemonic {
     pub fn binds_to_label(&self) -> bool {
         match self {
-            BuiltinMnemonic::Directive(directive) => match directive {
-                Directive::Equ | Directive::Macro | Directive::Section => true,
-                _ => false,
-            },
+            BuiltinMnemonic::Directive(directive) => matches!(
+                directive,
+                Directive::Equ | Directive::Macro | Directive::Section
+            ),
             _ => false,
         }
     }
