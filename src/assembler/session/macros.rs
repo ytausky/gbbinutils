@@ -33,14 +33,12 @@ impl<D, R> MacroSource for VecMacroTable<D, R> {
     type MacroId = MacroId;
 }
 
-impl<'a, C, R: SpanSystem<BufId>, I: StringSource, D, L> MacroSource
-    for CompositeSession<C, R, I, D, L>
-{
+impl<'a, C, R: SpanSystem<BufId>, I: StringSource, D> MacroSource for CompositeSession<C, R, I, D> {
     type MacroId = MacroId;
 }
 
-impl<'a, C, R, I, D, L> MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
-    for CompositeSession<C, R, I, D, L>
+impl<'a, C, R, I, D> MacroTable<I::StringRef, Literal<I::StringRef>, <Self as SpanSource>::Span>
+    for CompositeSession<C, R, I, D>
 where
     Self: Lex<R, I, Span = R::Span, StringRef = I::StringRef>,
     C: Codebase,
@@ -52,7 +50,6 @@ where
     Self: StartScope + NameTable<I::StringRef>,
     Self: Backend<R::Span>,
     Self: MacroSource<MacroId = MacroId>,
-    Self: Log<<Self as SymbolSource>::SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
@@ -66,7 +63,8 @@ where
             Box<[R::Span]>,
         ),
     ) -> Self::MacroId {
-        self.log(|| Event::DefineMacro {
+        #[cfg(test)]
+        self.log_event(Event::DefineMacro {
             name_span: name_span.clone(),
             params: (params.clone(), param_spans.clone()),
             body: (body.clone(), body_spans.clone()),
@@ -91,7 +89,8 @@ where
         (MacroId(id), name_span): (Self::MacroId, R::Span),
         (args, arg_spans): MacroArgs<Token<I::StringRef, Literal<I::StringRef>>, R::Span>,
     ) {
-        self.log(|| Event::ExpandMacro {
+        #[cfg(test)]
+        self.log_event(Event::ExpandMacro {
             name: (MacroId(id), name_span.clone()),
             args: (args.clone(), arg_spans.clone()),
         });

@@ -66,15 +66,8 @@ impl<M, S: Clone, R> SymbolSource for BiLevelNameTable<M, S, R> {
     type SymbolId = S;
 }
 
-impl<C, R: SpanSystem<BufId>, I, D, L> NameTable<I::StringRef> for CompositeSession<C, R, I, D, L>
+impl<C, R: SpanSystem<BufId>, I, D> NameTable<I::StringRef> for CompositeSession<C, R, I, D>
 where
-    Self: Log<
-        <Self as SymbolSource>::SymbolId,
-        <Self as MacroSource>::MacroId,
-        I::StringRef,
-        R::Span,
-        R::Stripped,
-    >,
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
     I: Interner,
 {
@@ -108,7 +101,8 @@ where
         visibility: Visibility,
         entry: ResolvedName<Self::MacroId, Self::SymbolId>,
     ) {
-        self.log(|| Event::DefineNameWithVisibility {
+        #[cfg(test)]
+        self.log_event(Event::DefineNameWithVisibility {
             ident: ident.clone(),
             visibility,
             entry: entry.clone(),
@@ -119,20 +113,15 @@ where
     }
 }
 
-impl<C, R, I, D, L> StartScope for CompositeSession<C, R, I, D, L>
+impl<C, R, I, D> StartScope for CompositeSession<C, R, I, D>
 where
-    Self: Log<
-        <Self as SymbolSource>::SymbolId,
-        <Self as MacroSource>::MacroId,
-        I::StringRef,
-        R::Span,
-        R::Stripped,
-    >,
     R: SpanSystem<BufId>,
     I: Interner,
 {
     fn start_scope(&mut self) {
-        self.log(|| Event::StartScope);
+        #[cfg(test)]
+        self.log_event(Event::StartScope);
+
         self.names.local = HashMap::new();
     }
 }

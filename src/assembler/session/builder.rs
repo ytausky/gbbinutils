@@ -51,23 +51,23 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<C, R, I, D, L> Backend<R::Span> for CompositeSession<C, R, I, D, L>
+impl<C, R, I, D> Backend<R::Span> for CompositeSession<C, R, I, D>
 where
     R: SpanSystem<BufId>,
     I: StringSource,
     Self: MacroSource + Diagnostics<R::Span>,
-    Self: Log<Self::SymbolId, <Self as MacroSource>::MacroId, I::StringRef, R::Span, R::Stripped>,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
     fn define_symbol(
         &mut self,
         name: Self::SymbolId,
-        span: R::Span,
+        _span: R::Span,
         expr: Expr<Self::SymbolId, R::Span>,
     ) {
-        self.log(|| Event::DefineSymbol {
+        #[cfg(test)]
+        self.log_event(Event::DefineSymbol {
             name,
-            span,
+            span: _span,
             expr: expr.clone(),
         });
 
@@ -80,9 +80,11 @@ where
     }
 
     fn emit_fragment(&mut self, fragment: Fragment<Expr<Self::SymbolId, R::Span>>) {
-        self.log(|| Event::EmitFragment {
+        #[cfg(test)]
+        self.log_event(Event::EmitFragment {
             fragment: fragment.clone(),
         });
+
         self.builder.push(fragment)
     }
 
@@ -104,7 +106,9 @@ where
     }
 
     fn set_origin(&mut self, addr: Expr<Self::SymbolId, R::Span>) {
-        self.log(|| Event::SetOrigin { addr: addr.clone() });
+        #[cfg(test)]
+        self.log_event(Event::SetOrigin { addr: addr.clone() });
+
         match self.builder.state.take().unwrap() {
             BuilderState::SectionPrelude(index) => {
                 self.builder.object.content.sections[index].constraints.addr = Some(addr);
@@ -114,8 +118,9 @@ where
         }
     }
 
-    fn start_section(&mut self, name: SymbolId, span: R::Span) {
-        self.log(|| Event::StartSection { name, span });
+    fn start_section(&mut self, name: SymbolId, _span: R::Span) {
+        #[cfg(test)]
+        self.log_event(Event::StartSection { name, span: _span });
 
         let index = self.builder.object.content.sections.len();
         self.builder.state = Some(BuilderState::SectionPrelude(index));
@@ -123,7 +128,7 @@ where
     }
 }
 
-impl<C, R, I, D, L> AllocSymbol<R::Span> for CompositeSession<C, R, I, D, L>
+impl<C, R, I, D> AllocSymbol<R::Span> for CompositeSession<C, R, I, D>
 where
     R: SpanSystem<BufId>,
     I: StringSource,

@@ -9,8 +9,8 @@ use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{SpanSource, SpanSystem};
 
-impl<C, R, I, D, L> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
-    for CompositeSession<C, R, I, D, L>
+impl<C, R, I, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
+    for CompositeSession<C, R, I, D>
 where
     C: Codebase,
     Self: Lex<R, I, Span = R::Span>,
@@ -26,13 +26,6 @@ where
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<<Self as StringSource>::StringRef>,
     Self: Backend<R::Span>,
-    Self: Log<
-        <Self as SymbolSource>::SymbolId,
-        <Self as MacroSource>::MacroId,
-        I::StringRef,
-        R::Span,
-        R::Stripped,
-    >,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
@@ -42,7 +35,8 @@ where
         path: <Self as StringSource>::StringRef,
         from: Option<R::Span>,
     ) -> Result<(), CodebaseError> {
-        self.log(|| Event::AnalyzeFile {
+        #[cfg(test)]
+        self.log_event(Event::AnalyzeFile {
             path: path.clone(),
             from: from.clone(),
         });
