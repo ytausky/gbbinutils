@@ -129,7 +129,7 @@ mod tests {
     fn retrieve_global_name() {
         let name = "start";
         let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
-        let mut session = MockSession::<()>::new();
+        let mut session = MockSession::<()>::default();
         session.define_name_with_visibility(name.into(), Visibility::Global, entry.clone());
         assert_eq!(
             session.resolve_name_with_visibility(&name.into(), Visibility::Global),
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn retrieve_local_name() {
         let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
-        let mut session = MockSession::<()>::new();
+        let mut session = MockSession::<()>::default();
         session.start_scope();
         session.define_name_with_visibility("_local".into(), Visibility::Local, entry.clone());
         assert_eq!(
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut session = MockSession::<()>::new();
+        let mut session = MockSession::<()>::default();
         session.start_scope();
         session.define_name_with_visibility(
             "_local".into(),

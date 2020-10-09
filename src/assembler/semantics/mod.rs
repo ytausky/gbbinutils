@@ -980,7 +980,7 @@ mod tests {
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
-        let session = MockSession::<()>::new();
+        let session = MockSession::<()>::default();
         assert_eq!(
             session.name_visibility(&"_loop".to_owned()),
             Visibility::Local
@@ -989,7 +989,7 @@ mod tests {
 
     #[test]
     fn ident_without_underscore_prefix_is_global() {
-        let session = MockSession::<()>::new();
+        let session = MockSession::<()>::default();
         assert_eq!(
             session.name_visibility(&"start".to_owned()),
             Visibility::Global
@@ -1364,7 +1364,7 @@ mod tests {
         F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Default + Debug + Merge,
     {
-        let mut session = MockSession::new();
+        let mut session = MockSession::default();
         for (ident, resolution) in entries {
             session.define_name(ident, resolution)
         }

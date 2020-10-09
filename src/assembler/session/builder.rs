@@ -213,7 +213,7 @@ mod tests {
     }
 
     fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(f: F) -> Object<S> {
-        let mut session = MockSession::new();
+        let mut session = MockSession::default();
         f(&mut session);
         session.builder.object
     }

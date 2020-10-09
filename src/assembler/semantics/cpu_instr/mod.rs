@@ -1929,7 +1929,7 @@ mod tests {
         use super::operand::analyze_operand;
         use crate::assembler::session::mock::MockSession;
 
-        let mut session = MockSession::new();
+        let mut session = MockSession::default();
         let operands: Vec<_> = operands
             .into_iter()
             .enumerate()

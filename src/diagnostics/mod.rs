@@ -582,7 +582,7 @@ mod tests {
         );
         assert_eq!(
             diagnostic
-                .expand(&mut RcContextFactory::new())
+                .expand(&mut RcContextFactory::default())
                 .render(&codebase),
             Diagnostic {
                 clauses: vec![Clause {
@@ -656,7 +656,7 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(compact.expand(&mut RcContextFactory::new()), expected)
+        assert_eq!(compact.expand(&mut RcContextFactory::default()), expected)
     }
 
     #[test]

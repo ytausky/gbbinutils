@@ -232,7 +232,7 @@ pub mod tests {
         expr: Arg<String, MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
-        let mut session = MockSession::new();
+        let mut session = MockSession::default();
         let result = super::analyze_operand(expr, context, &mut session);
         result.map_err(|_| session.log().to_vec())
     }

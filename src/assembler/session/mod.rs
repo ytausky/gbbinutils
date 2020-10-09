@@ -102,48 +102,43 @@ pub(super) type Session<'a> = CompositeSession<
     OutputForwarder<'a>,
 >;
 
-impl<'a> Session<'a> {
-    pub fn new(
-        codebase: FileCodebase<'a, dyn FileSystem>,
-        diagnostics: OutputForwarder<'a>,
-    ) -> Self {
-        let mut session = Self {
-            codebase,
-            registry: RcContextFactory::new(),
-            interner: HashInterner::new(),
-            tokens: Vec::new(),
-            macros: VecMacroTable::new(),
-            mnemonics: HashMap::default(),
-            names: BiLevelNameTable::new(),
-            builder: ObjectBuilder::new(),
-            diagnostics,
-            #[cfg(test)]
-            log: Vec::new(),
-        };
-        for (string, name) in crate::eval::BUILTIN_SYMBOLS {
-            let string = session.interner.intern(string);
-            session.define_name_with_visibility(
-                string,
-                Visibility::Global,
-                ResolvedName::Symbol(*name),
-            )
-        }
+impl<C, R, I, D> CompositeSession<C, R, I, D>
+where
+    R: Default + SpanSystem<BufId>,
+    I: Default + Interner,
+{
+    pub fn new(codebase: C, diagnostics: D) -> Self {
+        let mut interner = I::default();
+        let mut mnemonics = HashMap::new();
+        let mut names = BiLevelNameTable::new();
         for (ident, keyword) in KEYWORDS {
-            let string = session.interner.intern(ident);
+            let string = interner.intern(ident);
             match keyword {
                 Keyword::BuiltinMnemonic(mnemonic) => {
-                    session
-                        .mnemonics
-                        .insert(string, MnemonicEntry::Builtin(mnemonic));
+                    mnemonics.insert(string, MnemonicEntry::Builtin(mnemonic));
                 }
-                Keyword::Operand(keyword) => session.define_name_with_visibility(
-                    string,
-                    Visibility::Global,
-                    ResolvedName::Keyword(*keyword),
-                ),
+                Keyword::Operand(keyword) => {
+                    names.global.insert(string, ResolvedName::Keyword(*keyword));
+                }
             }
         }
-        session
+        for (ident, name) in crate::eval::BUILTIN_SYMBOLS {
+            let string = interner.intern(ident);
+            names.global.insert(string, ResolvedName::Symbol(*name));
+        }
+        Self {
+            builder: ObjectBuilder::new(),
+            codebase,
+            diagnostics,
+            interner,
+            #[cfg(test)]
+            log: Vec::new(),
+            macros: Vec::new(),
+            mnemonics,
+            names,
+            registry: R::default(),
+            tokens: Vec::new(),
+        }
     }
 }
 
@@ -290,6 +285,7 @@ pub(crate) trait Interner: StringSource {
     fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str;
 }
 
+#[derive(Default)]
 pub struct MockInterner;
 
 impl StringSource for MockInterner {
@@ -306,6 +302,7 @@ impl Interner for MockInterner {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct HashInterner {
     map: HashMap<String, StringId>,
     strings: Vec<String>,
@@ -313,15 +310,6 @@ pub(crate) struct HashInterner {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct StringId(usize);
-
-impl HashInterner {
-    fn new() -> Self {
-        HashInterner {
-            map: HashMap::new(),
-            strings: Vec::new(),
-        }
-    }
-}
 
 impl StringSource for HashInterner {
     type StringRef = StringId;
@@ -412,36 +400,13 @@ pub mod mock {
     pub(in crate::assembler) type MockSession<S> =
         CompositeSession<FakeCodebase, FakeSpanSystem<BufId, S>, MockInterner, IgnoreDiagnostics>;
 
-    impl<S: Clone + Default + Merge> MockSession<S> {
-        pub fn new() -> Self {
-            let mut names = BiLevelNameTable::new();
-            let mut mnemonics = HashMap::new();
-            for (ident, keyword) in KEYWORDS {
-                match keyword {
-                    Keyword::BuiltinMnemonic(mnemonic) => {
-                        mnemonics.insert((*ident).into(), MnemonicEntry::Builtin(mnemonic));
-                    }
-                    Keyword::Operand(keyword) => {
-                        names
-                            .global
-                            .insert((*ident).into(), ResolvedName::Keyword(*keyword));
-                    }
-                }
-            }
-            CompositeSession {
-                codebase: FakeCodebase::default(),
-                registry: FakeSpanSystem::default(),
-                interner: MockInterner,
-                tokens: Vec::new(),
-                macros: Vec::new(),
-                mnemonics,
-                names,
-                builder: ObjectBuilder::new(),
-                diagnostics: IgnoreDiagnostics,
-                log: Vec::new(),
-            }
+    impl<S: Clone + Default + Merge> Default for MockSession<S> {
+        fn default() -> Self {
+            Self::new(FakeCodebase::default(), IgnoreDiagnostics)
         }
+    }
 
+    impl<S: Clone + Default + Merge> MockSession<S> {
         pub fn fail(&mut self, error: CodebaseError) {
             self.codebase.fail(error)
         }

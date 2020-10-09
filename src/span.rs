@@ -145,9 +145,9 @@ fn merge_macro_expansion_ranges(
 
 pub(crate) struct RcContextFactory<F>(PhantomData<F>);
 
-impl<F> RcContextFactory<F> {
-    pub fn new() -> Self {
-        RcContextFactory(PhantomData)
+impl<F> Default for RcContextFactory<F> {
+    fn default() -> Self {
+        Self(PhantomData)
     }
 }
 
@@ -357,7 +357,7 @@ mod tests {
         }));
         let left = Span::<_, RcMacroExpansion<_>>::File(file.clone(), 0..4);
         let right = Span::<_, RcMacroExpansion<_>>::File(file.clone(), 5..10);
-        let combined = RcContextFactory::new().merge_spans(&left, &right);
+        let combined = RcContextFactory::default().merge_spans(&left, &right);
         assert_eq!(combined, Span::File(file, 0..10))
     }
 
@@ -386,7 +386,7 @@ mod tests {
         let inclusion = Rc::new(FileInclusionMetadata { file, from: None });
         let span = Span::<_, RcMacroExpansion<_>>::File(RcFileInclusion(inclusion), range.clone());
         assert_eq!(
-            RcContextFactory::new().strip_span(&span),
+            RcContextFactory::default().strip_span(&span),
             StrippedBufSpan {
                 buf_id: file,
                 range
@@ -416,7 +416,7 @@ mod tests {
             buf_id,
             range: macro_body_range(macro_base),
         };
-        assert_eq!(RcContextFactory::new().strip_span(&span), stripped)
+        assert_eq!(RcContextFactory::default().strip_span(&span), stripped)
     }
 
     fn mk_macro_def<F>(
