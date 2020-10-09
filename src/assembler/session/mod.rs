@@ -95,14 +95,6 @@ pub trait StringSource {
     type StringRef: Clone + Debug + Eq + Hash;
 }
 
-pub trait SymbolSource {
-    type SymbolId: Clone;
-}
-
-pub(crate) trait MacroSource {
-    type MacroId: Clone;
-}
-
 pub(super) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
     RcContextFactory<BufId>,
@@ -224,10 +216,6 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> StringSource for CompositeSess
     type StringRef = I::StringRef;
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> SymbolSource for CompositeSession<C, R, I, D> {
-    type SymbolId = SymbolId;
-}
-
 impl<C, R: SpanSystem<BufId>, I: StringSource, D> NextToken for CompositeSession<C, R, I, D> {
     fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>> {
         let token = self
@@ -246,7 +234,6 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> NextToken for CompositeSession
 impl<C, R: SpanSystem<BufId>, I: StringSource, D> EmitDiag<R::Span, R::Stripped>
     for CompositeSession<C, R, I, D>
 where
-    Self: SymbolSource + MacroSource,
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
 {

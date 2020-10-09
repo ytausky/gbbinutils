@@ -55,7 +55,7 @@ impl<C, R, I, D> Backend<R::Span> for CompositeSession<C, R, I, D>
 where
     R: SpanSystem<BufId>,
     I: StringSource,
-    Self: MacroSource + Diagnostics<R::Span>,
+    Self: Diagnostics<R::Span>,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
     fn define_symbol(&mut self, name: SymbolId, _span: R::Span, expr: Expr<SymbolId, R::Span>) {
@@ -131,10 +131,6 @@ where
     fn alloc_symbol(&mut self, span: R::Span) -> SymbolId {
         self.builder.alloc_symbol(span)
     }
-}
-
-impl<S: Clone> SymbolSource for ObjectBuilder<S> {
-    type SymbolId = SymbolId;
 }
 
 impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {

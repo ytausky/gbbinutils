@@ -27,16 +27,7 @@ pub(crate) type VecMacroTable<D, R> = Vec<Rc<MacroDef<D, R>>>;
 
 pub type MacroArgs<T, S> = (Box<[Box<[T]>]>, Box<[Box<[S]>]>);
 
-impl<D, R> MacroSource for VecMacroTable<D, R> {
-    type MacroId = MacroId;
-}
-
-impl<'a, C, R: SpanSystem<BufId>, I: StringSource, D> MacroSource for CompositeSession<C, R, I, D> {
-    type MacroId = MacroId;
-}
-
-impl<C, R, I, D> MacroTable<I::StringRef, <Self as SpanSource>::Span>
-    for CompositeSession<C, R, I, D>
+impl<C, R, I, D> MacroTable<I::StringRef, R::Span> for CompositeSession<C, R, I, D>
 where
     Self: Lex<R, I, Span = R::Span, StringRef = I::StringRef>,
     C: Codebase,
@@ -47,7 +38,6 @@ where
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<I::StringRef>,
     Self: Backend<R::Span>,
-    Self: MacroSource<MacroId = MacroId>,
     <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
     <Self as Lex<R, I>>::TokenIter: 'static,
