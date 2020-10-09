@@ -4,9 +4,9 @@ use crate::diagnostics::{Diagnostics, DiagnosticsContext};
 use crate::expr::Expr;
 use crate::object::*;
 
-pub(crate) struct ObjectBuilder<S> {
-    pub object: Object<S>,
-    state: Option<BuilderState<S>>,
+pub(crate) struct ObjectBuilder<M: SpanSource> {
+    pub object: Object<M>,
+    state: Option<BuilderState<M::Span>>,
 }
 
 enum BuilderState<S> {
@@ -15,19 +15,21 @@ enum BuilderState<S> {
     SectionPrelude(usize),
 }
 
-impl<S> ObjectBuilder<S> {
+impl<M: Default + SpanSource> ObjectBuilder<M> {
     pub fn new() -> Self {
         ObjectBuilder {
             object: Object::new(),
             state: Some(BuilderState::AnonSectionPrelude { addr: None }),
         }
     }
+}
 
-    fn push(&mut self, fragment: Fragment<Expr<SymbolId, S>>) {
+impl<M: SpanSource> ObjectBuilder<M> {
+    fn push(&mut self, fragment: Fragment<Expr<SymbolId, M::Span>>) {
         self.current_section().fragments.push(fragment)
     }
 
-    fn current_section(&mut self) -> &mut Section<S> {
+    fn current_section(&mut self) -> &mut Section<M::Span> {
         match self.state.take().unwrap() {
             BuilderState::AnonSectionPrelude { addr } => {
                 self.add_section(None);
@@ -91,7 +93,7 @@ where
         };
         let mut diagnostics = DiagnosticsContext {
             codebase: &mut self.codebase,
-            registry: &mut self.registry,
+            registry: &mut self.builder.object.metadata,
             diagnostics: &mut self.diagnostics,
         };
         value
@@ -128,14 +130,8 @@ where
     R: SpanSystem<BufId>,
     I: StringSource,
 {
-    fn alloc_symbol(&mut self, span: R::Span) -> SymbolId {
-        self.builder.alloc_symbol(span)
-    }
-}
-
-impl<S: Clone> AllocSymbol<S> for ObjectBuilder<S> {
-    fn alloc_symbol(&mut self, _span: S) -> SymbolId {
-        self.object.content.symbols.alloc().into()
+    fn alloc_symbol(&mut self, _: R::Span) -> SymbolId {
+        self.builder.object.content.symbols.alloc().into()
     }
 }
 
@@ -148,6 +144,7 @@ mod tests {
     use crate::expr::{Atom, BinOp, ExprOp};
     use crate::link::Program;
     use crate::object::SectionId;
+    use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
 
     use std::borrow::Borrow;
@@ -212,7 +209,9 @@ mod tests {
         assert_eq!(object.content.sections[0].fragments, [Fragment::Byte(0x00)])
     }
 
-    fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(f: F) -> Object<S> {
+    fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(
+        f: F,
+    ) -> Object<FakeSpanSystem<BufId, S>> {
         let mut session = MockSession::default();
         f(&mut session);
         session.builder.object
@@ -360,18 +359,13 @@ mod tests {
 
     fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
     where
-        S: Clone + Default + Merge + 'static,
+        S: Clone + Debug + Default + Merge + 'static,
         F: FnOnce(&mut MockSession<S>),
     {
-        let registry = &mut TestDiagnosticsListener::new();
-        let mut diagnostics = TestDiagnosticsListener::new();
-        let mut view = DiagnosticsContext {
-            codebase: &mut (),
-            registry,
-            diagnostics: &mut diagnostics,
-        };
-        let object = Program::link(build_object(f), &mut view);
-        let diagnostics = diagnostics.diagnostics.into_inner().into_boxed_slice();
+        let diagnostics = TestDiagnosticsListener::new();
+        let log = diagnostics.diagnostics.clone();
+        let object = Program::link(build_object(f), (), diagnostics);
+        let diagnostics = log.into_inner().into_boxed_slice();
         (object, diagnostics)
     }
 

@@ -1,6 +1,7 @@
-use crate::diagnostics::{BackendDiagnostics, IgnoreDiagnostics};
+use crate::diagnostics::{Diagnostics, DiagnosticsContext, IgnoreDiagnostics};
 use crate::object::num::Num;
 use crate::object::*;
+use crate::span::SpanSource;
 
 use std::borrow::Borrow;
 
@@ -11,21 +12,30 @@ pub struct Program {
 }
 
 impl Program {
-    pub(crate) fn link<S: Clone>(
-        mut object: Object<S>,
-        diagnostics: &mut impl BackendDiagnostics<S>,
-    ) -> Self {
+    pub(crate) fn link<C, D, M: SpanSource>(
+        mut object: Object<M>,
+        mut codebase: C,
+        mut diagnostics: D,
+    ) -> Self
+    where
+        for<'a> DiagnosticsContext<'a, C, M, D>: Diagnostics<M::Span>,
+    {
         object.vars.resolve(&object.content);
         let mut context = LinkageContext {
             content: &object.content,
             vars: &object.vars,
             location: 0.into(),
         };
+        let mut diagnostics = DiagnosticsContext {
+            codebase: &mut codebase,
+            registry: &mut object.metadata,
+            diagnostics: &mut diagnostics,
+        };
         Self {
             sections: object
                 .content
                 .sections()
-                .flat_map(|section| section.translate(&mut context, diagnostics))
+                .flat_map(|section| section.translate(&mut context, &mut diagnostics))
                 .collect(),
         }
     }
@@ -146,9 +156,11 @@ impl Width {
 mod tests {
     use super::*;
 
+    use crate::codebase::BufId;
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::Expr;
     use crate::expr::*;
+    use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
 
     #[test]
@@ -234,9 +246,10 @@ mod tests {
                 },
                 Var { value: 1.into() },
             ]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        let binary = Program::link(object, &mut IgnoreDiagnostics);
+        let binary = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(
             binary.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
@@ -269,6 +282,7 @@ mod tests {
                 Var { value: 0.into() },
                 Var { value: addr.into() },
             ]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
         object.vars.resolve(&object.content);
@@ -295,6 +309,7 @@ mod tests {
                     },
                     Var { value: 0.into() },
                 ]),
+                metadata: FakeSpanSystem::default(),
             },
         )
     }
@@ -319,6 +334,7 @@ mod tests {
                     },
                     Var { value: 1.into() },
                 ]),
+                metadata: FakeSpanSystem::default(),
             },
         );
     }
@@ -354,6 +370,7 @@ mod tests {
                         value: Num::Unknown,
                     },
                 ]),
+                metadata: FakeSpanSystem::default(),
             },
         );
     }
@@ -392,6 +409,7 @@ mod tests {
                         value: Num::Range { min: 2, max: 3 },
                     },
                 ]),
+                metadata: FakeSpanSystem::default(),
             },
         )
     }
@@ -422,9 +440,10 @@ mod tests {
                 },
                 Var { value: 2.into() },
             ]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        let binary = Program::link(object, &mut IgnoreDiagnostics);
+        let binary = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(binary.sections[0].data, [0x37, 0x13])
     }
 
@@ -468,13 +487,17 @@ mod tests {
                     value: (addr + bytes).into(),
                 },
             ]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
         object.vars.resolve(&object.content);
         assert_eq!(object.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, mut object: Object<()>) {
+    fn assert_section_size(
+        expected: impl Into<Num>,
+        mut object: Object<FakeSpanSystem<BufId, ()>>,
+    ) {
         object.vars.resolve(&object.content);
         assert_eq!(
             object.vars[object.content.sections().next().unwrap().size].value,

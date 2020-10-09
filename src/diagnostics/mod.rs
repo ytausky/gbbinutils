@@ -7,10 +7,10 @@
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 
 use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
+#[cfg(test)]
+use crate::log::Log;
 use crate::span::*;
 
-#[cfg(test)]
-use std::cell::RefCell;
 use std::fmt;
 use std::ops::{Add, AddAssign, Range};
 
@@ -266,14 +266,14 @@ impl<S: Clone> EmitDiag<S, S> for IgnoreDiagnostics {
 
 #[cfg(test)]
 pub(crate) struct TestDiagnosticsListener<S> {
-    pub diagnostics: RefCell<Vec<CompactDiag<S>>>,
+    pub diagnostics: Log<CompactDiag<S>>,
 }
 
 #[cfg(test)]
 impl<S> TestDiagnosticsListener<S> {
     pub fn new() -> TestDiagnosticsListener<S> {
         TestDiagnosticsListener {
-            diagnostics: RefCell::new(Vec::new()),
+            diagnostics: Log::default(),
         }
     }
 }
@@ -302,7 +302,7 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 #[cfg(test)]
 impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsContext<'a, C, R, TestDiagnosticsListener<S>> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
-        self.diagnostics.diagnostics.borrow_mut().push(diag.into())
+        self.diagnostics.diagnostics.push(diag.into())
     }
 }
 

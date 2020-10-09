@@ -62,11 +62,15 @@ where
         });
 
         let id = MacroId(self.macros.len());
-        let metadata = self.registry.add_macro_def(MacroDefMetadata {
-            name_span,
-            param_spans,
-            body_spans,
-        });
+        let metadata = self
+            .builder
+            .object
+            .metadata
+            .add_macro_def(MacroDefMetadata {
+                name_span,
+                param_spans,
+                body_spans,
+            });
         self.macros.push(Rc::new(MacroDef {
             metadata,
             params,
@@ -87,11 +91,15 @@ where
         });
 
         let def = &self.macros[id];
-        let metadata = self.registry.add_macro_expansion(MacroExpansionMetadata {
-            def: def.metadata.clone(),
-            name_span,
-            arg_spans,
-        });
+        let metadata = self
+            .builder
+            .object
+            .metadata
+            .add_macro_expansion(MacroExpansionMetadata {
+                def: def.metadata.clone(),
+                name_span,
+                arg_spans,
+            });
         let expansion = MacroExpansionIter::new(metadata, Rc::clone(def), args);
         self.tokens.push(Box::new(expansion));
         let mut parser = <DefaultParserFactory as ParserFactory<

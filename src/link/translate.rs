@@ -157,10 +157,12 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
+    use crate::codebase::BufId;
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
     use crate::object::num::Num;
     use crate::object::{Constraints, Content, Object, SymbolId, SymbolTable, Var, VarId};
+    use crate::span::fake::FakeSpanSystem;
 
     use std::borrow::Borrow;
 
@@ -241,6 +243,7 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: addr.into() }, Var { value: 1.into() }]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
         object.vars.resolve(&object.content);
@@ -276,6 +279,7 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
         object.vars.resolve(&object.content);
@@ -315,6 +319,7 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
+            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
         object.vars.resolve(&object.content);

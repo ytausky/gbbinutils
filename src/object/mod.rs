@@ -1,13 +1,15 @@
 use self::num::Num;
 
 use crate::expr::{Atom, ExprOp};
+use crate::span::SpanSource;
 
 use std::ops::{Index, IndexMut};
 
 pub mod num;
 
-pub struct Object<S> {
-    pub content: Content<S>,
+pub struct Object<M: SpanSource> {
+    pub content: Content<M::Span>,
+    pub metadata: M,
     pub vars: VarTable,
 }
 
@@ -88,10 +90,11 @@ pub struct Var {
     pub value: Num,
 }
 
-impl<S> Object<S> {
+impl<M: Default + SpanSource> Object<M> {
     pub fn new() -> Self {
         Object {
             content: Content::new(),
+            metadata: M::default(),
             vars: VarTable::new(),
         }
     }

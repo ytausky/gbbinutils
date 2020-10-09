@@ -1,7 +1,7 @@
 use self::session::{Interner, ReentrancyActions, Session};
 
 use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
-use crate::diagnostics::{mk_diagnostic, Diagnostic, DiagnosticsContext, OutputForwarder};
+use crate::diagnostics::{mk_diagnostic, Diagnostic, OutputForwarder};
 use crate::link::Program;
 use crate::{Config, DiagnosticsConfig, InputConfig};
 
@@ -56,12 +56,11 @@ fn try_assemble<'a>(
     let name = session.intern(name);
     session.analyze_file(name, None)?;
 
-    let mut diagnostics = DiagnosticsContext {
-        codebase: &mut session.codebase,
-        registry: &mut session.registry,
-        diagnostics: &mut session.diagnostics,
-    };
-    let result = Program::link(session.builder.object, &mut diagnostics);
+    let result = Program::link(
+        session.builder.object,
+        session.codebase,
+        session.diagnostics,
+    );
     Ok(result)
 }
 

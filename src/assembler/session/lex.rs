@@ -38,7 +38,9 @@ where
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,
-            self.registry
+            self.builder
+                .object
+                .metadata
                 .add_file_inclusion(FileInclusionMetadata { file: buf_id, from }),
         ))
     }

@@ -132,7 +132,6 @@ where
             macros: Vec::new(),
             mnemonics,
             names,
-            registry: R::default(),
             tokens: Vec::new(),
         }
     }
@@ -181,13 +180,12 @@ pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
 
 pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D> {
     pub codebase: C,
-    pub registry: R,
     interner: I,
     tokens: Vec<Box<dyn TokenStream<R, I>>>,
     macros: VecMacroTable<R::MacroDefMetadataId, I::StringRef>,
     mnemonics: HashMap<I::StringRef, MnemonicEntry>,
     names: BiLevelNameTable<I::StringRef>,
-    pub builder: ObjectBuilder<R::Span>,
+    pub builder: ObjectBuilder<R>,
     pub diagnostics: D,
     #[cfg(test)]
     log: Vec<Event<SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>>,
@@ -213,7 +211,7 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> NextToken for CompositeSession
             .tokens
             .last_mut()
             .unwrap()
-            .next_token(&mut self.registry, &mut self.interner)
+            .next_token(&mut self.builder.object.metadata, &mut self.interner)
             .unwrap();
         if let Ok(Token::Sigil(Sigil::Eos)) = token.0 {
             self.tokens.pop();
@@ -242,7 +240,7 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> CompositeSession<C, R, I, D> {
     fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
-            registry: &mut self.registry,
+            registry: &mut self.builder.object.metadata,
             diagnostics: &mut self.diagnostics,
         }
     }
@@ -252,7 +250,7 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> MergeSpans<R::Span>
     for CompositeSession<C, R, I, D>
 {
     fn merge_spans(&mut self, left: &R::Span, right: &R::Span) -> R::Span {
-        self.registry.merge_spans(left, right)
+        self.builder.object.metadata.merge_spans(left, right)
     }
 }
 
@@ -262,7 +260,7 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> StripSpan<R::Span>
     type Stripped = R::Stripped;
 
     fn strip_span(&mut self, span: &R::Span) -> Self::Stripped {
-        self.registry.strip_span(span)
+        self.builder.object.metadata.strip_span(span)
     }
 }
 
