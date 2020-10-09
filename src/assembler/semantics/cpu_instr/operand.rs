@@ -54,11 +54,11 @@ where
 {
     match expr {
         Arg::Bare(BareArg::Const(value)) => Ok(Operand::Const(value)),
-        Arg::Bare(BareArg::Symbol(symbol, span)) => {
+        Arg::Bare(BareArg::OperandKeyword(symbol, span)) => {
             analyze_keyword_operand((symbol, span), context, diagnostics)
         }
         Arg::Deref(BareArg::Const(value), _) => Ok(Operand::Deref(value)),
-        Arg::Deref(BareArg::Symbol(symbol, inner_span), outer_span) => {
+        Arg::Deref(BareArg::OperandKeyword(symbol, inner_span), outer_span) => {
             analyze_deref_operand_keyword((symbol, &inner_span), outer_span, diagnostics)
         }
         Arg::String(_, span) => {
@@ -70,7 +70,7 @@ where
 }
 
 fn analyze_deref_operand_keyword<D, S>(
-    keyword: (OperandSymbol, &S),
+    keyword: (OperandKeyword, &S),
     deref: S,
     diagnostics: &mut D,
 ) -> Result<Operand<S>, ()>
@@ -93,8 +93,8 @@ where
     }
 }
 
-fn try_deref_operand_keyword(symbol: OperandSymbol) -> Result<AtomKind, KeywordOperandCategory> {
-    use self::OperandSymbol::*;
+fn try_deref_operand_keyword(symbol: OperandKeyword) -> Result<AtomKind, KeywordOperandCategory> {
+    use self::OperandKeyword::*;
 
     match symbol {
         Bc => Ok(AtomKind::DerefPtrReg(PtrReg::Bc)),
@@ -110,7 +110,7 @@ fn try_deref_operand_keyword(symbol: OperandSymbol) -> Result<AtomKind, KeywordO
 }
 
 fn analyze_keyword_operand<D, S>(
-    (symbol, span): (OperandSymbol, S),
+    (symbol, span): (OperandKeyword, S),
     context: Context,
     diagnostics: &mut D,
 ) -> Result<Operand<S>, ()>
@@ -119,7 +119,7 @@ where
     S: Clone,
 {
     use self::Context::*;
-    use self::OperandSymbol::*;
+    use self::OperandKeyword::*;
 
     let kind = match symbol {
         A => AtomKind::Simple(M::A),
@@ -216,7 +216,7 @@ pub mod tests {
     }
 
     fn analyze_deref_ptr_reg(ptr_reg: PtrReg) {
-        let expr = Arg::Deref(BareArg::Symbol(ptr_reg.into(), 0.into()), 1.into());
+        let expr = Arg::Deref(BareArg::OperandKeyword(ptr_reg.into(), 0.into()), 1.into());
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Ok(Operand::Atom(AtomKind::DerefPtrReg(ptr_reg), 1.into()))
@@ -239,7 +239,10 @@ pub mod tests {
 
     #[test]
     fn analyze_deref_af() {
-        let parsed_expr = Arg::Deref(BareArg::Symbol(OperandSymbol::Af, 0.into()), 1.into());
+        let parsed_expr = Arg::Deref(
+            BareArg::OperandKeyword(OperandKeyword::Af, 0.into()),
+            1.into(),
+        );
         assert_eq!(
             analyze_operand(parsed_expr, Context::Other),
             Err(vec![Event::EmitDiag {
@@ -268,17 +271,17 @@ pub mod tests {
 
     #[test]
     fn analyze_bare_hld() {
-        test_bare_ptr_reg(OperandSymbol::Hld)
+        test_bare_ptr_reg(OperandKeyword::Hld)
     }
 
     #[test]
     fn analyze_bare_hli() {
-        test_bare_ptr_reg(OperandSymbol::Hli)
+        test_bare_ptr_reg(OperandKeyword::Hli)
     }
 
-    fn test_bare_ptr_reg(symbol: OperandSymbol) {
+    fn test_bare_ptr_reg(symbol: OperandKeyword) {
         let span = MockSpan::from(0);
-        let expr = Arg::Bare(BareArg::Symbol(symbol, span.clone()));
+        let expr = Arg::Bare(BareArg::OperandKeyword(symbol, span.clone()));
         assert_eq!(
             analyze_operand(expr, Context::Other),
             Err(vec![Event::EmitDiag {

@@ -1,11 +1,15 @@
 use self::BuiltinMnemonic::*;
 use self::Directive::*;
-use self::OperandSymbol::*;
-
-use super::semantics::Keyword;
-use super::semantics::Keyword::*;
+use self::Keyword::*;
+use self::OperandKeyword::*;
 
 use crate::IncDec;
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Keyword {
+    BuiltinMnemonic(BuiltinMnemonic),
+    Operand(OperandKeyword),
+}
 
 pub(super) const KEYWORDS: &[(&str, Keyword)] = &[
     ("A", Operand(A)),
@@ -166,7 +170,7 @@ pub enum StackOperation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OperandSymbol {
+pub enum OperandKeyword {
     A,
     Af,
     B,

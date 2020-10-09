@@ -1,4 +1,4 @@
-use super::keywords::{BuiltinMnemonic, Directive, Mnemonic, OperandSymbol};
+use super::keywords::{BuiltinMnemonic, Directive, Mnemonic, OperandKeyword};
 use super::session::*;
 use super::syntax::actions::*;
 use super::syntax::{LexError, Literal, SemanticToken, Sigil, Token};
@@ -19,12 +19,6 @@ macro_rules! set_state {
 
 mod cpu_instr;
 mod directive;
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Keyword {
-    BuiltinMnemonic(BuiltinMnemonic),
-    Operand(OperandSymbol),
-}
 
 pub(super) struct Semantics<'a, S, T> {
     pub session: &'a mut S,
@@ -161,7 +155,7 @@ enum Arg<R, S> {
 #[derive(Clone)]
 enum BareArg<S> {
     Const(Expr<SymbolId, S>),
-    Symbol(OperandSymbol, S),
+    OperandKeyword(OperandKeyword, S),
 }
 
 trait NameVisibility<R> {
@@ -182,28 +176,28 @@ where
 }
 
 trait DefineName<R> {
-    fn define_name(&mut self, name: R, entry: ResolvedName);
+    fn define_name(&mut self, name: R, entry: NameEntry);
 }
 
 impl<S> DefineName<S::StringRef> for S
 where
     S: Interner + NameTable<<S as StringSource>::StringRef>,
 {
-    fn define_name(&mut self, name: S::StringRef, entry: ResolvedName) {
+    fn define_name(&mut self, name: S::StringRef, entry: NameEntry) {
         let visibility = self.name_visibility(&name);
         self.define_name_with_visibility(name, visibility, entry)
     }
 }
 
 trait ResolveName<R> {
-    fn resolve_name(&mut self, name: &R) -> Option<ResolvedName>;
+    fn resolve_name(&mut self, name: &R) -> Option<NameEntry>;
 }
 
 impl<S> ResolveName<S::StringRef> for S
 where
     S: Interner + NameTable<<S as StringSource>::StringRef>,
 {
-    fn resolve_name(&mut self, name: &S::StringRef) -> Option<ResolvedName> {
+    fn resolve_name(&mut self, name: &S::StringRef) -> Option<NameEntry> {
         let visibility = self.name_visibility(name);
         self.resolve_name_with_visibility(name, visibility)
     }
@@ -525,11 +519,11 @@ where
 {
     fn reloc_lookup(&mut self, name: S::StringRef, span: S::Span) -> SymbolId {
         match self.session.resolve_name(&name) {
-            Some(ResolvedName::Keyword(_)) => unimplemented!(),
-            Some(ResolvedName::Symbol(id)) => id,
+            Some(NameEntry::OperandKeyword(_)) => unimplemented!(),
+            Some(NameEntry::Symbol(id)) => id,
             None => {
                 let id = self.session.alloc_symbol(span);
-                self.session.define_name(name, ResolvedName::Symbol(id));
+                self.session.define_name(name, NameEntry::Symbol(id));
                 id
             }
         }
@@ -720,7 +714,7 @@ impl<'a, S: Analysis, T> Semantics<'a, S, T> {
     ) -> Result<Expr<SymbolId, S::Span>, ()> {
         match self.session.resolve_names(arg)? {
             Arg::Bare(BareArg::Const(value)) => Ok(value),
-            Arg::Bare(BareArg::Symbol(_, span)) => {
+            Arg::Bare(BareArg::OperandKeyword(_, span)) => {
                 let keyword = self.session.strip_span(&span);
                 self.session
                     .emit_diag(Message::KeywordInExpr { keyword }.at(span));
@@ -794,13 +788,16 @@ where
     ) -> Result<Arg<T::StringRef, S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
-                BareArg::Symbol(symbol, span) => Ok(Arg::Bare(BareArg::Symbol(symbol, span))),
+                BareArg::OperandKeyword(symbol, span) => {
+                    Ok(Arg::Bare(BareArg::OperandKeyword(symbol, span)))
+                }
                 BareArg::Const(expr) => Ok(Arg::Bare(BareArg::Const(expr))),
             },
             ParsedArg::Parenthesized(expr, span) => match self.classify_expr(expr)? {
-                BareArg::Symbol(symbol, inner_span) => {
-                    Ok(Arg::Deref(BareArg::Symbol(symbol, inner_span), span))
-                }
+                BareArg::OperandKeyword(symbol, inner_span) => Ok(Arg::Deref(
+                    BareArg::OperandKeyword(symbol, inner_span),
+                    span,
+                )),
                 BareArg::Const(expr) => Ok(Arg::Deref(BareArg::Const(expr), span)),
             },
             ParsedArg::String(string, span) => Ok(Arg::String(string, span)),
@@ -818,21 +815,23 @@ where
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {
-                ExprOp::Atom(Atom::Name(name)) => match self.resolve_name(&name) {
-                    Some(ResolvedName::Keyword(operand)) => Ok(BareArg::Symbol(operand, node.span)),
-                    Some(ResolvedName::Symbol(id)) => {
-                        Ok(BareArg::Const(Expr(vec![
-                            ExprOp::Atom(Atom::Name(id)).with_span(node.span)
-                        ])))
+                ExprOp::Atom(Atom::Name(name)) => {
+                    match self.resolve_name(&name) {
+                        Some(NameEntry::OperandKeyword(operand)) => {
+                            Ok(BareArg::OperandKeyword(operand, node.span))
+                        }
+                        Some(NameEntry::Symbol(id)) => Ok(BareArg::Const(Expr(vec![
+                            ExprOp::Atom(Atom::Name(id)).with_span(node.span),
+                        ]))),
+                        None => {
+                            let id = self.alloc_symbol(node.span.clone());
+                            self.define_name(name, NameEntry::Symbol(id));
+                            Ok(BareArg::Const(Expr(vec![
+                                ExprOp::Atom(Atom::Name(id)).with_span(node.span)
+                            ])))
+                        }
                     }
-                    None => {
-                        let id = self.alloc_symbol(node.span.clone());
-                        self.define_name(name, ResolvedName::Symbol(id));
-                        Ok(BareArg::Const(Expr(vec![
-                            ExprOp::Atom(Atom::Name(id)).with_span(node.span)
-                        ])))
-                    }
-                },
+                }
                 ExprOp::Atom(Atom::Const(n)) => {
                     Ok(BareArg::Const(Expr(vec![
                         ExprOp::Atom(Atom::Const(n)).with_span(node.span)
@@ -856,17 +855,17 @@ where
             for node in expr.0 {
                 match node.item {
                     ExprOp::Atom(Atom::Name(name)) => match self.resolve_name(&name) {
-                        Some(ResolvedName::Keyword(_)) => {
+                        Some(NameEntry::OperandKeyword(_)) => {
                             let keyword = self.strip_span(&node.span);
                             self.emit_diag(Message::KeywordInExpr { keyword }.at(node.span));
                             error = true
                         }
-                        Some(ResolvedName::Symbol(id)) => {
+                        Some(NameEntry::Symbol(id)) => {
                             nodes.push(ExprOp::Atom(Atom::Name(id)).with_span(node.span))
                         }
                         None => {
                             let id = self.alloc_symbol(node.span.clone());
-                            self.define_name(name, ResolvedName::Symbol(id));
+                            self.define_name(name, NameEntry::Symbol(id));
                             nodes.push(ExprOp::Atom(Atom::Name(id)).with_span(node.span))
                         }
                     },
@@ -1086,7 +1085,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: name.to_owned(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
                 },
                 Event::EmitFragment {
                     fragment: Fragment::Embedded(
@@ -1124,7 +1123,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: label.into(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
                 },
                 Event::EmitFragment {
                     fragment: Fragment::Immediate(
@@ -1155,7 +1154,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: label.into(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
                 },
                 Event::DefineSymbol {
                     name: Symbol::UserDef(UserDefId(0)),
@@ -1360,7 +1359,7 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<Event<S>>
     where
-        I: IntoIterator<Item = (String, ResolvedName)>,
+        I: IntoIterator<Item = (String, NameEntry)>,
         F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Default + Debug + Merge,
     {
@@ -1594,7 +1593,7 @@ mod tests {
             Event::DefineNameWithVisibility {
                 ident: "f".into(),
                 visibility: Visibility::Global,
-                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
             },
             Event::EmitFragment {
                 fragment: Fragment::Immediate(
@@ -1628,7 +1627,7 @@ mod tests {
             Event::DefineNameWithVisibility {
                 ident: "f".into(),
                 visibility: Visibility::Global,
-                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
             },
             Event::EmitFragment {
                 fragment: Fragment::Immediate(
@@ -1669,7 +1668,7 @@ mod tests {
             Event::DefineNameWithVisibility {
                 ident: "const".into(),
                 visibility: Visibility::Global,
-                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
             },
             Event::EmitFragment {
                 fragment: Fragment::LdInlineAddr(
@@ -1704,7 +1703,7 @@ mod tests {
             Event::DefineNameWithVisibility {
                 ident: "label".into(),
                 visibility: Visibility::Global,
-                entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0))),
+                entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
             },
             Event::DefineSymbol {
                 name: Symbol::UserDef(UserDefId(0)),

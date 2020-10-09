@@ -4,8 +4,7 @@ use self::macros::MacroArgs;
 use self::macros::{MacroTable, VecMacroTable};
 use self::resolve::*;
 
-use super::keywords::{BuiltinMnemonic, OperandSymbol, KEYWORDS};
-use super::semantics::Keyword;
+use super::keywords::{BuiltinMnemonic, Keyword, OperandKeyword, KEYWORDS};
 #[cfg(test)]
 use super::syntax::SemanticToken;
 use super::syntax::{LexItem, Sigil, Token};
@@ -66,14 +65,9 @@ pub(super) trait NameTable<I> {
         &mut self,
         ident: &I,
         visibility: Visibility,
-    ) -> Option<ResolvedName>;
+    ) -> Option<NameEntry>;
 
-    fn define_name_with_visibility(
-        &mut self,
-        ident: I,
-        visibility: Visibility,
-        entry: ResolvedName,
-    );
+    fn define_name_with_visibility(&mut self, ident: I, visibility: Visibility, entry: NameEntry);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,8 +80,8 @@ pub(crate) enum Visibility {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum ResolvedName {
-    Keyword(OperandSymbol),
+pub(crate) enum NameEntry {
+    OperandKeyword(OperandKeyword),
     Symbol(SymbolId),
 }
 
@@ -118,13 +112,15 @@ where
                     mnemonics.insert(string, MnemonicEntry::Builtin(mnemonic));
                 }
                 Keyword::Operand(keyword) => {
-                    names.global.insert(string, ResolvedName::Keyword(*keyword));
+                    names
+                        .global
+                        .insert(string, NameEntry::OperandKeyword(*keyword));
                 }
             }
         }
         for (ident, name) in crate::eval::BUILTIN_SYMBOLS {
             let string = interner.intern(ident);
-            names.global.insert(string, ResolvedName::Symbol(*name));
+            names.global.insert(string, NameEntry::Symbol(*name));
         }
         Self {
             builder: ObjectBuilder::new(),
@@ -359,7 +355,7 @@ pub(super) enum Event<B, M, R, S, T> {
     DefineNameWithVisibility {
         ident: R,
         visibility: Visibility,
-        entry: ResolvedName,
+        entry: NameEntry,
     },
     DefineSymbol {
         name: B,

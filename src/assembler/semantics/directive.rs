@@ -209,7 +209,7 @@ mod tests {
     use crate::assembler::semantics::tests::Event;
     use crate::assembler::semantics::tests::*;
     use crate::assembler::session::mock::*;
-    use crate::assembler::session::ResolvedName;
+    use crate::assembler::session::NameEntry;
     use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
@@ -427,7 +427,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: symbol.into(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
                 },
                 Event::DefineSymbol {
                     name: Symbol::UserDef(UserDefId(0)),
@@ -466,7 +466,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: name.into(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
                 },
                 Event::DefineSymbol {
                     name: Symbol::UserDef(UserDefId(0)),
@@ -498,7 +498,7 @@ mod tests {
                 Event::DefineNameWithVisibility {
                     ident: name.into(),
                     visibility: Visibility::Global,
-                    entry: ResolvedName::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
                 },
                 Event::StartSection {
                     name: Symbol::UserDef(UserDefId(0)),

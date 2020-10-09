@@ -38,8 +38,8 @@ impl<T> From<Ident<T>> for ExprOp<Ident<T>> {
 }
 
 pub struct BiLevelNameTable<R> {
-    pub(super) global: HashMap<R, ResolvedName>,
-    local: HashMap<R, ResolvedName>,
+    pub(super) global: HashMap<R, NameEntry>,
+    local: HashMap<R, NameEntry>,
 }
 
 impl<R> BiLevelNameTable<R> {
@@ -50,7 +50,7 @@ impl<R> BiLevelNameTable<R> {
         }
     }
 
-    fn select_table_mut(&mut self, visibility: Visibility) -> &mut HashMap<R, ResolvedName> {
+    fn select_table_mut(&mut self, visibility: Visibility) -> &mut HashMap<R, NameEntry> {
         match visibility {
             Visibility::Global => &mut self.global,
             Visibility::Local => &mut self.local,
@@ -67,14 +67,14 @@ where
         &mut self,
         ident: &I::StringRef,
         visibility: Visibility,
-    ) -> Option<ResolvedName> {
+    ) -> Option<NameEntry> {
         let table = self.names.select_table_mut(visibility);
         let interner = &mut self.interner;
         table.get(&ident).cloned().map_or_else(
             || {
                 let representative =
                     interner.intern(&interner.get_string(ident).to_ascii_uppercase());
-                if let Some(keyword @ ResolvedName::Keyword(_)) =
+                if let Some(keyword @ NameEntry::OperandKeyword(_)) =
                     table.get(&representative).cloned()
                 {
                     table.insert(ident.clone(), keyword.clone());
@@ -91,7 +91,7 @@ where
         &mut self,
         ident: I::StringRef,
         visibility: Visibility,
-        entry: ResolvedName,
+        entry: NameEntry,
     ) {
         #[cfg(test)]
         self.log_event(Event::DefineNameWithVisibility {
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
+        let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
         let mut session = MockSession::<()>::default();
         session.define_name_with_visibility(name.into(), Visibility::Global, entry.clone());
         assert_eq!(
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn retrieve_local_name() {
-        let entry = ResolvedName::Symbol(Symbol::UserDef(UserDefId(42)));
+        let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
         let mut session = MockSession::<()>::default();
         session.start_scope();
         session.define_name_with_visibility("_local".into(), Visibility::Local, entry.clone());
@@ -156,7 +156,7 @@ mod tests {
         session.define_name_with_visibility(
             "_local".into(),
             Visibility::Local,
-            ResolvedName::Symbol(Symbol::UserDef(UserDefId(42))),
+            NameEntry::Symbol(Symbol::UserDef(UserDefId(42))),
         );
         session.start_scope();
         assert_eq!(

@@ -488,7 +488,7 @@ pub enum PtrReg {
 
 #[cfg(test)]
 mod tests {
-    pub use crate::assembler::keywords::OperandSymbol::*;
+    pub use crate::assembler::keywords::OperandKeyword::*;
     pub(crate) use crate::diagnostics::Message;
     pub(crate) use crate::object::Fragment;
     pub(crate) use crate::span::{Spanned, WithSpan};
@@ -522,8 +522,8 @@ mod tests {
         }
     }
 
-    pub(super) fn literal(symbol: OperandSymbol) -> Input {
-        Arg::Bare(BareArg::Symbol(symbol, ()))
+    pub(super) fn literal(symbol: OperandKeyword) -> Input {
+        Arg::Bare(BareArg::OperandKeyword(symbol, ()))
     }
 
     pub(super) fn number(n: i32, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
@@ -534,61 +534,12 @@ mod tests {
         Expr::from_atom(Atom::Name(symbol), span.into())
     }
 
-    pub(super) fn deref_symbol(symbol: impl Into<OperandSymbol>) -> Input {
-        Arg::Deref(BareArg::Symbol(symbol.into(), ()), ())
+    pub(super) fn deref_symbol(symbol: impl Into<OperandKeyword>) -> Input {
+        Arg::Deref(BareArg::OperandKeyword(symbol.into(), ()), ())
     }
 
     pub(super) fn deref_ident(ident: SymbolId) -> Input {
         Arg::Deref(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())), ())
-    }
-
-    impl From<AluOperation> for Mnemonic {
-        fn from(alu_operation: AluOperation) -> Self {
-            match alu_operation {
-                AluOperation::Add => ADD,
-                AluOperation::Adc => ADC,
-                AluOperation::Sub => SUB,
-                AluOperation::Sbc => SBC,
-                AluOperation::And => AND,
-                AluOperation::Xor => XOR,
-                AluOperation::Or => OR,
-                AluOperation::Cp => CP,
-            }
-        }
-    }
-
-    impl From<BitOperation> for Mnemonic {
-        fn from(operation: BitOperation) -> Self {
-            match operation {
-                BitOperation::Bit => BIT,
-                BitOperation::Set => SET,
-                BitOperation::Res => RES,
-            }
-        }
-    }
-
-    impl From<MiscOperation> for Mnemonic {
-        fn from(operation: MiscOperation) -> Self {
-            match operation {
-                MiscOperation::Rlc => RLC,
-                MiscOperation::Rrc => RRC,
-                MiscOperation::Rl => RL,
-                MiscOperation::Rr => RR,
-                MiscOperation::Sla => SLA,
-                MiscOperation::Sra => SRA,
-                MiscOperation::Swap => SWAP,
-                MiscOperation::Srl => SRL,
-            }
-        }
-    }
-
-    impl From<IncDec> for Mnemonic {
-        fn from(mode: IncDec) -> Self {
-            match mode {
-                IncDec::Inc => INC,
-                IncDec::Dec => DEC,
-            }
-        }
     }
 
     impl From<M> for Input {
@@ -606,7 +557,7 @@ mod tests {
         }
     }
 
-    impl From<PtrReg> for OperandSymbol {
+    impl From<PtrReg> for OperandKeyword {
         fn from(ptr_reg: PtrReg) -> Self {
             match ptr_reg {
                 PtrReg::Bc => Bc,
@@ -617,7 +568,7 @@ mod tests {
         }
     }
 
-    impl From<Reg16> for OperandSymbol {
+    impl From<Reg16> for OperandKeyword {
         fn from(reg16: Reg16) -> Self {
             match reg16 {
                 Reg16::Bc => Bc,
@@ -630,7 +581,7 @@ mod tests {
 
     impl<T> From<T> for Input
     where
-        OperandSymbol: From<T>,
+        OperandKeyword: From<T>,
     {
         fn from(src: T) -> Self {
             literal(src.into())
@@ -1953,9 +1904,10 @@ mod tests {
                     .map(|Spanned { item, .. }| item.with_span(TokenId::Operand(i, 0).into()))
                     .collect(),
             ))),
-            Arg::Bare(BareArg::Symbol(symbol, ())) => {
-                Arg::Bare(BareArg::Symbol(symbol, TokenId::Operand(i, 0).into()))
-            }
+            Arg::Bare(BareArg::OperandKeyword(symbol, ())) => Arg::Bare(BareArg::OperandKeyword(
+                symbol,
+                TokenId::Operand(i, 0).into(),
+            )),
             Arg::Deref(BareArg::Const(value), ()) => Arg::Deref(
                 BareArg::Const(crate::expr::Expr(
                     value
@@ -1966,8 +1918,8 @@ mod tests {
                 )),
                 TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
             ),
-            Arg::Deref(BareArg::Symbol(symbol, ()), ()) => Arg::Deref(
-                BareArg::Symbol(symbol, TokenId::Operand(i, 1).into()),
+            Arg::Deref(BareArg::OperandKeyword(symbol, ()), ()) => Arg::Deref(
+                BareArg::OperandKeyword(symbol, TokenId::Operand(i, 1).into()),
                 TokenSpan::merge(TokenId::Operand(i, 0), TokenId::Operand(i, 2)),
             ),
             _ => unimplemented!(),
