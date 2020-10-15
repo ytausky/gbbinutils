@@ -1,19 +1,21 @@
 pub use self::lexer::{LexError, Lexer};
 pub(crate) use self::parser::ParseTokenStream;
 
+use super::string_ref::StringRef;
+
 use std::fmt::Debug;
 
 pub mod actions;
 mod lexer;
 pub mod parser;
 
-pub type LexItem<R, S> = (Result<SemanticToken<R>, LexError>, S);
-pub type SemanticToken<R> = crate::assembler::syntax::Token<R, Literal<R>>;
+pub type LexItem<S> = (Result<SemanticToken, LexError>, S);
+pub type SemanticToken = crate::assembler::syntax::Token<StringRef, Literal>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Literal<R> {
+pub enum Literal {
     Number(i32),
-    String(R),
+    String(StringRef),
 }
 
 #[derive(Clone, Debug, PartialEq)]

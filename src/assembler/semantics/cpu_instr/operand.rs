@@ -42,14 +42,13 @@ pub enum Context {
     Other,
 }
 
-pub(in super::super) fn analyze_operand<D, R, S>(
-    expr: Arg<R, S>,
+pub(in super::super) fn analyze_operand<D, S>(
+    expr: Arg<S>,
     context: Context,
     diagnostics: &mut D,
 ) -> Result<Operand<S>, ()>
 where
     D: Diagnostics<S>,
-    R: Eq,
     S: Clone,
 {
     match expr {
@@ -224,12 +223,12 @@ pub mod tests {
     }
 
     pub(in crate::assembler::semantics::cpu_instr) type Event<S> =
-        crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+        crate::assembler::session::Event<SymbolId, MacroId, S, S>;
 
     type OperandResult<S> = Result<Operand<S>, Vec<Event<S>>>;
 
     fn analyze_operand<S: Clone + Debug>(
-        expr: Arg<String, MockSpan<S>>,
+        expr: Arg<MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
         let mut session = MockSession::default();

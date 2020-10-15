@@ -6,12 +6,11 @@ use crate::span::Source;
 
 pub(super) fn analyze_directive<'a, S: Analysis>(
     directive: (Directive, S::Span),
-    label: Option<Label<S::StringRef, S::Span>>,
-    args: BuiltinInstrArgs<S::StringRef, S::Span>,
+    label: Option<Label<S::Span>>,
+    args: BuiltinInstrArgs<S::Span>,
     session: TokenStreamSemantics<'a, S>,
 ) -> TokenStreamSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     let context = DirectiveContext {
@@ -25,14 +24,13 @@ where
 
 struct DirectiveContext<'a, S: Analysis> {
     span: S::Span,
-    label: Option<Label<S::StringRef, S::Span>>,
-    args: BuiltinInstrArgs<S::StringRef, S::Span>,
+    label: Option<Label<S::Span>>,
+    args: BuiltinInstrArgs<S::Span>,
     session: TokenStreamSemantics<'a, S>,
 }
 
 impl<'a, S: Analysis> DirectiveContext<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     fn analyze(self, directive: Directive) -> TokenStreamSemantics<'a, S> {
@@ -156,11 +154,11 @@ where
     }
 }
 
-fn reduce_include<R, D: Diagnostics<S>, S: Clone>(
+fn reduce_include<D: Diagnostics<S>, S: Clone>(
     span: S,
-    args: Vec<ParsedArg<R, S>>,
+    args: Vec<ParsedArg<S>>,
     diagnostics: &mut D,
-) -> Option<(R, S)> {
+) -> Option<(StringRef, S)> {
     let arg = match single_arg(span, args, diagnostics) {
         Some(arg) => arg,
         None => return None,
@@ -222,12 +220,12 @@ mod tests {
     fn build_include_item() {
         let filename = "file.asm";
         let actions = unary_directive("INCLUDE", |arg| {
-            arg.act_on_atom(ExprAtom::Literal(Literal::String(filename.to_string())), ());
+            arg.act_on_atom(ExprAtom::Literal(Literal::String(filename.into())), ());
         });
         assert_eq!(
             actions,
             [Event::AnalyzeFile {
-                path: filename.to_string(),
+                path: filename.into(),
                 from: Some(())
             }]
         )
@@ -298,7 +296,7 @@ mod tests {
         )
     }
 
-    fn mk_literal(n: i32) -> ExprAtom<String, Literal<String>> {
+    fn mk_literal(n: i32) -> ExprAtom<StringRef, Literal> {
         ExprAtom::Literal(Literal::Number(n))
     }
 

@@ -5,6 +5,7 @@ use self::macros::{MacroTable, VecMacroTable};
 use self::resolve::*;
 
 use super::keywords::{BuiltinMnemonic, Keyword, OperandKeyword, KEYWORDS};
+use super::string_ref::StringRef;
 #[cfg(test)]
 use super::syntax::SemanticToken;
 use super::syntax::{LexItem, Sigil, Token};
@@ -17,7 +18,6 @@ use crate::span::*;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
 
 mod builder;
 mod lex;
@@ -27,25 +27,23 @@ mod resolve;
 
 pub(super) trait Analysis:
     SpanSource
-    + StringSource
     + NextToken
-    + Interner
-    + ReentrancyActions<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
+    + ReentrancyActions<<Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope
-    + NameTable<<Self as StringSource>::StringRef>
-    + MacroTable<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>
+    + NameTable<StringRef>
+    + MacroTable<<Self as SpanSource>::Span>
 {
-    fn mnemonic_lookup(&mut self, mnemonic: &Self::StringRef) -> Option<MnemonicEntry>;
+    fn mnemonic_lookup(&mut self, mnemonic: StringRef) -> Option<MnemonicEntry>;
 }
 
-pub(crate) trait NextToken: StringSource + SpanSource {
-    fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>>;
+pub(crate) trait NextToken: SpanSource {
+    fn next_token(&mut self) -> Option<LexItem<Self::Span>>;
 }
 
-pub(super) trait ReentrancyActions<R, S> {
-    fn analyze_file(&mut self, path: R, from: Option<S>) -> Result<(), CodebaseError>;
+pub(super) trait ReentrancyActions<S> {
+    fn analyze_file(&mut self, path: StringRef, from: Option<S>) -> Result<(), CodebaseError>;
 }
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
@@ -85,28 +83,21 @@ pub(crate) enum NameEntry {
     Symbol(SymbolId),
 }
 
-pub trait StringSource {
-    type StringRef: Clone + Debug + Eq + Hash;
-}
-
 pub(super) type Session<'a> = CompositeSession<
     FileCodebase<'a, dyn FileSystem>,
     RcContextFactory<BufId>,
-    HashInterner,
     OutputForwarder<'a>,
 >;
 
-impl<C, R, I, D> CompositeSession<C, R, I, D>
+impl<C, R, D> CompositeSession<C, R, D>
 where
     R: Default + SpanSystem<BufId>,
-    I: Default + Interner,
 {
     pub fn new(codebase: C, diagnostics: D) -> Self {
-        let mut interner = I::default();
         let mut mnemonics = HashMap::new();
         let mut names = BiLevelNameTable::new();
         for (ident, keyword) in KEYWORDS {
-            let string = interner.intern(ident);
+            let string = (*ident).into();
             match keyword {
                 Keyword::BuiltinMnemonic(mnemonic) => {
                     mnemonics.insert(string, MnemonicEntry::Builtin(mnemonic));
@@ -119,14 +110,14 @@ where
             }
         }
         for (ident, name) in crate::eval::BUILTIN_SYMBOLS {
-            let string = interner.intern(ident);
-            names.global.insert(string, NameEntry::Symbol(*name));
+            names
+                .global
+                .insert((*ident).into(), NameEntry::Symbol(*name));
         }
         Self {
             builder: ObjectBuilder::new(),
             codebase,
             diagnostics,
-            interner,
             #[cfg(test)]
             log: Vec::new(),
             macros: Vec::new(),
@@ -137,7 +128,7 @@ where
     }
 }
 
-impl<C, R, I, D> Analysis for CompositeSession<C, R, I, D>
+impl<C, R, D> Analysis for CompositeSession<C, R, D>
 where
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     C: Codebase,
@@ -145,24 +136,17 @@ where
     R::FileInclusionMetadataId: 'static,
     R::Span: 'static,
     R::Stripped: Clone,
-    I: Interner,
-    I::StringRef: 'static,
 {
-    fn mnemonic_lookup(&mut self, mnemonic: &Self::StringRef) -> Option<MnemonicEntry> {
+    fn mnemonic_lookup(&mut self, mnemonic: StringRef) -> Option<MnemonicEntry> {
         if let Some(entry) = self.mnemonics.get(&mnemonic) {
             Some(entry.clone())
         } else {
-            let representative = self
-                .interner
-                .intern(&self.interner.get_string(mnemonic).to_ascii_uppercase());
-            if let Some(builtin @ MnemonicEntry::Builtin(_)) = self.mnemonics.get(&representative) {
+            let representative = mnemonic.to_ascii_uppercase();
+            if let Some(builtin @ MnemonicEntry::Builtin(_)) =
+                self.mnemonics.get(representative.as_str())
+            {
                 let builtin = (*builtin).clone();
-                Some(
-                    self.mnemonics
-                        .entry(mnemonic.clone())
-                        .or_insert(builtin)
-                        .clone(),
-                )
+                Some(self.mnemonics.entry(mnemonic).or_insert(builtin).clone())
             } else {
                 None
             }
@@ -170,25 +154,20 @@ where
     }
 }
 
-pub(crate) trait TokenStream<R: SpanSource, I: StringSource> {
-    fn next_token(
-        &mut self,
-        registry: &mut R,
-        interner: &mut I,
-    ) -> Option<LexItem<I::StringRef, R::Span>>;
+pub(crate) trait TokenStream<R: SpanSource> {
+    fn next_token(&mut self, registry: &mut R) -> Option<LexItem<R::Span>>;
 }
 
-pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, I: StringSource, D> {
+pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, D> {
     pub codebase: C,
-    interner: I,
-    tokens: Vec<Box<dyn TokenStream<R, I>>>,
-    macros: VecMacroTable<R::MacroDefMetadataId, I::StringRef>,
-    mnemonics: HashMap<I::StringRef, MnemonicEntry>,
-    names: BiLevelNameTable<I::StringRef>,
+    tokens: Vec<Box<dyn TokenStream<R>>>,
+    macros: VecMacroTable<R::MacroDefMetadataId>,
+    mnemonics: HashMap<StringRef, MnemonicEntry>,
+    names: BiLevelNameTable<StringRef>,
     pub builder: ObjectBuilder<R>,
     pub diagnostics: D,
     #[cfg(test)]
-    log: Vec<Event<SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>>,
+    log: Vec<Event<SymbolId, MacroId, R::Span, R::Stripped>>,
 }
 
 #[derive(Clone)]
@@ -197,21 +176,17 @@ pub(super) enum MnemonicEntry {
     Macro(MacroId),
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> SpanSource for CompositeSession<C, R, I, D> {
+impl<C, R: SpanSystem<BufId>, D> SpanSource for CompositeSession<C, R, D> {
     type Span = R::Span;
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> StringSource for CompositeSession<C, R, I, D> {
-    type StringRef = I::StringRef;
-}
-
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> NextToken for CompositeSession<C, R, I, D> {
-    fn next_token(&mut self) -> Option<LexItem<Self::StringRef, Self::Span>> {
+impl<C, R: SpanSystem<BufId>, D> NextToken for CompositeSession<C, R, D> {
+    fn next_token(&mut self) -> Option<LexItem<Self::Span>> {
         let token = self
             .tokens
             .last_mut()
             .unwrap()
-            .next_token(&mut self.builder.object.metadata, &mut self.interner)
+            .next_token(&mut self.builder.object.metadata)
             .unwrap();
         if let Ok(Token::Sigil(Sigil::Eos)) = token.0 {
             self.tokens.pop();
@@ -220,8 +195,7 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> NextToken for CompositeSession
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> EmitDiag<R::Span, R::Stripped>
-    for CompositeSession<C, R, I, D>
+impl<C, R: SpanSystem<BufId>, D> EmitDiag<R::Span, R::Stripped> for CompositeSession<C, R, D>
 where
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
@@ -236,7 +210,7 @@ where
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> CompositeSession<C, R, I, D> {
+impl<C, R: SpanSystem<BufId>, D> CompositeSession<C, R, D> {
     fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
@@ -246,17 +220,13 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> CompositeSession<C, R, I, D> {
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> MergeSpans<R::Span>
-    for CompositeSession<C, R, I, D>
-{
+impl<C, R: SpanSystem<BufId>, D> MergeSpans<R::Span> for CompositeSession<C, R, D> {
     fn merge_spans(&mut self, left: &R::Span, right: &R::Span) -> R::Span {
         self.builder.object.metadata.merge_spans(left, right)
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> StripSpan<R::Span>
-    for CompositeSession<C, R, I, D>
-{
+impl<C, R: SpanSystem<BufId>, D> StripSpan<R::Span> for CompositeSession<C, R, D> {
     type Stripped = R::Stripped;
 
     fn strip_span(&mut self, span: &R::Span) -> Self::Stripped {
@@ -264,94 +234,31 @@ impl<C, R: SpanSystem<BufId>, I: StringSource, D> StripSpan<R::Span>
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I: Interner, D> Interner for CompositeSession<C, R, I, D> {
-    fn intern(&mut self, string: &str) -> Self::StringRef {
-        self.interner.intern(string)
-    }
-
-    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
-        self.interner.get_string(id)
-    }
-}
-
-pub(crate) trait Interner: StringSource {
-    fn intern(&mut self, string: &str) -> Self::StringRef;
-    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str;
-}
-
-#[derive(Default)]
-pub struct MockInterner;
-
-impl StringSource for MockInterner {
-    type StringRef = String;
-}
-
-impl Interner for MockInterner {
-    fn intern(&mut self, string: &str) -> Self::StringRef {
-        string.to_owned()
-    }
-
-    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
-        id
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct HashInterner {
-    map: HashMap<String, StringId>,
-    strings: Vec<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct StringId(usize);
-
-impl StringSource for HashInterner {
-    type StringRef = StringId;
-}
-
-impl Interner for HashInterner {
-    fn intern(&mut self, string: &str) -> Self::StringRef {
-        let strings = &mut self.strings;
-        let id = self
-            .map
-            .entry(string.to_owned())
-            .or_insert_with(|| StringId(strings.len()));
-        if id.0 == strings.len() {
-            strings.push(string.to_owned())
-        }
-        *id
-    }
-
-    fn get_string<'a>(&'a self, id: &'a Self::StringRef) -> &str {
-        &self.strings[id.0]
-    }
-}
-
 #[cfg(test)]
-impl<C, R: SpanSystem<BufId>, I: StringSource, D> CompositeSession<C, R, I, D> {
-    pub fn log(&self) -> &[Event<SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>] {
+impl<C, R: SpanSystem<BufId>, D> CompositeSession<C, R, D> {
+    pub fn log(&self) -> &[Event<SymbolId, MacroId, R::Span, R::Stripped>] {
         &self.log
     }
 
-    fn log_event(&mut self, event: Event<SymbolId, MacroId, I::StringRef, R::Span, R::Stripped>) {
+    fn log_event(&mut self, event: Event<SymbolId, MacroId, R::Span, R::Stripped>) {
         self.log.push(event)
     }
 }
 
 #[cfg(test)]
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Event<B, M, R, S, T> {
+pub(super) enum Event<B, M, S, T> {
     AnalyzeFile {
-        path: R,
+        path: StringRef,
         from: Option<S>,
     },
     DefineMacro {
-        name: (R, S),
-        params: (Box<[R]>, Box<[S]>),
-        body: (Box<[SemanticToken<R>]>, Box<[S]>),
+        name: (StringRef, S),
+        params: (Box<[StringRef]>, Box<[S]>),
+        body: (Box<[SemanticToken]>, Box<[S]>),
     },
     DefineNameWithVisibility {
-        ident: R,
+        ident: StringRef,
         visibility: Visibility,
         entry: NameEntry,
     },
@@ -368,7 +275,7 @@ pub(super) enum Event<B, M, R, S, T> {
     },
     ExpandMacro {
         name: (M, S),
-        args: MacroArgs<SemanticToken<R>, S>,
+        args: MacroArgs<S>,
     },
     SetOrigin {
         addr: Expr<B, S>,
@@ -392,7 +299,7 @@ pub mod mock {
     pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
     pub(in crate::assembler) type MockSession<S> =
-        CompositeSession<FakeCodebase, FakeSpanSystem<BufId, S>, MockInterner, IgnoreDiagnostics>;
+        CompositeSession<FakeCodebase, FakeSpanSystem<BufId, S>, IgnoreDiagnostics>;
 
     impl<S: Clone + Default + Merge> Default for MockSession<S> {
         fn default() -> Self {

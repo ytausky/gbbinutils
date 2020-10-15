@@ -1,10 +1,11 @@
 use super::Sigil::*;
-use super::{LexItem, Literal, Sigil, Token};
+use super::{LexItem, Literal, SemanticToken, Sigil, Token};
 
-use crate::assembler::session::Interner;
+use crate::assembler::string_ref::StringRef;
 
 use std::borrow::Borrow;
 use std::ops::Range;
+use std::rc::Rc;
 use std::str;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -182,23 +183,16 @@ fn is_hex_digit(character: char) -> bool {
     character.is_digit(16)
 }
 
-pub struct Lexer<B> {
-    scanner: Scanner<B>,
+pub struct Lexer {
+    scanner: Scanner<Rc<str>>,
 }
 
-fn mk_token<I>(
-    kind: TokenKind,
-    lexeme: &str,
-    interner: &mut I,
-) -> Result<Token<I::StringRef, Literal<I::StringRef>>, LexError>
-where
-    I: Interner,
-{
+fn mk_token(kind: TokenKind, lexeme: StringRef) -> Result<SemanticToken, LexError> {
     match kind {
-        TokenKind::Ident => Ok(Token::Ident(interner.intern(lexeme))),
-        TokenKind::Label => Ok(Token::Label(interner.intern(lexeme))),
+        TokenKind::Ident => Ok(Token::Ident(lexeme)),
+        TokenKind::Label => Ok(Token::Label(lexeme)),
         TokenKind::Number(Radix::Decimal) => Ok(Token::Literal(Literal::Number(
-            i32::from_str_radix(lexeme, 10).unwrap(),
+            i32::from_str_radix(lexeme.as_ref(), 10).unwrap(),
         ))),
         TokenKind::Number(Radix::Hexadecimal) => match i32::from_str_radix(&lexeme[1..], 16) {
             Ok(n) => Ok(Token::Literal(Literal::Number(n))),
@@ -206,30 +200,26 @@ where
         },
         TokenKind::Sigil(sigil) => Ok(Token::Sigil(sigil)),
         TokenKind::String => Ok(Token::Literal(Literal::String(
-            interner.intern(&lexeme[1..(lexeme.len() - 1)]),
+            lexeme.substring(1..(lexeme.len() - 1)),
         ))),
     }
 }
 
-impl<B: Borrow<str>> Lexer<B> {
-    pub fn new(src: B) -> Self {
+impl Lexer {
+    pub fn new(src: Rc<str>) -> Self {
         Lexer {
             scanner: Scanner::new(src),
         }
     }
 
-    pub(crate) fn next_token<R, I>(
-        &mut self,
-        _registry: &mut R,
-        interner: &mut I,
-    ) -> Option<LexItem<I::StringRef, Range<usize>>>
-    where
-        I: Interner,
-    {
+    pub(crate) fn next_token<R>(&mut self, _registry: &mut R) -> Option<LexItem<Range<usize>>> {
         self.scanner.next().map(|(result, range)| {
             (
                 result.and_then(|kind| {
-                    mk_token(kind, &self.scanner.src.borrow()[range.clone()], interner)
+                    mk_token(
+                        kind,
+                        StringRef::new(self.scanner.src.clone(), range.clone()),
+                    )
                 }),
                 range,
             )
@@ -244,17 +234,15 @@ mod tests {
     use super::Literal::Number;
     use super::Token::*;
 
-    use crate::assembler::session::MockInterner;
-
     use std::borrow::Borrow;
 
-    type LexResult<I> = Result<Token<I, super::Literal<String>>, LexError>;
+    type LexResult = Result<SemanticToken, LexError>;
 
-    impl<B: Borrow<str>> Iterator for Lexer<B> {
-        type Item = (LexResult<String>, Range<usize>);
+    impl Iterator for Lexer {
+        type Item = (LexResult, Range<usize>);
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.next_token(&mut (), &mut MockInterner)
+            self.next_token(&mut ())
         }
     }
 
@@ -279,33 +267,39 @@ mod tests {
         )
     }
 
-    fn test_byte_range_at_eos(src: &'static str, tokens: impl Borrow<[(TestToken, Range<usize>)]>) {
+    fn test_byte_range_at_eos(
+        src: &'static str,
+        tokens: impl Borrow<[(SemanticToken, Range<usize>)]>,
+    ) {
         let expected: Vec<_> = tokens
             .borrow()
             .iter()
             .cloned()
             .map(|(t, r)| (Ok(t), r))
             .collect();
-        assert_eq!(Lexer::new(src).collect::<Vec<_>>(), expected)
+        assert_eq!(
+            Lexer::new(src.to_owned().into()).collect::<Vec<_>>(),
+            expected
+        )
     }
 
-    fn assert_eq_tokens(src: &str, expected_without_eos: impl Borrow<[TestToken]>) {
+    fn assert_eq_tokens(src: &str, expected_without_eos: impl Borrow<[SemanticToken]>) {
         assert_eq_lex_results(src, expected_without_eos.borrow().iter().cloned().map(Ok))
     }
 
     fn assert_eq_lex_results<I>(src: &str, expected_without_eos: I)
     where
-        I: IntoIterator<Item = Result<TestToken, LexError>>,
+        I: IntoIterator<Item = Result<SemanticToken, LexError>>,
     {
         let mut expected: Vec<_> = expected_without_eos.into_iter().collect();
         expected.push(Ok(Eos.into()));
         assert_eq!(
-            Lexer::new(src).map(|(t, _)| t).collect::<Vec<_>>(),
+            Lexer::new(src.to_owned().into())
+                .map(|(t, _)| t)
+                .collect::<Vec<_>>(),
             expected
         )
     }
-
-    type TestToken = Token<String, crate::assembler::syntax::Literal<String>>;
 
     #[test]
     fn lex_empty_str() {
@@ -344,7 +338,7 @@ mod tests {
     fn lex_quoted_string() {
         assert_eq_tokens(
             "\"file.asm\"",
-            [Literal(super::Literal::String("file.asm".to_string()))],
+            [Literal(super::Literal::String("file.asm".into()))],
         )
     }
 

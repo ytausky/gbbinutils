@@ -9,29 +9,25 @@ use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{SpanSource, SpanSystem};
 
-impl<C, R, I, D> ReentrancyActions<<Self as StringSource>::StringRef, R::Span>
-    for CompositeSession<C, R, I, D>
+impl<C, R, D> ReentrancyActions<R::Span> for CompositeSession<C, R, D>
 where
     C: Codebase,
-    Self: Lex<R, I, Span = R::Span>,
-    Self: Interner<StringRef = I::StringRef>,
+    Self: Lex<R, Span = R::Span>,
     Self: NextToken,
-    Self: MacroTable<<Self as StringSource>::StringRef, <Self as SpanSource>::Span>,
+    Self: MacroTable<<Self as SpanSource>::Span>,
     R: SpanSystem<BufId>,
-    I: Interner,
     Self: EmitDiag<R::Span, R::Stripped>,
-    Self: StartScope + NameTable<<Self as StringSource>::StringRef>,
+    Self: StartScope + NameTable<StringRef>,
     Self: Backend<R::Span>,
-    <Self as StringSource>::StringRef: 'static,
     <Self as SpanSource>::Span: 'static,
-    <Self as Lex<R, I>>::TokenIter: 'static,
+    <Self as Lex<R>>::TokenIter: 'static,
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
     R::FileInclusionMetadataId: 'static,
 {
     fn analyze_file(
         &mut self,
-        path: <Self as StringSource>::StringRef,
+        path: StringRef,
         from: Option<R::Span>,
     ) -> Result<(), CodebaseError> {
         #[cfg(test)]
@@ -43,8 +39,8 @@ where
         let tokens = self.lex_file(path, from)?;
         self.tokens.push(Box::new(tokens));
         let mut parser = <DefaultParserFactory as ParserFactory<
-            <Self as StringSource>::StringRef,
-            Literal<<Self as StringSource>::StringRef>,
+            StringRef,
+            Literal,
             LexError,
             <Self as SpanSource>::Span,
         >>::mk_parser(&mut DefaultParserFactory);

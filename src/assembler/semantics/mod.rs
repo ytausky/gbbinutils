@@ -1,5 +1,6 @@
 use super::keywords::{BuiltinMnemonic, Directive, Mnemonic, OperandKeyword};
 use super::session::*;
+use super::string_ref::StringRef;
 use super::syntax::actions::*;
 use super::syntax::{LexError, Literal, SemanticToken, Sigil, Token};
 
@@ -34,15 +35,14 @@ impl<'a, 'b, S: Analysis, T> Semantics<'a, S, T> {
     }
 }
 
-type TokenStreamSemantics<'a, S> =
-    Semantics<'a, S, TokenStreamState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
+type TokenStreamSemantics<'a, S> = Semantics<'a, S, TokenStreamState<<S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub(super) struct TokenStreamState<R, S> {
-    mode: LineRule<InstrLineState<R, S>, TokenLineState<R, S>>,
+pub(super) struct TokenStreamState<S> {
+    mode: LineRule<InstrLineState<S>, TokenLineState<S>>,
 }
 
-impl<R, S> TokenStreamState<R, S> {
+impl<S> TokenStreamState<S> {
     pub fn new() -> Self {
         Self {
             mode: LineRule::InstrLine(InstrLineState::new()),
@@ -50,47 +50,45 @@ impl<R, S> TokenStreamState<R, S> {
     }
 }
 
-type InstrLineSemantics<'a, S> =
-    Semantics<'a, S, InstrLineState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
+type InstrLineSemantics<'a, S> = Semantics<'a, S, InstrLineState<<S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct InstrLineState<R, S> {
-    label: Option<Label<R, S>>,
+pub struct InstrLineState<S> {
+    label: Option<Label<S>>,
 }
 
-impl<R, S> InstrLineState<R, S> {
+impl<S> InstrLineState<S> {
     fn new() -> Self {
         Self { label: None }
     }
 }
 
-type Label<R, S> = ((R, S), Params<R, S>);
-type Params<I, S> = (Vec<I>, Vec<S>);
+type Label<S> = ((StringRef, S), Params<S>);
+type Params<S> = (Vec<StringRef>, Vec<S>);
 
-type TokenLineSemantics<'a, S> =
-    Semantics<'a, S, TokenLineState<<S as StringSource>::StringRef, <S as SpanSource>::Span>>;
+type TokenLineSemantics<'a, S> = Semantics<'a, S, TokenLineState<<S as SpanSource>::Span>>;
 
 #[derive(Debug, PartialEq)]
-pub struct TokenLineState<R, S> {
-    context: TokenContext<R, S>,
+pub struct TokenLineState<S> {
+    context: TokenContext<S>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TokenContext<R, S> {
+pub enum TokenContext<S> {
     FalseIf,
-    MacroDef(MacroDefState<R, S>),
+    MacroDef(MacroDefState<S>),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MacroDefState<R, S> {
-    label: Option<Label<R, S>>,
-    tokens: TokenSeq<R, S>,
+pub struct MacroDefState<S> {
+    label: Option<Label<S>>,
+    tokens: TokenSeq<S>,
 }
 
-pub type TokenSeq<R, S> = (Vec<SemanticToken<R>>, Vec<S>);
+pub type TokenSeq<S> = (Vec<SemanticToken>, Vec<S>);
 
-impl<R, S> MacroDefState<R, S> {
-    fn new(label: Option<Label<R, S>>) -> Self {
+impl<S> MacroDefState<S> {
+    fn new(label: Option<Label<S>>) -> Self {
         Self {
             label,
             tokens: (Vec::new(), Vec::new()),
@@ -101,16 +99,13 @@ impl<R, S> MacroDefState<R, S> {
 type BuiltinInstrSemantics<'a, S> = Semantics<'a, S, BuiltinInstrState<S>>;
 
 pub(super) struct BuiltinInstrState<S: Analysis> {
-    label: Option<Label<S::StringRef, S::Span>>,
+    label: Option<Label<S::Span>>,
     mnemonic: Spanned<BuiltinMnemonic, S::Span>,
-    args: BuiltinInstrArgs<S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Span>,
 }
 
 impl<S: Analysis> BuiltinInstrState<S> {
-    fn new(
-        label: Option<Label<S::StringRef, S::Span>>,
-        mnemonic: Spanned<BuiltinMnemonic, S::Span>,
-    ) -> Self {
+    fn new(label: Option<Label<S::Span>>, mnemonic: Spanned<BuiltinMnemonic, S::Span>) -> Self {
         Self {
             label,
             mnemonic,
@@ -119,36 +114,33 @@ impl<S: Analysis> BuiltinInstrState<S> {
     }
 }
 
-type BuiltinInstrArgs<R, S> = Vec<ParsedArg<R, S>>;
+type BuiltinInstrArgs<S> = Vec<ParsedArg<S>>;
 
-pub(super) type ArgSemantics<'a, S> = Semantics<
-    'a,
-    S,
-    ExprBuilder<<S as StringSource>::StringRef, <S as SpanSource>::Span, BuiltinInstrState<S>>,
->;
+pub(super) type ArgSemantics<'a, S> =
+    Semantics<'a, S, ExprBuilder<<S as SpanSource>::Span, BuiltinInstrState<S>>>;
 
-pub(crate) struct ExprBuilder<R, S, P> {
-    arg: Option<ParsedArg<R, S>>,
+pub(crate) struct ExprBuilder<S, P> {
+    arg: Option<ParsedArg<S>>,
     parent: P,
 }
 
-impl<R, S, P> ExprBuilder<R, S, P> {
+impl<S, P> ExprBuilder<S, P> {
     pub fn new(parent: P) -> Self {
         Self { arg: None, parent }
     }
 }
 
-enum ParsedArg<R, S> {
-    Bare(Expr<R, S>),
-    Parenthesized(Expr<R, S>, S),
-    String(R, S),
+enum ParsedArg<S> {
+    Bare(Expr<StringRef, S>),
+    Parenthesized(Expr<StringRef, S>, S),
+    String(StringRef, S),
     Error,
 }
 
-enum Arg<R, S> {
+enum Arg<S> {
     Bare(BareArg<S>),
     Deref(BareArg<S>, S),
-    String(R, S),
+    String(StringRef, S),
     Error,
 }
 
@@ -158,16 +150,13 @@ enum BareArg<S> {
     OperandKeyword(OperandKeyword, S),
 }
 
-trait NameVisibility<R> {
-    fn name_visibility(&self, name: &R) -> Visibility;
+trait NameVisibility {
+    fn name_visibility(&self, name: &str) -> Visibility;
 }
 
-impl<S> NameVisibility<S::StringRef> for S
-where
-    S: Interner + NameTable<<S as StringSource>::StringRef>,
-{
-    fn name_visibility(&self, name: &S::StringRef) -> Visibility {
-        if self.get_string(name).starts_with('_') {
+impl<S> NameVisibility for S {
+    fn name_visibility(&self, name: &str) -> Visibility {
+        if name.starts_with('_') {
             Visibility::Local
         } else {
             Visibility::Global
@@ -179,12 +168,12 @@ trait DefineName<R> {
     fn define_name(&mut self, name: R, entry: NameEntry);
 }
 
-impl<S> DefineName<S::StringRef> for S
+impl<S> DefineName<StringRef> for S
 where
-    S: Interner + NameTable<<S as StringSource>::StringRef>,
+    S: NameTable<StringRef>,
 {
-    fn define_name(&mut self, name: S::StringRef, entry: NameEntry) {
-        let visibility = self.name_visibility(&name);
+    fn define_name(&mut self, name: StringRef, entry: NameEntry) {
+        let visibility = self.name_visibility(name.as_ref());
         self.define_name_with_visibility(name, visibility, entry)
     }
 }
@@ -193,26 +182,26 @@ trait ResolveName<R> {
     fn resolve_name(&mut self, name: &R) -> Option<NameEntry>;
 }
 
-impl<S> ResolveName<S::StringRef> for S
+impl<S> ResolveName<StringRef> for S
 where
-    S: Interner + NameTable<<S as StringSource>::StringRef>,
+    S: NameTable<StringRef>,
 {
-    fn resolve_name(&mut self, name: &S::StringRef) -> Option<NameEntry> {
-        let visibility = self.name_visibility(name);
+    fn resolve_name(&mut self, name: &StringRef) -> Option<NameEntry> {
+        let visibility = self.name_visibility(name.as_ref());
         self.resolve_name_with_visibility(name, visibility)
     }
 }
 
-impl<R, S> From<InstrLineState<R, S>> for TokenStreamState<R, S> {
-    fn from(actions: InstrLineState<R, S>) -> Self {
+impl<S> From<InstrLineState<S>> for TokenStreamState<S> {
+    fn from(actions: InstrLineState<S>) -> Self {
         Self {
             mode: LineRule::InstrLine(actions),
         }
     }
 }
 
-impl<R, S> From<TokenLineState<R, S>> for TokenStreamState<R, S> {
-    fn from(actions: TokenLineState<R, S>) -> Self {
+impl<S> From<TokenLineState<S>> for TokenStreamState<S> {
+    fn from(actions: TokenLineState<S>) -> Self {
         Self {
             mode: LineRule::TokenLine(actions),
         }
@@ -223,8 +212,8 @@ impl<'a, S, T> ParsingContext for Semantics<'a, S, T>
 where
     S: NextToken + Diagnostics<<S as SpanSource>::Span>,
 {
-    type Ident = S::StringRef;
-    type Literal = Literal<S::StringRef>;
+    type Ident = StringRef;
+    type Literal = Literal;
     type Error = LexError;
     type Span = S::Span;
     type Stripped = <S as StripSpan<<S as SpanSource>::Span>>::Stripped;
@@ -250,7 +239,6 @@ where
 
 impl<'a, S: Analysis> TokenStreamContext for TokenStreamSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type InstrLineContext = InstrLineSemantics<'a, S>;
@@ -311,7 +299,7 @@ impl<'a, S: Analysis> LineFinalizer for TokenStreamSemantics<'a, S> {
 impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
     type ContextFinalizer = TokenContextFinalizationSemantics<'a, S>;
 
-    fn act_on_token(&mut self, token: SemanticToken<S::StringRef>, span: S::Span) {
+    fn act_on_token(&mut self, token: SemanticToken, span: S::Span) {
         match &mut self.state.context {
             TokenContext::FalseIf => (),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
@@ -320,10 +308,11 @@ impl<'a, S: Analysis> TokenLineContext for TokenLineSemantics<'a, S> {
 
     fn act_on_mnemonic(
         mut self,
-        ident: S::StringRef,
+        ident: StringRef,
         span: S::Span,
     ) -> TokenLineRule<Self, Self::ContextFinalizer> {
-        if let Some(MnemonicEntry::Builtin(mnemonic)) = self.session.mnemonic_lookup(&ident) {
+        if let Some(MnemonicEntry::Builtin(mnemonic)) = self.session.mnemonic_lookup(ident.clone())
+        {
             if let TokenLineRule::LineEnd(()) =
                 self.state.context.act_on_mnemonic(&mnemonic, span.clone())
             {
@@ -339,9 +328,9 @@ pub(crate) trait ActOnMnemonic<M, S> {
     fn act_on_mnemonic(&mut self, mnemonic: M, span: S) -> TokenLineRule<(), ()>;
 }
 
-impl<R, S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenContext<R, S>
+impl<S> ActOnMnemonic<&'static BuiltinMnemonic, S> for TokenContext<S>
 where
-    Self: ActOnToken<SemanticToken<R>, S>,
+    Self: ActOnToken<S>,
 {
     fn act_on_mnemonic(
         &mut self,
@@ -361,12 +350,12 @@ where
     }
 }
 
-pub trait ActOnToken<T, S> {
-    fn act_on_token(&mut self, token: T, span: S);
+pub trait ActOnToken<S> {
+    fn act_on_token(&mut self, token: SemanticToken, span: S);
 }
 
-impl<R, S> ActOnToken<SemanticToken<R>, S> for TokenContext<R, S> {
-    fn act_on_token(&mut self, token: SemanticToken<R>, span: S) {
+impl<S> ActOnToken<S> for TokenContext<S> {
+    fn act_on_token(&mut self, token: SemanticToken, span: S) {
         match self {
             TokenContext::FalseIf => drop((token, span)),
             TokenContext::MacroDef(state) => state.act_on_token(token, span),
@@ -374,8 +363,8 @@ impl<R, S> ActOnToken<SemanticToken<R>, S> for TokenContext<R, S> {
     }
 }
 
-impl<R, S> MacroDefState<R, S> {
-    fn act_on_token(&mut self, token: SemanticToken<R>, span: S) {
+impl<S> MacroDefState<S> {
+    fn act_on_token(&mut self, token: SemanticToken, span: S) {
         self.tokens.0.push(token);
         self.tokens.1.push(span)
     }
@@ -395,8 +384,8 @@ pub(super) struct TokenContextFinalizationSemantics<'a, S: Analysis> {
 }
 
 impl<'a, S: Analysis> ParsingContext for TokenContextFinalizationSemantics<'a, S> {
-    type Ident = S::StringRef;
-    type Literal = Literal<S::StringRef>;
+    type Ident = StringRef;
+    type Literal = Literal;
     type Error = LexError;
     type Span = S::Span;
     type Stripped = <S as StripSpan<S::Span>>::Stripped;
@@ -443,13 +432,12 @@ impl<'a, S: Analysis> LineFinalizer for TokenContextFinalizationSemantics<'a, S>
 
 impl<'a, S: Analysis> InstrLineContext for InstrLineSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type LabelContext = LabelSemantics<'a, S>;
     type InstrContext = Self;
 
-    fn will_parse_label(mut self, label: (S::StringRef, S::Span)) -> Self::LabelContext {
+    fn will_parse_label(mut self, label: (StringRef, S::Span)) -> Self::LabelContext {
         self.flush_label();
         self.map_state(|line| LabelState::new(line, label))
     }
@@ -457,7 +445,6 @@ where
 
 impl<'a, S: Analysis> InstrContext for InstrLineSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type BuiltinInstrContext = BuiltinInstrSemantics<'a, S>;
@@ -467,10 +454,10 @@ where
 
     fn will_parse_instr(
         mut self,
-        ident: S::StringRef,
+        ident: StringRef,
         span: S::Span,
     ) -> InstrRule<Self::BuiltinInstrContext, Self::MacroInstrContext, Self> {
-        match self.session.mnemonic_lookup(&ident) {
+        match self.session.mnemonic_lookup(ident) {
             Some(MnemonicEntry::Builtin(mnemonic)) => {
                 if !mnemonic.binds_to_label() {
                     self.flush_label();
@@ -500,7 +487,7 @@ where
 impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
     pub fn flush_label(&mut self) {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            if self.session.name_visibility(&label) == Visibility::Global {
+            if self.session.name_visibility(label.as_ref()) == Visibility::Global {
                 self.session.start_scope();
             }
             let id = self.reloc_lookup(label, span.clone());
@@ -517,7 +504,7 @@ impl<'a, S, T> Semantics<'a, S, T>
 where
     S: Analysis,
 {
-    fn reloc_lookup(&mut self, name: S::StringRef, span: S::Span) -> SymbolId {
+    fn reloc_lookup(&mut self, name: StringRef, span: S::Span) -> SymbolId {
         match self.session.resolve_name(&name) {
             Some(NameEntry::OperandKeyword(_)) => unimplemented!(),
             Some(NameEntry::Symbol(id)) => id,
@@ -533,16 +520,13 @@ where
 pub(super) type LabelSemantics<'a, S> = Semantics<'a, S, LabelState<S>>;
 
 pub(super) struct LabelState<S: Analysis> {
-    parent: InstrLineState<S::StringRef, S::Span>,
-    label: (S::StringRef, S::Span),
-    params: Params<S::StringRef, S::Span>,
+    parent: InstrLineState<S::Span>,
+    label: (StringRef, S::Span),
+    params: Params<S::Span>,
 }
 
 impl<S: Analysis> LabelState<S> {
-    pub fn new(
-        parent: InstrLineState<S::StringRef, S::Span>,
-        label: (S::StringRef, S::Span),
-    ) -> Self {
+    pub fn new(parent: InstrLineState<S::Span>, label: (StringRef, S::Span)) -> Self {
         Self {
             parent,
             label,
@@ -554,7 +538,7 @@ impl<S: Analysis> LabelState<S> {
 impl<'a, S: Analysis> LabelContext for LabelSemantics<'a, S> {
     type Next = InstrLineSemantics<'a, S>;
 
-    fn act_on_param(&mut self, ident: S::StringRef, span: S::Span) {
+    fn act_on_param(&mut self, ident: StringRef, span: S::Span) {
         let params = &mut self.state.params;
         params.0.push(ident);
         params.1.push(span)
@@ -569,13 +553,13 @@ impl<'a, S: Analysis> LabelContext for LabelSemantics<'a, S> {
 pub(super) type MacroInstrSemantics<'a, S> = Semantics<'a, S, MacroInstrState<S>>;
 
 pub(super) struct MacroInstrState<S: Analysis> {
-    parent: InstrLineState<S::StringRef, S::Span>,
+    parent: InstrLineState<S::Span>,
     name: (MacroId, S::Span),
-    args: (Vec<Box<[SemanticToken<S::StringRef>]>>, Vec<Box<[S::Span]>>),
+    args: (Vec<Box<[SemanticToken]>>, Vec<Box<[S::Span]>>),
 }
 
 impl<S: Analysis> MacroInstrState<S> {
-    pub fn new(parent: InstrLineState<S::StringRef, S::Span>, name: (MacroId, S::Span)) -> Self {
+    pub fn new(parent: InstrLineState<S::Span>, name: (MacroId, S::Span)) -> Self {
         Self {
             parent,
             name,
@@ -583,7 +567,7 @@ impl<S: Analysis> MacroInstrState<S> {
         }
     }
 
-    fn push_arg(&mut self, arg: TokenSeq<S::StringRef, S::Span>) {
+    fn push_arg(&mut self, arg: TokenSeq<S::Span>) {
         let args = &mut self.args;
         args.0.push(arg.0.into_boxed_slice());
         args.1.push(arg.1.into_boxed_slice())
@@ -592,7 +576,6 @@ impl<S: Analysis> MacroInstrState<S> {
 
 impl<'a, S: Analysis> MacroInstrContext for MacroInstrSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type MacroArgContext = MacroArgSemantics<'a, S>;
@@ -604,7 +587,6 @@ where
 
 impl<'a, S: Analysis> InstrFinalizer for MacroInstrSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type Next = TokenStreamSemantics<'a, S>;
@@ -627,7 +609,7 @@ where
 type MacroArgSemantics<'a, S> = Semantics<'a, S, MacroArgState<S>>;
 
 pub(super) struct MacroArgState<S: Analysis> {
-    tokens: TokenSeq<S::StringRef, S::Span>,
+    tokens: TokenSeq<S::Span>,
     parent: MacroInstrState<S>,
 }
 
@@ -643,7 +625,7 @@ impl<S: Analysis> MacroArgState<S> {
 impl<'a, S: Analysis> MacroArgContext for MacroArgSemantics<'a, S> {
     type Next = MacroInstrSemantics<'a, S>;
 
-    fn act_on_token(&mut self, (token, span): (SemanticToken<S::StringRef>, S::Span)) {
+    fn act_on_token(&mut self, (token, span): (SemanticToken, S::Span)) {
         let tokens = &mut self.state.tokens;
         tokens.0.push(token);
         tokens.1.push(span)
@@ -655,9 +637,7 @@ impl<'a, S: Analysis> MacroArgContext for MacroArgSemantics<'a, S> {
     }
 }
 
-impl<S: Analysis> From<BuiltinInstrState<S>>
-    for TokenStreamState<<S as StringSource>::StringRef, <S as SpanSource>::Span>
-{
+impl<S: Analysis> From<BuiltinInstrState<S>> for TokenStreamState<<S as SpanSource>::Span> {
     fn from(_: BuiltinInstrState<S>) -> Self {
         InstrLineState::new().into()
     }
@@ -665,7 +645,6 @@ impl<S: Analysis> From<BuiltinInstrState<S>>
 
 impl<'a, S: Analysis> BuiltinInstrContext for BuiltinInstrSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type ArgContext = ArgSemantics<'a, S>;
@@ -680,7 +659,6 @@ where
 
 impl<'a, S: Analysis> InstrFinalizer for BuiltinInstrSemantics<'a, S>
 where
-    S::StringRef: 'static,
     S::Span: 'static,
 {
     type Next = TokenStreamSemantics<'a, S>;
@@ -708,10 +686,7 @@ where
 }
 
 impl<'a, S: Analysis, T> Semantics<'a, S, T> {
-    fn expect_const(
-        &mut self,
-        arg: ParsedArg<S::StringRef, S::Span>,
-    ) -> Result<Expr<SymbolId, S::Span>, ()> {
+    fn expect_const(&mut self, arg: ParsedArg<S::Span>) -> Result<Expr<SymbolId, S::Span>, ()> {
         match self.session.resolve_names(arg)? {
             Arg::Bare(BareArg::Const(value)) => Ok(value),
             Arg::Bare(BareArg::OperandKeyword(_, span)) => {
@@ -727,8 +702,8 @@ impl<'a, S: Analysis, T> Semantics<'a, S, T> {
 
     fn define_symbol_with_params(
         &mut self,
-        (name, span): (S::StringRef, S::Span),
-        expr: ParsedArg<S::StringRef, S::Span>,
+        (name, span): (StringRef, S::Span),
+        expr: ParsedArg<S::Span>,
     ) {
         if let Ok(expr) = self.expect_const(expr) {
             let id = self.reloc_lookup(name, span.clone());
@@ -751,7 +726,7 @@ impl From<Mnemonic> for BuiltinMnemonic {
 
 fn analyze_mnemonic<S: Analysis>(
     name: (&Mnemonic, S::Span),
-    args: BuiltinInstrArgs<S::StringRef, S::Span>,
+    args: BuiltinInstrArgs<S::Span>,
     session: &mut S,
 ) {
     let mut operands = Vec::new();
@@ -769,23 +744,20 @@ fn analyze_mnemonic<S: Analysis>(
     }
 }
 
-trait Resolve<R, S> {
-    fn resolve_names(&mut self, arg: ParsedArg<R, S>) -> Result<Arg<R, S>, ()>;
+trait Resolve<S> {
+    fn resolve_names(&mut self, arg: ParsedArg<S>) -> Result<Arg<S>, ()>;
 }
 
 trait ClassifyExpr<I, S> {
     fn classify_expr(&mut self, expr: Expr<I, S>) -> Result<BareArg<S>, ()>;
 }
 
-impl<T, S> Resolve<T::StringRef, S> for T
+impl<T, S> Resolve<S> for T
 where
-    T: Interner + NameTable<<T as StringSource>::StringRef> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<StringRef> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn resolve_names(
-        &mut self,
-        arg: ParsedArg<T::StringRef, S>,
-    ) -> Result<Arg<T::StringRef, S>, ()> {
+    fn resolve_names(&mut self, arg: ParsedArg<S>) -> Result<Arg<S>, ()> {
         match arg {
             ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
                 BareArg::OperandKeyword(symbol, span) => {
@@ -806,12 +778,12 @@ where
     }
 }
 
-impl<T, S> ClassifyExpr<T::StringRef, S> for T
+impl<T, S> ClassifyExpr<StringRef, S> for T
 where
-    T: Interner + NameTable<<T as StringSource>::StringRef> + Diagnostics<S> + AllocSymbol<S>,
+    T: NameTable<StringRef> + Diagnostics<S> + AllocSymbol<S>,
     S: Clone,
 {
-    fn classify_expr(&mut self, mut expr: Expr<T::StringRef, S>) -> Result<BareArg<S>, ()> {
+    fn classify_expr(&mut self, mut expr: Expr<StringRef, S>) -> Result<BareArg<S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {
@@ -905,7 +877,7 @@ impl<'a, S: Analysis> ArgFinalizer for ArgSemantics<'a, S> {
 }
 
 impl<'a, S: Analysis> ArgContext for ArgSemantics<'a, S> {
-    fn act_on_atom(&mut self, atom: ExprAtom<S::StringRef, Literal<S::StringRef>>, span: S::Span) {
+    fn act_on_atom(&mut self, atom: ExprAtom<StringRef, Literal>, span: S::Span) {
         match atom {
             ExprAtom::Ident(ident) => self.act_on_ident(ident, span),
             ExprAtom::Literal(Literal::Number(n)) => {
@@ -934,7 +906,7 @@ impl<'a, S: Analysis> ArgContext for ArgSemantics<'a, S> {
 }
 
 impl<'a, S: Analysis> ArgSemantics<'a, S> {
-    fn act_on_expr_node(&mut self, node: ExprOp<S::StringRef>, span: S::Span) {
+    fn act_on_expr_node(&mut self, node: ExprOp<StringRef>, span: S::Span) {
         self.state.arg = match self.state.arg.take() {
             None => Some(ParsedArg::Bare(Expr(vec![node.with_span(span)]))),
             Some(ParsedArg::Bare(mut expr)) | Some(ParsedArg::Parenthesized(mut expr, _)) => {
@@ -946,7 +918,7 @@ impl<'a, S: Analysis> ArgSemantics<'a, S> {
         }
     }
 
-    fn act_on_ident(&mut self, ident: S::StringRef, span: S::Span) {
+    fn act_on_ident(&mut self, ident: StringRef, span: S::Span) {
         let no_params = vec![];
         let params = match &self.state.parent.label {
             Some((_, (params, _))) => &params,
@@ -975,7 +947,7 @@ mod tests {
     use std::borrow::Borrow;
     use std::fmt::Debug;
 
-    pub(super) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, String, S, S>;
+    pub(super) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, S, S>;
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
@@ -1071,7 +1043,7 @@ mod tests {
                 .will_parse_instr("RST".into(), ())
                 .into_builtin_instr();
             let mut expr = command.will_parse_arg();
-            expr.act_on_atom(ExprAtom::Ident(name.to_owned()), ());
+            expr.act_on_atom(ExprAtom::Ident(name.into()), ());
             expr.act_on_atom(ExprAtom::Literal(Literal::Number(1)), ());
             expr.act_on_operator(Operator::FnCall(1), ());
             expr.did_parse_arg()
@@ -1083,7 +1055,7 @@ mod tests {
             actions,
             [
                 Event::DefineNameWithVisibility {
-                    ident: name.to_owned(),
+                    ident: name.into(),
                     visibility: Visibility::Global,
                     entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0))),
                 },
@@ -1236,7 +1208,7 @@ mod tests {
     fn test_macro_definition(
         name: &str,
         params: impl Borrow<[&'static str]>,
-        body: impl Borrow<[SemanticToken<String>]>,
+        body: impl Borrow<[SemanticToken]>,
     ) {
         let actions = collect_semantic_actions(|actions| {
             let mut params_actions = actions
@@ -1359,7 +1331,7 @@ mod tests {
 
     pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<Event<S>>
     where
-        I: IntoIterator<Item = (String, NameEntry)>,
+        I: IntoIterator<Item = (StringRef, NameEntry)>,
         F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
         S: Clone + Default + Debug + Merge,
     {

@@ -58,24 +58,21 @@ impl<R> BiLevelNameTable<R> {
     }
 }
 
-impl<C, R: SpanSystem<BufId>, I, D> NameTable<I::StringRef> for CompositeSession<C, R, I, D>
+impl<C, R: SpanSystem<BufId>, D> NameTable<StringRef> for CompositeSession<C, R, D>
 where
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
-    I: Interner,
 {
     fn resolve_name_with_visibility(
         &mut self,
-        ident: &I::StringRef,
+        ident: &StringRef,
         visibility: Visibility,
     ) -> Option<NameEntry> {
         let table = self.names.select_table_mut(visibility);
-        let interner = &mut self.interner;
-        table.get(&ident).cloned().map_or_else(
+        table.get(ident).cloned().map_or_else(
             || {
-                let representative =
-                    interner.intern(&interner.get_string(ident).to_ascii_uppercase());
+                let representative = ident.as_ref().to_ascii_uppercase();
                 if let Some(keyword @ NameEntry::OperandKeyword(_)) =
-                    table.get(&representative).cloned()
+                    table.get(representative.as_str()).cloned()
                 {
                     table.insert(ident.clone(), keyword.clone());
                     Some(keyword)
@@ -89,7 +86,7 @@ where
 
     fn define_name_with_visibility(
         &mut self,
-        ident: I::StringRef,
+        ident: StringRef,
         visibility: Visibility,
         entry: NameEntry,
     ) {
@@ -105,10 +102,9 @@ where
     }
 }
 
-impl<C, R, I, D> StartScope for CompositeSession<C, R, I, D>
+impl<C, R, D> StartScope for CompositeSession<C, R, D>
 where
     R: SpanSystem<BufId>,
-    I: Interner,
 {
     fn start_scope(&mut self) {
         #[cfg(test)]

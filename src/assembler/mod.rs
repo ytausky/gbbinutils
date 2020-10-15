@@ -1,4 +1,4 @@
-use self::session::{Interner, ReentrancyActions, Session};
+use self::session::{ReentrancyActions, Session};
 
 use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
 use crate::diagnostics::{mk_diagnostic, Diagnostic, OutputForwarder};
@@ -8,6 +8,7 @@ use crate::{Config, DiagnosticsConfig, InputConfig};
 mod keywords;
 mod semantics;
 pub mod session;
+mod string_ref;
 mod syntax;
 
 pub struct Assembler<'a> {
@@ -53,8 +54,7 @@ fn try_assemble<'a>(
     let codebase = FileCodebase::new(input);
     let diagnostics = OutputForwarder { output };
     let mut session = Session::new(codebase, diagnostics);
-    let name = session.intern(name);
-    session.analyze_file(name, None)?;
+    session.analyze_file(name.into(), None)?;
 
     let result = Program::link(
         session.builder.object,

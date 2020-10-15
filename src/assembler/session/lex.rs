@@ -1,40 +1,37 @@
-use super::StringSource;
-
-use crate::assembler::session::{CompositeSession, Interner, TokenStream};
+use crate::assembler::session::{CompositeSession, TokenStream};
+use crate::assembler::string_ref::StringRef;
 use crate::assembler::syntax::*;
 use crate::codebase::{BufId, Codebase, CodebaseError};
 use crate::span::{FileInclusionMetadata, Span, SpanSource, SpanSystem};
 
 use std::rc::Rc;
 
-pub(crate) trait Lex<R, I>: StringSource + SpanSource
+pub(crate) trait Lex<R>: SpanSource
 where
     R: SpanSource,
-    I: Interner,
 {
-    type TokenIter: TokenStream<R, I>;
+    type TokenIter: TokenStream<R>;
 
     fn lex_file(
         &mut self,
-        path: Self::StringRef,
+        path: StringRef,
         from: Option<R::Span>,
     ) -> Result<Self::TokenIter, CodebaseError>;
 }
 
-impl<'a, C, R, I, D> Lex<R, I> for CompositeSession<C, R, I, D>
+impl<'a, C, R, D> Lex<R> for CompositeSession<C, R, D>
 where
     C: Codebase,
-    I: Interner,
     R: SpanSystem<BufId>,
 {
     type TokenIter = TokenizedSrc<R::FileInclusionMetadataId>;
 
     fn lex_file(
         &mut self,
-        path: Self::StringRef,
+        path: StringRef,
         from: Option<R::Span>,
     ) -> Result<Self::TokenIter, CodebaseError> {
-        let buf_id = self.codebase.open(&self.interner.get_string(&path))?;
+        let buf_id = self.codebase.open(&path)?;
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(
             rc_src,
@@ -47,7 +44,7 @@ where
 }
 
 pub struct TokenizedSrc<I> {
-    tokens: Lexer<Rc<str>>,
+    tokens: Lexer,
     inclusion: I,
 }
 
@@ -60,17 +57,12 @@ impl<I> TokenizedSrc<I> {
     }
 }
 
-impl<R, I> TokenStream<R, I> for TokenizedSrc<R::FileInclusionMetadataId>
+impl<R> TokenStream<R> for TokenizedSrc<R::FileInclusionMetadataId>
 where
     R: SpanSystem<BufId>,
-    I: Interner,
 {
-    fn next_token(
-        &mut self,
-        registry: &mut R,
-        interner: &mut I,
-    ) -> Option<LexItem<I::StringRef, R::Span>> {
-        self.tokens.next_token(registry, interner).map(|(t, r)| {
+    fn next_token(&mut self, registry: &mut R) -> Option<LexItem<R::Span>> {
+        self.tokens.next_token(registry).map(|(t, r)| {
             (
                 t,
                 registry.encode_span(Span::File(self.inclusion.clone(), r)),

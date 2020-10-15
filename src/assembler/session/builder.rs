@@ -53,10 +53,9 @@ impl<M: SpanSource> ObjectBuilder<M> {
     }
 }
 
-impl<C, R, I, D> Backend<R::Span> for CompositeSession<C, R, I, D>
+impl<C, R, D> Backend<R::Span> for CompositeSession<C, R, D>
 where
     R: SpanSystem<BufId>,
-    I: StringSource,
     Self: Diagnostics<R::Span>,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
@@ -125,10 +124,9 @@ where
     }
 }
 
-impl<C, R, I, D> AllocSymbol<R::Span> for CompositeSession<C, R, I, D>
+impl<C, R, D> AllocSymbol<R::Span> for CompositeSession<C, R, D>
 where
     R: SpanSystem<BufId>,
-    I: StringSource,
 {
     fn alloc_symbol(&mut self, _: R::Span) -> SymbolId {
         self.builder.object.content.symbols.alloc().into()

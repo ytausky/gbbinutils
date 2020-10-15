@@ -511,10 +511,10 @@ mod tests {
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
     type Expr<S> = crate::expr::Expr<SymbolId, S>;
-    type Input = Arg<String, ()>;
+    type Input = Arg<()>;
 
-    impl From<Literal<String>> for Input {
-        fn from(literal: Literal<String>) -> Input {
+    impl From<Literal> for Input {
+        fn from(literal: Literal) -> Input {
             match literal {
                 Literal::Number(n) => Arg::Bare(BareArg::Const(Expr::from_atom(n.into(), ()))),
                 Literal::String(_string) => unimplemented!(),
@@ -1895,7 +1895,7 @@ mod tests {
         AnalysisResult(session.log().to_vec())
     }
 
-    fn add_token_spans((i, operand): (usize, Input)) -> Arg<String, TokenSpan> {
+    fn add_token_spans((i, operand): (usize, Input)) -> Arg<TokenSpan> {
         match operand {
             Arg::Bare(BareArg::Const(value)) => Arg::Bare(BareArg::Const(crate::expr::Expr(
                 value
