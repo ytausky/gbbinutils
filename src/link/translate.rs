@@ -157,12 +157,10 @@ fn is_in_u8_range(n: i32) -> bool {
 mod tests {
     use super::*;
 
-    use crate::codebase::BufId;
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
     use crate::object::num::Num;
-    use crate::object::{Constraints, Content, Object, SymbolId, SymbolTable, Var, VarId};
-    use crate::span::fake::FakeSpanSystem;
+    use crate::object::{Constraints, Content, Data, SymbolId, SymbolTable, Var, VarId};
 
     use std::borrow::Borrow;
 
@@ -230,7 +228,7 @@ mod tests {
 
         // ORG $7ff0
         // NOP
-        let mut object = Object {
+        let mut data = Data {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -243,16 +241,15 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: addr.into() }, Var { value: 1.into() }]),
-            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        object.vars.resolve(&object.content);
+        data.vars.resolve(&data.content);
         let context = &mut LinkageContext {
-            content: &object.content,
-            vars: &object.vars,
+            content: &data.content,
+            vars: &data.vars,
             location: 0.into(),
         };
-        let translated = object
+        let translated = data
             .content
             .sections()
             .next()
@@ -265,7 +262,7 @@ mod tests {
     fn translate_expr_with_location_counter() {
         // NOP
         // DB   .
-        let mut object = Object {
+        let mut data = Data {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints { addr: None },
@@ -279,16 +276,15 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
-            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        object.vars.resolve(&object.content);
+        data.vars.resolve(&data.content);
         let context = &mut LinkageContext {
-            content: &object.content,
-            vars: &object.vars,
+            content: &data.content,
+            vars: &data.vars,
             location: 0.into(),
         };
-        let binary = object
+        let binary = data
             .content
             .sections()
             .next()
@@ -303,7 +299,7 @@ mod tests {
 
         // ORG  $ffe1
         // DW   .
-        let mut object = Object {
+        let mut data = Data {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -319,16 +315,15 @@ mod tests {
                 symbols: SymbolTable::new(),
             },
             vars: VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
-            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        object.vars.resolve(&object.content);
+        data.vars.resolve(&data.content);
         let context = &mut LinkageContext {
-            content: &object.content,
-            vars: &object.vars,
+            content: &data.content,
+            vars: &data.vars,
             location: 0.into(),
         };
-        let binary = object
+        let binary = data
             .content
             .sections()
             .next()

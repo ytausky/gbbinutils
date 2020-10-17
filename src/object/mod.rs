@@ -8,8 +8,12 @@ use std::ops::{Index, IndexMut};
 pub mod num;
 
 pub struct Object<M: SpanSource> {
-    pub content: Content<M::Span>,
+    pub data: Data<M::Span>,
     pub metadata: M,
+}
+
+pub struct Data<S> {
+    pub content: Content<S>,
     pub vars: VarTable,
 }
 
@@ -90,11 +94,10 @@ pub struct Var {
     pub value: Num,
 }
 
-impl<M: Default + SpanSource> Object<M> {
+impl<S> Data<S> {
     pub fn new() -> Self {
-        Object {
+        Data {
             content: Content::new(),
-            metadata: M::default(),
             vars: VarTable::new(),
         }
     }

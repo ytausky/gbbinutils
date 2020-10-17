@@ -4,6 +4,7 @@ use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
 use crate::diagnostics::{mk_diagnostic, Diagnostic, OutputForwarder};
 use crate::link::Program;
 use crate::{Config, DiagnosticsConfig, InputConfig};
+use crate::object::Object;
 
 mod keywords;
 mod semantics;
@@ -57,7 +58,10 @@ fn try_assemble<'a>(
     session.analyze_file(name.into(), None)?;
 
     let result = Program::link(
-        session.builder.object,
+        Object {
+            data: session.builder.data,
+            metadata: session.metadata,
+        },
         session.codebase,
         session.diagnostics,
     );

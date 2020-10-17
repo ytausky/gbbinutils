@@ -121,6 +121,7 @@ where
             #[cfg(test)]
             log: Vec::new(),
             macros: Vec::new(),
+            metadata: R::default(),
             mnemonics,
             names,
             tokens: Vec::new(),
@@ -162,9 +163,10 @@ pub(super) struct CompositeSession<C, R: SpanSystem<BufId>, D> {
     pub codebase: C,
     tokens: Vec<Box<dyn TokenStream<R>>>,
     macros: VecMacroTable<R::MacroDefMetadataId>,
+    pub metadata: R,
     mnemonics: HashMap<StringRef, MnemonicEntry>,
     names: BiLevelNameTable<StringRef>,
-    pub builder: ObjectBuilder<R>,
+    pub builder: ObjectBuilder<R::Span>,
     pub diagnostics: D,
     #[cfg(test)]
     log: Vec<Event<SymbolId, MacroId, R::Span, R::Stripped>>,
@@ -186,7 +188,7 @@ impl<C, R: SpanSystem<BufId>, D> NextToken for CompositeSession<C, R, D> {
             .tokens
             .last_mut()
             .unwrap()
-            .next_token(&mut self.builder.object.metadata)
+            .next_token(&mut self.metadata)
             .unwrap();
         if let Ok(Token::Sigil(Sigil::Eos)) = token.0 {
             self.tokens.pop();
@@ -214,7 +216,7 @@ impl<C, R: SpanSystem<BufId>, D> CompositeSession<C, R, D> {
     fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
-            registry: &mut self.builder.object.metadata,
+            registry: &mut self.metadata,
             diagnostics: &mut self.diagnostics,
         }
     }
@@ -222,7 +224,7 @@ impl<C, R: SpanSystem<BufId>, D> CompositeSession<C, R, D> {
 
 impl<C, R: SpanSystem<BufId>, D> MergeSpans<R::Span> for CompositeSession<C, R, D> {
     fn merge_spans(&mut self, left: &R::Span, right: &R::Span) -> R::Span {
-        self.builder.object.metadata.merge_spans(left, right)
+        self.metadata.merge_spans(left, right)
     }
 }
 
@@ -230,7 +232,7 @@ impl<C, R: SpanSystem<BufId>, D> StripSpan<R::Span> for CompositeSession<C, R, D
     type Stripped = R::Stripped;
 
     fn strip_span(&mut self, span: &R::Span) -> Self::Stripped {
-        self.builder.object.metadata.strip_span(span)
+        self.metadata.strip_span(span)
     }
 }
 

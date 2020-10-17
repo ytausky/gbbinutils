@@ -20,10 +20,10 @@ impl Program {
     where
         for<'a> DiagnosticsContext<'a, C, M, D>: Diagnostics<M::Span>,
     {
-        object.vars.resolve(&object.content);
+        object.data.vars.resolve(&object.data.content);
         let mut context = LinkageContext {
-            content: &object.content,
-            vars: &object.vars,
+            content: &object.data.content,
+            vars: &object.data.vars,
             location: 0.into(),
         };
         let mut diagnostics = DiagnosticsContext {
@@ -33,6 +33,7 @@ impl Program {
         };
         Self {
             sections: object
+                .data
                 .content
                 .sections()
                 .flat_map(|section| section.translate(&mut context, &mut diagnostics))
@@ -211,41 +212,43 @@ mod tests {
         // ORG . + $10
         // HALT
         let object = Object {
-            content: Content {
-                sections: vec![
-                    Section {
-                        constraints: Constraints {
-                            addr: Some(Expr::from_atom(Atom::Const(0x0150), ())),
+            data: Data {
+                content: Content {
+                    sections: vec![
+                        Section {
+                            constraints: Constraints {
+                                addr: Some(Expr::from_atom(Atom::Const(0x0150), ())),
+                            },
+                            addr: VarId(0),
+                            size: VarId(1),
+                            fragments: vec![Fragment::Byte(0x00)],
                         },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Byte(0x00)],
-                    },
-                    Section {
-                        constraints: Constraints {
-                            addr: Some(Expr(vec![
-                                ExprOp::Atom(Atom::Location).with_span(()),
-                                ExprOp::Atom(Atom::Const(0x10)).with_span(()),
-                                ExprOp::Binary(BinOp::Plus).with_span(()),
-                            ])),
+                        Section {
+                            constraints: Constraints {
+                                addr: Some(Expr(vec![
+                                    ExprOp::Atom(Atom::Location).with_span(()),
+                                    ExprOp::Atom(Atom::Const(0x10)).with_span(()),
+                                    ExprOp::Binary(BinOp::Plus).with_span(()),
+                                ])),
+                            },
+                            addr: VarId(2),
+                            size: VarId(3),
+                            fragments: vec![Fragment::Byte(0x76)],
                         },
-                        addr: VarId(2),
-                        size: VarId(3),
-                        fragments: vec![Fragment::Byte(0x76)],
+                    ],
+                    symbols: SymbolTable(vec![]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x0150.into(),
                     },
-                ],
-                symbols: SymbolTable(vec![]),
+                    Var { value: 1.into() },
+                    Var {
+                        value: (0x0150 + 1 + 0x10).into(),
+                    },
+                    Var { value: 1.into() },
+                ]),
             },
-            vars: VarTable(vec![
-                Var {
-                    value: 0x0150.into(),
-                },
-                Var { value: 1.into() },
-                Var {
-                    value: (0x0150 + 1 + 0x10).into(),
-                },
-                Var { value: 1.into() },
-            ]),
             metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
@@ -262,7 +265,7 @@ mod tests {
 
         // ORG $ffe1
         // LABEL
-        let mut object = Object {
+        let mut data = Data {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -282,18 +285,17 @@ mod tests {
                 Var { value: 0.into() },
                 Var { value: addr.into() },
             ]),
-            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        object.vars.resolve(&object.content);
-        assert_eq!(object.vars[VarId(0)].value, addr.into());
+        data.vars.resolve(&data.content);
+        assert_eq!(data.vars[VarId(0)].value, addr.into());
     }
 
     #[test]
     fn empty_section_has_size_zero() {
         assert_section_size(
             0,
-            Object {
+            Data {
                 content: Content {
                     sections: vec![Section {
                         constraints: Constraints { addr: None },
@@ -309,7 +311,6 @@ mod tests {
                     },
                     Var { value: 0.into() },
                 ]),
-                metadata: FakeSpanSystem::default(),
             },
         )
     }
@@ -318,7 +319,7 @@ mod tests {
     fn section_with_one_byte_has_size_one() {
         assert_section_size(
             1,
-            Object {
+            Data {
                 content: Content {
                     sections: vec![Section {
                         constraints: Constraints { addr: None },
@@ -334,7 +335,6 @@ mod tests {
                     },
                     Var { value: 1.into() },
                 ]),
-                metadata: FakeSpanSystem::default(),
             },
         );
     }
@@ -352,7 +352,7 @@ mod tests {
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_section_size(
             expected,
-            Object {
+            Data {
                 content: Content {
                     sections: vec![Section {
                         constraints: Constraints { addr: None },
@@ -370,7 +370,6 @@ mod tests {
                         value: Num::Unknown,
                     },
                 ]),
-                metadata: FakeSpanSystem::default(),
             },
         );
     }
@@ -379,7 +378,7 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(
             3,
-            Object {
+            Data {
                 content: Content {
                     sections: vec![Section {
                         constraints: Constraints { addr: None },
@@ -409,7 +408,6 @@ mod tests {
                         value: Num::Range { min: 2, max: 3 },
                     },
                 ]),
-                metadata: FakeSpanSystem::default(),
             },
         )
     }
@@ -420,26 +418,28 @@ mod tests {
         //              ORG     $1337
         //              DW      my_section
         let object = Object {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(Expr::from_atom(Atom::Const(0x1337), ())),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![Fragment::Immediate(
-                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                        Width::Word,
-                    )],
-                }],
-                symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
-            },
-            vars: VarTable(vec![
-                Var {
-                    value: 0x1337.into(),
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints {
+                            addr: Some(Expr::from_atom(Atom::Const(0x1337), ())),
+                        },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Immediate(
+                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Width::Word,
+                        )],
+                    }],
+                    symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
                 },
-                Var { value: 2.into() },
-            ]),
+                vars: VarTable(vec![
+                    Var {
+                        value: 0x1337.into(),
+                    },
+                    Var { value: 2.into() },
+                ]),
+            },
             metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
@@ -456,7 +456,7 @@ mod tests {
         //          ORG $0100
         //          DS  10
         // label    DW  label
-        let mut object = Object {
+        let mut data = Data {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints {
@@ -487,20 +487,16 @@ mod tests {
                     value: (addr + bytes).into(),
                 },
             ]),
-            metadata: FakeSpanSystem::<BufId, _>::default(),
         };
 
-        object.vars.resolve(&object.content);
-        assert_eq!(object.vars[symbol].value, (addr + bytes).into())
+        data.vars.resolve(&data.content);
+        assert_eq!(data.vars[symbol].value, (addr + bytes).into())
     }
 
-    fn assert_section_size(
-        expected: impl Into<Num>,
-        mut object: Object<FakeSpanSystem<BufId, ()>>,
-    ) {
-        object.vars.resolve(&object.content);
+    fn assert_section_size(expected: impl Into<Num>, mut data: Data<()>) {
+        data.vars.resolve(&data.content);
         assert_eq!(
-            object.vars[object.content.sections().next().unwrap().size].value,
+            data.vars[data.content.sections().next().unwrap().size].value,
             expected.into()
         );
     }
