@@ -3,8 +3,8 @@ use self::session::{ReentrancyActions, Session};
 use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
 use crate::diagnostics::{mk_diagnostic, Diagnostic, OutputForwarder};
 use crate::link::Program;
-use crate::{Config, DiagnosticsConfig, InputConfig};
 use crate::object::Object;
+use crate::{Config, DiagnosticsConfig, InputConfig};
 
 mod keywords;
 mod semantics;

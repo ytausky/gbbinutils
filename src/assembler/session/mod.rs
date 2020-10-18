@@ -83,11 +83,8 @@ pub(crate) enum NameEntry {
     Symbol(SymbolId),
 }
 
-pub(super) type Session<'a> = CompositeSession<
-    FileCodebase<'a, dyn FileSystem>,
-    RcContextFactory<BufId>,
-    OutputForwarder<'a>,
->;
+pub(super) type Session<'a> =
+    CompositeSession<FileCodebase<'a, dyn FileSystem>, Spans<BufId>, OutputForwarder<'a>>;
 
 impl<C, R, D> CompositeSession<C, R, D>
 where
