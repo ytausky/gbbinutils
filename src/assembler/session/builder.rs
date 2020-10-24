@@ -139,13 +139,9 @@ mod tests {
 
     use crate::assembler::session::mock::MockSession;
     use crate::diagnostics::*;
-    use crate::expr::{Atom, BinOp, ExprOp};
-    use crate::link::Program;
+    use crate::expr::{Atom, ExprOp};
     use crate::object::SectionId;
-    use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
-
-    use std::borrow::Borrow;
 
     #[test]
     fn new_object_has_no_sections() {
@@ -212,115 +208,6 @@ mod tests {
         session.builder.data
     }
 
-    fn emit_items_and_compare<I, B>(items: I, bytes: B)
-    where
-        I: Borrow<[Fragment<Expr<SymbolId, ()>>]>,
-        B: Borrow<[u8]>,
-    {
-        let (object, _) = with_object_builder(|builder| {
-            for item in items.borrow() {
-                builder.emit_fragment(item.clone())
-            }
-        });
-        assert_eq!(object.sections.last().unwrap().data, bytes.borrow())
-    }
-
-    #[test]
-    fn emit_literal_byte_item() {
-        emit_items_and_compare([byte_literal(0xff)], [0xff])
-    }
-
-    #[test]
-    fn emit_two_literal_byte_item() {
-        emit_items_and_compare([byte_literal(0x12), byte_literal(0x34)], [0x12, 0x34])
-    }
-
-    fn byte_literal(value: i32) -> Fragment<Expr<SymbolId, ()>> {
-        Fragment::Immediate(value.into(), Width::Byte)
-    }
-
-    #[test]
-    fn emit_diagnostic_when_byte_item_out_of_range() {
-        test_diagnostic_for_out_of_range_byte(i32::from(i8::min_value()) - 1);
-        test_diagnostic_for_out_of_range_byte(i32::from(u8::max_value()) + 1)
-    }
-
-    fn test_diagnostic_for_out_of_range_byte(value: i32) {
-        let (_, diagnostics) =
-            with_object_builder(|builder| builder.emit_fragment(byte_literal(value)));
-        assert_eq!(
-            *diagnostics,
-            [Message::ValueOutOfRange {
-                value,
-                width: Width::Byte,
-            }
-            .at(())
-            .into()]
-        );
-    }
-
-    #[test]
-    fn diagnose_unresolved_symbol() {
-        let name = "ident";
-        let (_, diagnostics) = with_object_builder::<MockSpan<String>, _>(|builder| {
-            let symbol_id = builder.alloc_symbol(name.to_string().into());
-            builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(symbol_id)).with_span(name.to_string().into())
-            ])))
-        });
-        assert_eq!(*diagnostics, [unresolved(name)]);
-    }
-
-    #[test]
-    fn diagnose_two_unresolved_symbols_in_one_expr() {
-        let name1 = "ident1";
-        let name2 = "ident2";
-        let (_, diagnostics) = with_object_builder::<MockSpan<String>, _>(|builder| {
-            let id1 = builder.alloc_symbol(name1.to_string().into());
-            let id2 = builder.alloc_symbol(name2.to_string().into());
-            builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(id1)).with_span(name1.to_string().into()),
-                ExprOp::Atom(Atom::Name(id2)).with_span(name2.to_string().into()),
-                ExprOp::Binary(BinOp::Minus).with_span("diff".to_string().into()),
-            ])))
-        });
-        assert_eq!(*diagnostics, [unresolved(name1), unresolved(name2)]);
-    }
-
-    #[test]
-    fn emit_defined_symbol() {
-        let (object, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.alloc_symbol(());
-            builder.define_symbol(
-                symbol_id,
-                (),
-                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-            );
-            builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(symbol_id)).with_span(())
-            ])));
-        });
-        assert_eq!(*diagnostics, []);
-        assert_eq!(object.sections.last().unwrap().data, [0x00, 0x00])
-    }
-
-    #[test]
-    fn emit_symbol_defined_after_use() {
-        let (object, diagnostics) = with_object_builder(|builder| {
-            let symbol_id = builder.alloc_symbol(());
-            builder.emit_fragment(word_item(Expr(vec![
-                ExprOp::Atom(Atom::Name(symbol_id)).with_span(())
-            ])));
-            builder.define_symbol(
-                symbol_id,
-                (),
-                Expr(vec![ExprOp::Atom(Atom::Location).with_span(())]),
-            );
-        });
-        assert_eq!(*diagnostics, []);
-        assert_eq!(object.sections.last().unwrap().data, [0x02, 0x00])
-    }
-
     #[test]
     fn reserve_bytes_in_section() {
         let bytes = 3;
@@ -350,37 +237,5 @@ mod tests {
                 Some(true)
             )
         });
-    }
-
-    fn with_object_builder<S, F>(f: F) -> (Program, Box<[CompactDiag<S, S>]>)
-    where
-        S: Clone + Debug + Default + Merge + 'static,
-        F: FnOnce(&mut MockSession<S>),
-    {
-        let diagnostics = TestDiagnosticsListener::new();
-        let log = diagnostics.diagnostics.clone();
-        let object = Program::link(
-            Object {
-                data: build_object(f),
-                metadata: FakeSpanSystem::<(), _>::default(),
-            },
-            (),
-            diagnostics,
-        );
-        let diagnostics = log.into_inner().into_boxed_slice();
-        (object, diagnostics)
-    }
-
-    fn word_item<S: Clone>(value: Expr<SymbolId, S>) -> Fragment<Expr<SymbolId, S>> {
-        Fragment::Immediate(value, Width::Word)
-    }
-
-    fn unresolved(symbol: impl Into<String>) -> CompactDiag<MockSpan<String>, MockSpan<String>> {
-        let symbol = symbol.into();
-        Message::UnresolvedSymbol {
-            symbol: symbol.clone().into(),
-        }
-        .at(symbol.into())
-        .into()
     }
 }

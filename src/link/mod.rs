@@ -158,7 +158,7 @@ mod tests {
     use super::*;
 
     use crate::codebase::BufId;
-    use crate::diagnostics::IgnoreDiagnostics;
+    use crate::diagnostics::{IgnoreDiagnostics, Message, MockSpan, TestDiagnosticsListener};
     use crate::expr::Expr;
     use crate::expr::*;
     use crate::span::fake::FakeSpanSystem;
@@ -200,6 +200,286 @@ mod tests {
         };
         let rom = object.into_rom();
         assert_eq!(rom.data.len(), MIN_ROM_LEN)
+    }
+
+    #[test]
+    fn section_with_immediate_byte_fragment() {
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Immediate(
+                            Expr::from_atom(Atom::Const(0xff), ()),
+                            Width::Byte,
+                        )],
+                    }],
+                    symbols: SymbolTable(vec![]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 1.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, ()>::default(),
+        };
+        let program = Program::link(object, (), IgnoreDiagnostics);
+        assert_eq!(program.sections[0].data, [0xff])
+    }
+
+    #[test]
+    fn section_with_two_immediate_byte_fragments() {
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![
+                            Fragment::Immediate(
+                                Expr::from_atom(Atom::Const(0x12), ()),
+                                Width::Byte,
+                            ),
+                            Fragment::Immediate(
+                                Expr::from_atom(Atom::Const(0x34), ()),
+                                Width::Byte,
+                            ),
+                        ],
+                    }],
+                    symbols: SymbolTable(vec![]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 2.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, ()>::default(),
+        };
+        let program = Program::link(object, (), IgnoreDiagnostics);
+        assert_eq!(program.sections[0].data, [0x12, 0x34])
+    }
+
+    #[test]
+    fn diagnose_immediate_byte_fragment_less_than_negative_128() {
+        test_diagnostic_for_out_of_range_immediate_byte_fragment(-129)
+    }
+
+    #[test]
+    fn diagnose_immediate_byte_fragment_greater_than_255() {
+        test_diagnostic_for_out_of_range_immediate_byte_fragment(256)
+    }
+
+    fn test_diagnostic_for_out_of_range_immediate_byte_fragment(value: i32) {
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Immediate(
+                            Expr::from_atom(Atom::Const(value), MockSpan::from("byte")),
+                            Width::Byte,
+                        )],
+                    }],
+                    symbols: SymbolTable(vec![]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 1.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+        };
+        let listener = TestDiagnosticsListener::new();
+        let diagnostics = listener.diagnostics.clone();
+        Program::link(object, (), listener);
+        assert_eq!(
+            *diagnostics.into_inner(),
+            [Message::ValueOutOfRange {
+                value,
+                width: Width::Byte,
+            }
+            .at(MockSpan::from("byte"))
+            .into()]
+        )
+    }
+
+    #[test]
+    fn diagnose_unresolved_symbol() {
+        // DW   name
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Immediate(
+                            Expr::from_atom(
+                                Atom::Name(Symbol::UserDef(UserDefId(0))),
+                                MockSpan::from("name"),
+                            ),
+                            Width::Word,
+                        )],
+                    }],
+                    symbols: SymbolTable(vec![None]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 2.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+        };
+        let listener = TestDiagnosticsListener::new();
+        let diagnostics = listener.diagnostics.clone();
+        Program::link(object, (), listener);
+        assert_eq!(
+            *diagnostics.into_inner(),
+            [Message::UnresolvedSymbol {
+                symbol: MockSpan::from("name")
+            }
+            .at(MockSpan::from("name"))
+            .into()]
+        )
+    }
+
+    #[test]
+    fn diagnose_two_unresolved_symbols_in_one_expr() {
+        // DW   name1 - name2
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Immediate(
+                            Expr(vec![
+                                ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
+                                    .with_span(MockSpan::from("name1")),
+                                ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(1))))
+                                    .with_span(MockSpan::from("name2")),
+                                ExprOp::Binary(BinOp::Minus).with_span(MockSpan::from("diff")),
+                            ]),
+                            Width::Word,
+                        )],
+                    }],
+                    symbols: SymbolTable(vec![None, None]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 2.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+        };
+        let listener = TestDiagnosticsListener::new();
+        let diagnostics = listener.diagnostics.clone();
+        Program::link(object, (), listener);
+        assert_eq!(
+            *diagnostics.into_inner(),
+            [
+                Message::UnresolvedSymbol {
+                    symbol: MockSpan::from("name1")
+                }
+                .at(MockSpan::from("name1"))
+                .into(),
+                Message::UnresolvedSymbol {
+                    symbol: MockSpan::from("name2")
+                }
+                .at(MockSpan::from("name2"))
+                .into()
+            ]
+        )
+    }
+
+    #[test]
+    fn emit_symbol_after_definition() {
+        // name DB  name
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![
+                            Fragment::Reloc(VarId(2)),
+                            Fragment::Immediate(
+                                Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                                Width::Word,
+                            ),
+                        ],
+                    }],
+                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
+                    }))]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 2.into() },
+                    Var { value: 0.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, _>::default(),
+        };
+        let program = Program::link(object, (), IgnoreDiagnostics);
+        assert_eq!(program.sections[0].data, [0x00, 0x00])
+    }
+
+    #[test]
+    fn emit_symbol_before_definition() {
+        // name DB  name
+        let object = Object {
+            data: Data {
+                content: Content {
+                    sections: vec![Section {
+                        constraints: Constraints { addr: None },
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![
+                            Fragment::Immediate(
+                                Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                                Width::Word,
+                            ),
+                            Fragment::Reloc(VarId(2)),
+                        ],
+                    }],
+                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
+                    }))]),
+                },
+                vars: VarTable(vec![
+                    Var {
+                        value: Num::Unknown,
+                    },
+                    Var { value: 2.into() },
+                    Var { value: 2.into() },
+                ]),
+            },
+            metadata: FakeSpanSystem::<BufId, _>::default(),
+        };
+        let program = Program::link(object, (), IgnoreDiagnostics);
+        assert_eq!(program.sections[0].data, [0x02, 0x00])
     }
 
     #[test]
