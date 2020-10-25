@@ -1,5 +1,5 @@
 use crate::diagnostics::{Diagnostics, DiagnosticsContext, IgnoreDiagnostics};
-use crate::object::num::Num;
+use crate::object::var::Var;
 use crate::object::*;
 use crate::span::SpanSource;
 
@@ -84,7 +84,7 @@ impl VarTable {
         let context = &mut LinkageContext {
             content,
             vars: self,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         for section in content.sections() {
             context.location = section.eval_addr(context);
@@ -101,13 +101,13 @@ impl VarTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Num
+    fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Var
     where
         V: Borrow<VarTable>,
         F: FnMut(&Fragment<Expr<S>>, &mut LinkageContext<&Content<S>, V>),
     {
         let addr = context.location.clone();
-        let mut offset = Num::from(0);
+        let mut offset = Var::from(0);
         for item in &self.fragments {
             offset += &item.size(&context);
             context.location = &addr + &offset;
@@ -119,7 +119,7 @@ impl<S: Clone> Section<S> {
     fn eval_addr<'a, V: Borrow<VarTable>>(
         &self,
         context: &LinkageContext<&'a Content<S>, V>,
-    ) -> Num {
+    ) -> Var {
         self.constraints
             .addr
             .as_ref()
@@ -129,14 +129,14 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Fragment<Expr<S>> {
-    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Num {
+    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Var {
         match self {
             Fragment::Byte(_) | Fragment::Embedded(..) => 1.into(),
             Fragment::Immediate(_, width) => width.len().into(),
             Fragment::LdInlineAddr(_, expr) => match expr.to_num(context, &mut IgnoreDiagnostics) {
-                Num::Range { min, .. } if min >= 0xff00 => 2.into(),
-                Num::Range { max, .. } if max < 0xff00 => 3.into(),
-                _ => Num::Range { min: 2, max: 3 },
+                Var::Range { min, .. } if min >= 0xff00 => 2.into(),
+                Var::Range { max, .. } if max < 0xff00 => 3.into(),
+                _ => Var::Range { min: 2, max: 3 },
             },
             Fragment::Reloc(_) => 0.into(),
             Fragment::Reserved(bytes) => bytes.to_num(context, &mut IgnoreDiagnostics),
@@ -218,12 +218,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 1.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
             metadata: FakeSpanSystem::<BufId, ()>::default(),
         };
@@ -253,12 +248,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 2.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
             metadata: FakeSpanSystem::<BufId, ()>::default(),
         };
@@ -291,12 +281,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 1.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
             metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
         };
@@ -334,12 +319,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![None]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 2.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
             metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
         };
@@ -379,12 +359,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![None, None]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 2.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
             metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
         };
@@ -431,13 +406,7 @@ mod tests {
                         location: VarId(2),
                     }))]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 2.into() },
-                    Var { value: 0.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
             },
             metadata: FakeSpanSystem::<BufId, _>::default(),
         };
@@ -468,13 +437,7 @@ mod tests {
                         location: VarId(2),
                     }))]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: Num::Unknown,
-                    },
-                    Var { value: 2.into() },
-                    Var { value: 2.into() },
-                ]),
+                vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
             },
             metadata: FakeSpanSystem::<BufId, _>::default(),
         };
@@ -519,14 +482,10 @@ mod tests {
                     symbols: SymbolTable(vec![]),
                 },
                 vars: VarTable(vec![
-                    Var {
-                        value: 0x0150.into(),
-                    },
-                    Var { value: 1.into() },
-                    Var {
-                        value: (0x0150 + 1 + 0x10).into(),
-                    },
-                    Var { value: 1.into() },
+                    0x0150.into(),
+                    1.into(),
+                    (0x0150 + 1 + 0x10).into(),
+                    1.into(),
                 ]),
             },
             metadata: FakeSpanSystem::<BufId, _>::default(),
@@ -560,15 +519,11 @@ mod tests {
                     location: VarId(2),
                 }))]),
             },
-            vars: VarTable(vec![
-                Var { value: addr.into() },
-                Var { value: 0.into() },
-                Var { value: addr.into() },
-            ]),
+            vars: VarTable(vec![addr.into(), 0.into(), addr.into()]),
         };
 
         data.vars.resolve(&data.content);
-        assert_eq!(data.vars[VarId(0)].value, addr.into());
+        assert_eq!(data.vars[VarId(0)], addr.into());
     }
 
     #[test]
@@ -585,12 +540,7 @@ mod tests {
                     }],
                     symbols: SymbolTable::new(),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: 0x0000.into(),
-                    },
-                    Var { value: 0.into() },
-                ]),
+                vars: VarTable(vec![0x0000.into(), 0.into()]),
             },
         )
     }
@@ -609,12 +559,7 @@ mod tests {
                     }],
                     symbols: SymbolTable::new(),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: 0x0000.into(),
-                    },
-                    Var { value: 1.into() },
-                ]),
+                vars: VarTable(vec![0x0000.into(), 1.into()]),
             },
         );
     }
@@ -642,14 +587,7 @@ mod tests {
                     }],
                     symbols: SymbolTable::new(),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: 0x0000.into(),
-                    },
-                    Var {
-                        value: Num::Unknown,
-                    },
-                ]),
+                vars: VarTable(vec![0x0000.into(), Var::Unknown]),
             },
         );
     }
@@ -678,15 +616,9 @@ mod tests {
                     }))]),
                 },
                 vars: VarTable(vec![
-                    Var {
-                        value: 0x0000.into(),
-                    },
-                    Var {
-                        value: Num::Range { min: 2, max: 3 },
-                    },
-                    Var {
-                        value: Num::Range { min: 2, max: 3 },
-                    },
+                    0x0000.into(),
+                    Var::Range { min: 2, max: 3 },
+                    Var::Range { min: 2, max: 3 },
                 ]),
             },
         )
@@ -713,12 +645,7 @@ mod tests {
                     }],
                     symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
                 },
-                vars: VarTable(vec![
-                    Var {
-                        value: 0x1337.into(),
-                    },
-                    Var { value: 2.into() },
-                ]),
+                vars: VarTable(vec![0x1337.into(), 2.into()]),
             },
             metadata: FakeSpanSystem::<BufId, _>::default(),
         };
@@ -758,25 +685,17 @@ mod tests {
                     location: VarId(2),
                 }))]),
             },
-            vars: VarTable(vec![
-                Var { value: addr.into() },
-                Var {
-                    value: (bytes + 2).into(),
-                },
-                Var {
-                    value: (addr + bytes).into(),
-                },
-            ]),
+            vars: VarTable(vec![addr.into(), (bytes + 2).into(), (addr + bytes).into()]),
         };
 
         data.vars.resolve(&data.content);
-        assert_eq!(data.vars[symbol].value, (addr + bytes).into())
+        assert_eq!(data.vars[symbol], (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Num>, mut data: Data<()>) {
+    fn assert_section_size(expected: impl Into<Var>, mut data: Data<()>) {
         data.vars.resolve(&data.content);
         assert_eq!(
-            data.vars[data.content.sections().next().unwrap().size].value,
+            data.vars[data.content.sections().next().unwrap().size],
             expected.into()
         );
     }

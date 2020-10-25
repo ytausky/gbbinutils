@@ -1,11 +1,11 @@
-use self::num::Num;
+use self::var::Var;
 
 use crate::expr::{Atom, ExprOp};
 use crate::span::SpanSource;
 
 use std::ops::{Index, IndexMut};
 
-pub mod num;
+pub mod var;
 
 pub struct Object<M: SpanSource> {
     pub data: Data<M::Span>,
@@ -89,11 +89,6 @@ pub struct SectionId(pub usize);
 
 pub struct VarTable(pub Vec<Var>);
 
-#[derive(Clone, Default)]
-pub struct Var {
-    pub value: Num,
-}
-
 impl<S> Data<S> {
     pub fn new() -> Self {
         Data {
@@ -159,35 +154,7 @@ impl<S> SymbolTable<S> {
 pub(super) struct LinkageContext<C, V> {
     pub content: C,
     pub vars: V,
-    pub location: Num,
-}
-
-impl Var {
-    pub fn refine(&mut self, value: Num) -> bool {
-        let old_value = self.value.clone();
-        let was_refined = match (old_value, &value) {
-            (Num::Unknown, new_value) => *new_value != Num::Unknown,
-            (
-                Num::Range {
-                    min: old_min,
-                    max: old_max,
-                },
-                Num::Range {
-                    min: new_min,
-                    max: new_max,
-                },
-            ) => {
-                assert!(*new_min >= old_min);
-                assert!(*new_max <= old_max);
-                *new_min > old_min || *new_max < old_max
-            }
-            (Num::Range { .. }, Num::Unknown) => {
-                panic!("a symbol previously approximated is now unknown")
-            }
-        };
-        self.value = value;
-        was_refined
-    }
+    pub location: Var,
 }
 
 impl VarTable {

@@ -1,13 +1,13 @@
 use crate::diagnostics::{BackendDiagnostics, Message, ValueKind};
 use crate::expr::{Atom, BinOp, ExprOp, ParamId};
-use crate::object::num::Num;
+use crate::object::var::Var;
 use crate::object::*;
 use crate::span::{Spanned, WithSpan};
 
 use std::borrow::Borrow;
 
 impl<S: Clone> Expr<S> {
-    pub(crate) fn to_num<C, V, D>(&self, context: &LinkageContext<C, V>, diagnostics: &mut D) -> Num
+    pub(crate) fn to_num<C, V, D>(&self, context: &LinkageContext<C, V>, diagnostics: &mut D) -> Var
     where
         C: Borrow<Content<S>>,
         V: Borrow<VarTable>,
@@ -41,9 +41,9 @@ struct EvalContext<'a, C, V, S: Clone> {
 }
 
 impl<'a, C, V: Borrow<VarTable>, S: Clone> EvalContext<'a, C, V, S> {
-    fn location(&self) -> Num {
+    fn location(&self) -> Var {
         match self.location_var {
-            Some(id) => self.linkage.vars.borrow()[id].value.clone(),
+            Some(id) => self.linkage.vars.borrow()[id].clone(),
             None => self.linkage.location.clone(),
         }
     }
@@ -52,13 +52,13 @@ impl<'a, C, V: Borrow<VarTable>, S: Clone> EvalContext<'a, C, V, S> {
 #[derive(Clone)]
 enum Value<'a, S: Clone> {
     Symbol(Option<DefRef<'a, S>>),
-    Num(Num),
+    Num(Var),
 }
 
 type DefRef<'a, S> = Symbol<BuiltinDefId, UserDef<&'a Closure<S>, &'a Section<S>>>;
 
 impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
-    type Output = Num;
+    type Output = Var;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
@@ -99,7 +99,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
 type Args<'a, S> = &'a [Spanned<Value<'a, S>, &'a S>];
 
 impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
-    type Output = Num;
+    type Output = Var;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
@@ -108,14 +108,14 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
     ) -> Self::Output {
         match self.item {
             Value::Symbol(Some(name)) => name.with_span(self.span).eval_subst(context, diagnostics),
-            Value::Symbol(None) => Num::Unknown,
+            Value::Symbol(None) => Var::Unknown,
             Value::Num(value) => value,
         }
     }
 }
 
 impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
-    type Output = Num;
+    type Output = Var;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
         self,
@@ -132,7 +132,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
                     diagnostics.emit_diag(
                         Message::CannotCoerceBuiltinNameIntoNum { name }.at(self.span.clone()),
                     );
-                    Num::Unknown
+                    Var::Unknown
                 }),
             Symbol::UserDef(UserDef::Closure(def)) => def.expr.eval_subst(
                 &EvalContext {
@@ -142,7 +142,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
                 diagnostics,
             ),
             Symbol::UserDef(UserDef::Section(section)) => {
-                context.linkage.vars.borrow()[section.addr].value.clone()
+                context.linkage.vars.borrow()[section.addr].clone()
             }
         }
     }
@@ -215,13 +215,13 @@ impl<S: Clone> Spanned<UserDefId, &S> {
 }
 
 impl BinOp {
-    fn apply(self, lhs: &Num, rhs: &Num) -> Num {
+    fn apply(self, lhs: &Var, rhs: &Var) -> Var {
         match self {
             BinOp::BitOr => lhs | rhs,
             BinOp::Division => lhs / rhs,
             BinOp::Equality => match (lhs.exact(), rhs.exact()) {
                 (Some(lhs), Some(rhs)) => (if lhs == rhs { 1 } else { 0 }).into(),
-                _ => Num::Unknown,
+                _ => Var::Unknown,
             },
             BinOp::Minus => lhs - rhs,
             BinOp::Multiplication => lhs * rhs,
@@ -231,7 +231,7 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<C, V, D>(&self, context: &'a LinkageContext<C, V>, diagnostics: &mut D) -> Num
+    fn sizeof<C, V, D>(&self, context: &'a LinkageContext<C, V>, diagnostics: &mut D) -> Var
     where
         C: Borrow<Content<S>>,
         V: Borrow<VarTable>,
@@ -239,7 +239,7 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
     {
         match self.item {
             Value::Symbol(Some(Symbol::UserDef(UserDef::Section(section)))) => {
-                context.vars.borrow()[section.size].value.clone()
+                context.vars.borrow()[section.size].clone()
             }
             ref other => {
                 if let Some(found) = other.kind() {
@@ -251,7 +251,7 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
                         .at(self.span.clone()),
                     )
                 }
-                Num::Unknown
+                Var::Unknown
             }
         }
     }
@@ -278,7 +278,6 @@ mod tests {
 
     use crate::diagnostics::*;
     use crate::log::Log;
-    use crate::object::Var;
 
     type MockDiagnostics<S> = crate::diagnostics::MockDiagnostics<DiagnosticsEvent<S>, S>;
 
@@ -286,11 +285,11 @@ mod tests {
     fn eval_section_addr() {
         let addr = 0x0100;
         let content = &mk_program_with_empty_section();
-        let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
+        let vars = &VarTable(vec![addr.into(), 0.into()]);
         let context = LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         assert_eq!(
             Expr::from_atom(UserDefId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
@@ -302,11 +301,11 @@ mod tests {
     fn eval_section_size() {
         let content = &mk_program_with_empty_section();
         let size = 42;
-        let vars = &VarTable(vec![Var { value: 0.into() }, Var { value: size.into() }]);
+        let vars = &VarTable(vec![0.into(), size.into()]);
         let context = &LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         assert_eq!(
             Expr::from_items(&[
@@ -334,7 +333,7 @@ mod tests {
         let context = &LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         assert_eq!(immediate.to_num(context, &mut IgnoreDiagnostics), 43.into())
     }
@@ -359,7 +358,7 @@ mod tests {
         let context = &LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         assert_eq!(immediate.to_num(context, &mut IgnoreDiagnostics), 43.into())
     }
@@ -368,11 +367,11 @@ mod tests {
     fn eval_section_name_call() {
         let addr = 0x1337;
         let content = &mk_program_with_empty_section();
-        let vars = &VarTable(vec![Var { value: addr.into() }, Var { value: 0.into() }]);
+        let vars = &VarTable(vec![addr.into(), 0.into()]);
         let context = LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         let immediate = Expr::from_items(&[UserDefId(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
@@ -445,7 +444,7 @@ mod tests {
         );
         let value = eval_in_empty_program(immediate, &mut view);
         drop(diagnostics);
-        assert_eq!(value, Num::Unknown);
+        assert_eq!(value, Var::Unknown);
         assert_eq!(
             log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
@@ -466,7 +465,7 @@ mod tests {
         let context = LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
@@ -484,7 +483,7 @@ mod tests {
         ]);
         let value = immediate.to_num(&context, &mut view);
         drop(diagnostics);
-        assert_eq!(value, Num::Unknown);
+        assert_eq!(value, Var::Unknown);
         assert_eq!(
             log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
@@ -530,7 +529,7 @@ mod tests {
         let context = LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
@@ -550,7 +549,7 @@ mod tests {
         ]);
         let num = immediate.to_num(&context, &mut view);
         drop(diagnostics);
-        assert_eq!(num, Num::Unknown);
+        assert_eq!(num, Var::Unknown);
         assert_eq!(
             log.into_inner(),
             [DiagnosticsEvent::EmitDiag(
@@ -579,7 +578,7 @@ mod tests {
     fn eval_in_empty_program<S: Clone>(
         immediate: Expr<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
-    ) -> Num {
+    ) -> Var {
         let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![]),
@@ -588,7 +587,7 @@ mod tests {
         let context = &LinkageContext {
             content,
             vars,
-            location: Num::Unknown,
+            location: Var::Unknown,
         };
         immediate.to_num(context, diagnostics)
     }

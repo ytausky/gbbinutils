@@ -15,7 +15,7 @@ impl<'a, S: Clone + 'a> Section<S> {
     ) -> Vec<BinarySection> {
         let mut chunks = Vec::new();
         let mut data = Vec::new();
-        let mut addr = context.vars[self.addr].value.clone();
+        let mut addr = context.vars[self.addr].clone();
         context.location = addr.clone();
         self.traverse(context, |fragment, context| {
             if let Fragment::Reserved(expr) = fragment {
@@ -159,8 +159,8 @@ mod tests {
 
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
-    use crate::object::num::Num;
-    use crate::object::{Constraints, Content, Data, SymbolId, SymbolTable, Var, VarId};
+    use crate::object::var::Var;
+    use crate::object::{Constraints, Content, Data, SymbolId, SymbolTable, VarId};
 
     use std::borrow::Borrow;
 
@@ -215,7 +215,7 @@ mod tests {
                 &LinkageContext {
                     content: &Content::new(),
                     vars: &VarTable::new(),
-                    location: Num::Unknown,
+                    location: Var::Unknown,
                 },
                 &mut IgnoreDiagnostics,
             )
@@ -240,7 +240,7 @@ mod tests {
                 }],
                 symbols: SymbolTable::new(),
             },
-            vars: VarTable(vec![Var { value: addr.into() }, Var { value: 1.into() }]),
+            vars: VarTable(vec![addr.into(), 1.into()]),
         };
 
         data.vars.resolve(&data.content);
@@ -275,7 +275,7 @@ mod tests {
                 }],
                 symbols: SymbolTable::new(),
             },
-            vars: VarTable(vec![Var { value: 0.into() }, Var { value: 2.into() }]),
+            vars: VarTable(vec![0.into(), 2.into()]),
         };
 
         data.vars.resolve(&data.content);
@@ -314,7 +314,7 @@ mod tests {
                 }],
                 symbols: SymbolTable::new(),
             },
-            vars: VarTable(vec![Var { value: addr.into() }, Var { value: 2.into() }]),
+            vars: VarTable(vec![addr.into(), 2.into()]),
         };
 
         data.vars.resolve(&data.content);
