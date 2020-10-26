@@ -18,6 +18,9 @@ pub(crate) enum Message<S> {
         operand: S,
     },
     CannotSpecifyTarget,
+    CodebaseError {
+        error: CodebaseError,
+    },
     ConditionOutsideBranch,
     DestCannotBeConst,
     DestMustBeA,
@@ -28,12 +31,8 @@ pub(crate) enum Message<S> {
     },
     ExpectedString,
     IncompatibleOperand,
-    InvalidUtf8,
     CalledHere {
         name: S,
-    },
-    IoError {
-        string: String,
     },
     KeywordInExpr {
         keyword: S,
@@ -105,17 +104,6 @@ pub enum ValueKind {
     Symbol,
 }
 
-impl<S> From<CodebaseError> for Message<S> {
-    fn from(error: CodebaseError) -> Message<S> {
-        match error {
-            CodebaseError::IoError(error) => Message::IoError {
-                string: error.to_string(),
-            },
-            CodebaseError::Utf8Error => Message::InvalidUtf8,
-        }
-    }
-}
-
 impl Message<StrippedBufSpan<BufId, BufRange>> {
     pub fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use self::Message::*;
@@ -138,6 +126,7 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
                 codebase.snippet(operand),
             ),
             CannotSpecifyTarget => "branch target cannot be specified explicitly".into(),
+            CodebaseError { error } => error.to_string(),
             ConditionOutsideBranch => {
                 "condition codes can only be used as operands for branching instructions".into()
             }
@@ -147,8 +136,6 @@ impl Message<StrippedBufSpan<BufId, BufRange>> {
             ExpectedFound { expected, found } => format!("expected {}, found {}", expected, found),
             ExpectedString => "expected string argument".into(),
             IncompatibleOperand => "operand cannot be used with this instruction".into(),
-            InvalidUtf8 => "file contains invalid UTF-8".into(),
-            IoError { string } => string.clone(),
             KeywordInExpr { keyword } => format!(
                 "keyword `{}` cannot appear in expression",
                 codebase.snippet(keyword),

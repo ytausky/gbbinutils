@@ -1,7 +1,7 @@
 use self::session::{ReentrancyActions, Session};
 
 use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
-use crate::diagnostics::{mk_diagnostic, Diagnostic, OutputForwarder};
+use crate::diagnostics::{Clause, Diagnostic, OutputForwarder, Tag};
 use crate::link::Program;
 use crate::object::Object;
 use crate::{Config, DiagnosticsConfig, InputConfig};
@@ -42,7 +42,16 @@ impl<'a> Assembler<'a> {
             DiagnosticsConfig::Output(diagnostics) => *diagnostics,
         };
         try_assemble(name, input, diagnostics)
-            .map_err(|error| diagnostics(mk_diagnostic(name, &error.into())))
+            .map_err(|error| {
+                diagnostics(Diagnostic {
+                    clauses: vec![Clause {
+                        file: name.into(),
+                        tag: Tag::Error,
+                        message: error.to_string(),
+                        excerpt: None,
+                    }],
+                })
+            })
             .ok()
     }
 }

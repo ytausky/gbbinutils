@@ -383,20 +383,6 @@ fn mk_called_here_clause<F: Clone>(
     })
 }
 
-pub(crate) fn mk_diagnostic(
-    file: impl Into<String>,
-    message: &Message<StrippedBufSpan<BufId, BufRange>>,
-) -> Diagnostic {
-    Diagnostic {
-        clauses: vec![Clause {
-            file: file.into(),
-            tag: Tag::Error,
-            message: message.render(&TextCache::new()),
-            excerpt: None,
-        }],
-    }
-}
-
 impl ExpandedDiagnostic<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
     fn render(&self, codebase: &TextCache) -> Diagnostic {
         Diagnostic {

@@ -118,8 +118,10 @@ where
             None => return self.session,
         };
         let result = self.session.session.analyze_file(path, Some(span.clone()));
-        if let Err(err) = result {
-            self.session.session.emit_diag(Message::from(err).at(span))
+        if let Err(error) = result {
+            self.session
+                .session
+                .emit_diag(Message::CodebaseError { error }.at(span))
         }
         Semantics {
             session: self.session.session,
@@ -214,7 +216,6 @@ mod tests {
     use crate::object::{Symbol, SymbolId, UserDefId};
 
     use std::borrow::Borrow;
-    use std::io;
 
     #[test]
     fn build_include_item() {
@@ -370,7 +371,11 @@ mod tests {
                     from: Some(())
                 },
                 Event::EmitDiag {
-                    diag: Message::InvalidUtf8.at(()).into()
+                    diag: Message::CodebaseError {
+                        error: CodebaseError::Utf8Error
+                    }
+                    .at(())
+                    .into()
                 }
             ]
         )
@@ -381,10 +386,7 @@ mod tests {
         let name = "nonexistent.s";
         let message = "some message";
         let log = collect_semantic_actions(|actions| {
-            actions.session.fail(CodebaseError::IoError(io::Error::new(
-                io::ErrorKind::NotFound,
-                message,
-            )));
+            actions.session.fail(CodebaseError::IoError(message.into()));
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -402,8 +404,8 @@ mod tests {
                     from: Some(())
                 },
                 Event::EmitDiag {
-                    diag: Message::IoError {
-                        string: message.to_string()
+                    diag: Message::CodebaseError {
+                        error: CodebaseError::IoError(message.to_string())
                     }
                     .at(())
                     .into()

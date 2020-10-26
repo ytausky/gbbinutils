@@ -1,6 +1,7 @@
 use crate::diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
 
 use std::cell::RefCell;
+use std::fmt::{Display, Error, Formatter};
 use std::io;
 use std::rc::Rc;
 use std::string::FromUtf8Error;
@@ -194,15 +195,24 @@ pub trait Codebase {
     fn buf(&self, buf_id: BufId) -> Rc<str>;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CodebaseError {
-    IoError(io::Error),
+    IoError(String),
     Utf8Error,
+}
+
+impl Display for CodebaseError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            CodebaseError::IoError(error) => error.fmt(f),
+            CodebaseError::Utf8Error => "file contains invalid UTF-8".fmt(f),
+        }
+    }
 }
 
 impl From<io::Error> for CodebaseError {
     fn from(error: io::Error) -> CodebaseError {
-        CodebaseError::IoError(error)
+        CodebaseError::IoError(error.to_string())
     }
 }
 
