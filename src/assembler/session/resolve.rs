@@ -58,7 +58,7 @@ impl<R> BiLevelNameTable<R> {
     }
 }
 
-impl<C, R: SpanSystem<BufId>, D> NameTable<StringRef> for CompositeSession<C, R, D>
+impl<C, R: SpanSystem, D> NameTable<StringRef> for CompositeSession<C, R, D>
 where
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
 {
@@ -104,7 +104,7 @@ where
 
 impl<C, R, D> StartScope for CompositeSession<C, R, D>
 where
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
 {
     fn start_scope(&mut self) {
         #[cfg(test)]

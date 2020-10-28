@@ -3,7 +3,7 @@ use self::var::Var;
 use crate::expr::{Atom, ExprOp};
 use crate::span::SpanSource;
 
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range, RangeInclusive};
 
 pub mod var;
 
@@ -88,6 +88,70 @@ pub struct Closure<S> {
 pub struct SectionId(pub usize);
 
 pub struct VarTable(pub Vec<Var>);
+
+pub(crate) struct SpanData {
+    pub source_file_inclusions: Vec<FileInclusionMetadata<Span>>,
+    pub macro_defs: Vec<MacroDefMetadata<Span>>,
+    pub macro_expansions: Vec<MacroExpansionMetadata<Span>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SourceFileId(pub usize);
+
+#[derive(Clone, Copy, Debug)]
+pub struct MacroDefId(pub usize);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SourceFileInclusionId(pub usize);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MacroExpansionId(pub usize);
+
+#[derive(Debug)]
+pub struct FileInclusionMetadata<S> {
+    pub file: SourceFileId,
+    pub from: Option<S>,
+}
+
+#[derive(Debug)]
+pub struct MacroDefMetadata<S> {
+    pub name_span: S,
+    pub param_spans: Box<[S]>,
+    pub body_spans: Box<[S]>,
+}
+
+#[derive(Debug)]
+pub struct MacroExpansionMetadata<S> {
+    pub def: MacroDefId,
+    pub name_span: S,
+    pub arg_spans: Box<[Box<[S]>]>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Span {
+    SourceFile {
+        inclusion_metadata: SourceFileInclusionId,
+        range: SourceFileRange,
+    },
+    MacroExpansion {
+        metadata: MacroExpansionId,
+        range: RangeInclusive<MacroExpansionPos>,
+    },
+}
+
+pub type SourceFileRange = Range<usize>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MacroExpansionPos {
+    pub token: usize,
+    pub param_expansion: Option<ParamExpansionPos>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParamExpansionPos {
+    pub param: usize,
+    pub arg_token: usize,
+}
 
 impl<S> Data<S> {
     pub fn new() -> Self {

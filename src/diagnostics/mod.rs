@@ -6,13 +6,14 @@
 
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 
-use crate::codebase::{BufId, BufRange, FileCodebase, FileSystem, TextBuf, TextCache};
+use crate::codebase::{FileCodebase, FileSystem, TextBuf, TextCache};
 #[cfg(test)]
 use crate::log::Log;
+use crate::object::{SourceFileId, SourceFileRange, Span, SpanData};
 use crate::span::*;
 
 use std::fmt;
-use std::ops::{Add, AddAssign, Range};
+use std::ops::{Add, AddAssign};
 
 mod message;
 
@@ -218,19 +219,10 @@ where
     }
 }
 
-impl<'a, 'b, F: FileSystem + ?Sized>
-    EmitDiag<Span<SourceFileInclusionId, MacroExpansionId>, StrippedBufSpan<BufId, BufRange>>
-    for DiagnosticsContext<'b, FileCodebase<'a, F>, Spans<BufId>, OutputForwarder<'a>>
+impl<'a, 'b, F: FileSystem + ?Sized> EmitDiag<Span, StrippedBufSpan>
+    for DiagnosticsContext<'b, FileCodebase<'a, F>, SpanData, OutputForwarder<'a>>
 {
-    fn emit_diag(
-        &mut self,
-        diag: impl Into<
-            CompactDiag<
-                Span<SourceFileInclusionId, MacroExpansionId>,
-                StrippedBufSpan<BufId, BufRange>,
-            >,
-        >,
-    ) {
+    fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan>>) {
         (self.diagnostics.output)(
             diag.into()
                 .expand(self.registry)
@@ -326,25 +318,20 @@ impl<R> Message<R> {
 }
 
 #[derive(Debug, PartialEq)]
-struct ExpandedDiagnostic<S, B, R> {
-    clauses: Vec<ExpandedDiagnosticClause<S, B, R>>,
+struct ExpandedDiagnostic {
+    clauses: Vec<ExpandedDiagnosticClause>,
 }
 
 #[derive(Debug, PartialEq)]
-struct ExpandedDiagnosticClause<S, B, R> {
-    buf_id: B,
+struct ExpandedDiagnosticClause {
+    buf_id: SourceFileId,
     tag: Tag,
-    message: Message<S>,
-    location: Option<R>,
+    message: Message<StrippedBufSpan>,
+    location: Option<SourceFileRange>,
 }
 
-impl<F: Clone>
-    CompactDiag<Span<SourceFileInclusionId, MacroExpansionId>, StrippedBufSpan<F, Range<usize>>>
-{
-    fn expand(
-        self,
-        registry: &mut Spans<F>,
-    ) -> ExpandedDiagnostic<StrippedBufSpan<F, Range<usize>>, F, Range<usize>> {
+impl CompactDiag<Span, StrippedBufSpan> {
+    fn expand(self, registry: &mut SpanData) -> ExpandedDiagnostic {
         let StrippedBufSpan { buf_id, range } = registry.strip_span(&self.main.highlight);
         let main_clause = ExpandedDiagnosticClause {
             buf_id,
@@ -360,30 +347,22 @@ impl<F: Clone>
     }
 }
 
-type BufSnippetClause<B> =
-    ExpandedDiagnosticClause<StrippedBufSpan<B, Range<usize>>, B, Range<usize>>;
-
-fn mk_called_here_clause<F: Clone>(
-    span: &Span<SourceFileInclusionId, MacroExpansionId>,
-    registry: &mut Spans<F>,
-) -> Option<BufSnippetClause<F>> {
-    let call = if let Span::MacroExpansion(macro_expansion, _) = span {
-        registry.macro_expansions[macro_expansion.0]
-            .name_span
-            .clone()
+fn mk_called_here_clause(span: &Span, registry: &mut SpanData) -> Option<ExpandedDiagnosticClause> {
+    let call = if let Span::MacroExpansion { metadata, .. } = span {
+        registry.macro_expansions[metadata.0].name_span.clone()
     } else {
         return None;
     };
     let stripped = registry.strip_span(&call);
     Some(ExpandedDiagnosticClause {
-        buf_id: stripped.buf_id.clone(),
+        buf_id: stripped.buf_id,
         tag: Tag::Note,
         location: Some(stripped.range.clone()),
         message: Message::CalledHere { name: stripped },
     })
 }
 
-impl ExpandedDiagnostic<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
+impl ExpandedDiagnostic {
     fn render(&self, codebase: &TextCache) -> Diagnostic {
         Diagnostic {
             clauses: self
@@ -395,7 +374,7 @@ impl ExpandedDiagnostic<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
     }
 }
 
-impl ExpandedDiagnosticClause<StrippedBufSpan<BufId, BufRange>, BufId, BufRange> {
+impl ExpandedDiagnosticClause {
     fn render(&self, codebase: &TextCache) -> Clause {
         let buf = codebase.buf(self.buf_id);
         let excerpt = self.location.as_ref().map(|range| {
@@ -527,6 +506,8 @@ pub(crate) mod mock {
 mod tests {
     use super::*;
 
+    use crate::object::*;
+
     static DUMMY_FILE: &str = "/my/file";
 
     #[test]
@@ -534,13 +515,16 @@ mod tests {
         let mut codebase = TextCache::new();
         let src = "    nop\n    my_macro a, $12\n\n";
         let buf_id = codebase.add_src_buf(DUMMY_FILE, src);
-        let mut spans = Spans::default();
-        let source_file_inclusion = spans.add_file_inclusion(FileInclusionMetadata {
+        let mut spans = SpanData::default();
+        let inclusion_metadata = spans.add_file_inclusion(FileInclusionMetadata {
             file: buf_id,
             from: None,
         });
         let range = 12..20;
-        let token_span = spans.encode_span(Span::File(source_file_inclusion, range.clone()));
+        let token_span = spans.encode_span(Span::SourceFile {
+            inclusion_metadata,
+            range: range.clone(),
+        });
         let diagnostic = CompactDiag::from(
             Message::NotAMnemonic {
                 name: StrippedBufSpan { buf_id, range },
@@ -578,22 +562,31 @@ mod tests {
 
     #[test]
     fn expand_error_in_macro() {
-        let mut spans = Spans::default();
-        let source_file_inclusion = spans.add_file_inclusion(FileInclusionMetadata {
-            file: (),
+        let buf_id = SourceFileId(0);
+        let mut spans = SpanData::default();
+        let inclusion_metadata = spans.add_file_inclusion(FileInclusionMetadata {
+            file: buf_id,
             from: None,
         });
-        let def_name_span = spans.encode_span(Span::File(source_file_inclusion, 0..1));
-        let body_span = spans.encode_span(Span::File(source_file_inclusion, 2..3));
+        let def_name_span = spans.encode_span(Span::SourceFile {
+            inclusion_metadata,
+            range: 0..1,
+        });
+        let body_span = spans.encode_span(Span::SourceFile {
+            inclusion_metadata,
+            range: 2..3,
+        });
         let macro_def = spans.add_macro_def(MacroDefMetadata {
             name_span: def_name_span,
             param_spans: Box::new([]),
             body_spans: Box::new([body_span]),
         });
         let call_range = 10..11;
-        let expansion_name_span =
-            spans.encode_span(Span::File(source_file_inclusion, call_range.clone()));
-        let macro_expansion = spans.add_macro_expansion(MacroExpansionMetadata {
+        let expansion_name_span = spans.encode_span(Span::SourceFile {
+            inclusion_metadata,
+            range: call_range.clone(),
+        });
+        let metadata = spans.add_macro_expansion(MacroExpansionMetadata {
             name_span: expansion_name_span,
             def: macro_def,
             arg_spans: Box::new([]),
@@ -602,26 +595,26 @@ mod tests {
             token: 0,
             param_expansion: None,
         };
-        let span = spans.encode_span(Span::MacroExpansion(
-            macro_expansion,
-            position.clone()..=position,
-        ));
+        let span = spans.encode_span(Span::MacroExpansion {
+            metadata,
+            range: position.clone()..=position,
+        });
         let message = Message::AfOutsideStackOperation;
         let compact = CompactDiag::from(message.clone().at(span));
         let expected = ExpandedDiagnostic {
             clauses: vec![
                 ExpandedDiagnosticClause {
-                    buf_id: (),
+                    buf_id,
                     tag: Tag::Error,
                     message,
                     location: Some(2..3),
                 },
                 ExpandedDiagnosticClause {
-                    buf_id: (),
+                    buf_id,
                     tag: Tag::Note,
                     message: Message::CalledHere {
                         name: StrippedBufSpan {
-                            buf_id: (),
+                            buf_id,
                             range: call_range,
                         },
                     },

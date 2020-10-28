@@ -157,7 +157,6 @@ impl Width {
 mod tests {
     use super::*;
 
-    use crate::codebase::BufId;
     use crate::diagnostics::{IgnoreDiagnostics, Message, MockSpan, TestDiagnosticsListener};
     use crate::expr::Expr;
     use crate::expr::*;
@@ -220,7 +219,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, ()>::default(),
+            metadata: FakeSpanSystem::<()>::default(),
         };
         let program = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(program.sections[0].data, [0xff])
@@ -250,7 +249,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, ()>::default(),
+            metadata: FakeSpanSystem::<()>::default(),
         };
         let program = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(program.sections[0].data, [0x12, 0x34])
@@ -283,7 +282,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
@@ -321,7 +320,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
@@ -361,7 +360,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, MockSpan<_>>::default(),
+            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
@@ -408,7 +407,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, _>::default(),
+            metadata: FakeSpanSystem::<_>::default(),
         };
         let program = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(program.sections[0].data, [0x00, 0x00])
@@ -439,7 +438,7 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, _>::default(),
+            metadata: FakeSpanSystem::<_>::default(),
         };
         let program = Program::link(object, (), IgnoreDiagnostics);
         assert_eq!(program.sections[0].data, [0x02, 0x00])
@@ -488,7 +487,7 @@ mod tests {
                     1.into(),
                 ]),
             },
-            metadata: FakeSpanSystem::<BufId, _>::default(),
+            metadata: FakeSpanSystem::<_>::default(),
         };
 
         let binary = Program::link(object, (), IgnoreDiagnostics);
@@ -647,7 +646,7 @@ mod tests {
                 },
                 vars: VarTable(vec![0x1337.into(), 2.into()]),
             },
-            metadata: FakeSpanSystem::<BufId, _>::default(),
+            metadata: FakeSpanSystem::<_>::default(),
         };
 
         let binary = Program::link(object, (), IgnoreDiagnostics);

@@ -1,4 +1,5 @@
 use crate::diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
+use crate::object::{SourceFileId, SourceFileRange};
 
 use std::cell::RefCell;
 use std::fmt::{Display, Error, Formatter};
@@ -7,16 +8,14 @@ use std::rc::Rc;
 use std::string::FromUtf8Error;
 use std::{cmp, fs, ops};
 
-pub type BufRange = ops::Range<usize>;
-
 pub trait TextBuf {
-    fn text_range(&self, buf_range: &BufRange) -> TextRange;
+    fn text_range(&self, buf_range: &SourceFileRange) -> TextRange;
 }
 
 pub struct StringSrcBuf {
     name: String,
     src: Rc<str>,
-    line_ranges: Vec<BufRange>,
+    line_ranges: Vec<SourceFileRange>,
 }
 
 impl StringSrcBuf {
@@ -112,7 +111,7 @@ impl<'a> Iterator for TextLines<'a> {
 }
 
 impl TextBuf for StringSrcBuf {
-    fn text_range(&self, buf_range: &BufRange) -> TextRange {
+    fn text_range(&self, buf_range: &SourceFileRange) -> TextRange {
         TextRange {
             start: self.text_position(buf_range.start),
             end: self.text_position(buf_range.end),
@@ -124,21 +123,18 @@ pub struct TextCache {
     bufs: Vec<StringSrcBuf>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BufId(usize);
-
 impl TextCache {
     pub fn new() -> TextCache {
         TextCache { bufs: Vec::new() }
     }
 
-    pub fn add_src_buf(&mut self, name: impl Into<String>, src: impl Into<String>) -> BufId {
-        let buf_id = BufId(self.bufs.len());
+    pub fn add_src_buf(&mut self, name: impl Into<String>, src: impl Into<String>) -> SourceFileId {
+        let buf_id = SourceFileId(self.bufs.len());
         self.bufs.push(StringSrcBuf::new(name, src));
         buf_id
     }
 
-    pub fn buf(&self, buf_id: BufId) -> &StringSrcBuf {
+    pub fn buf(&self, buf_id: SourceFileId) -> &StringSrcBuf {
         &self.bufs[buf_id.0]
     }
 }
@@ -191,8 +187,8 @@ impl FileSystem for StdFileSystem {
 }
 
 pub trait Codebase {
-    fn open(&mut self, path: &str) -> Result<BufId, CodebaseError>;
-    fn buf(&self, buf_id: BufId) -> Rc<str>;
+    fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError>;
+    fn buf(&self, buf_id: SourceFileId) -> Rc<str>;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -237,7 +233,7 @@ impl<'a, FS: FileSystem + ?Sized> FileCodebase<'a, FS> {
 }
 
 impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
-    fn open(&mut self, path: &str) -> Result<BufId, CodebaseError> {
+    fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError> {
         let data = self.fs.read_file(path)?;
         Ok(self
             .cache
@@ -245,7 +241,7 @@ impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
             .add_src_buf(path.to_string(), String::from_utf8(data)?))
     }
 
-    fn buf(&self, buf_id: BufId) -> Rc<str> {
+    fn buf(&self, buf_id: SourceFileId) -> Rc<str> {
         self.cache.borrow().buf(buf_id).text()
     }
 }
@@ -268,15 +264,15 @@ pub mod fake {
     }
 
     impl Codebase for FakeCodebase {
-        fn open(&mut self, _path: &str) -> Result<BufId, CodebaseError> {
+        fn open(&mut self, _path: &str) -> Result<SourceFileId, CodebaseError> {
             if let Some(error) = self.error.take() {
                 Err(error)
             } else {
-                Ok(BufId(0))
+                Ok(SourceFileId(0))
             }
         }
 
-        fn buf(&self, _: BufId) -> Rc<str> {
+        fn buf(&self, _: SourceFileId) -> Rc<str> {
             String::new().into()
         }
     }

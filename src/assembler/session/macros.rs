@@ -6,8 +6,9 @@ use crate::assembler::session::resolve::StartScope;
 use crate::assembler::session::{Backend, NameTable, TokenStream};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::assembler::syntax::{LexError, LexItem, Literal, SemanticToken, Token};
-use crate::codebase::{BufId, Codebase};
+use crate::codebase::Codebase;
 use crate::diagnostics::EmitDiag;
+use crate::object::*;
 
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -23,7 +24,7 @@ pub(in crate::assembler) trait MacroTable<S: Clone> {
     fn expand_macro(&mut self, name: (MacroId, S), args: MacroArgs<S>);
 }
 
-pub(crate) type VecMacroTable<D> = Vec<Rc<MacroDef<D>>>;
+pub(crate) type VecMacroTable = Vec<Rc<MacroDef>>;
 
 pub type MacroArgs<S> = (Box<[Box<[SemanticToken]>]>, Box<[Box<[S]>]>);
 
@@ -31,7 +32,7 @@ impl<C, R, D> MacroTable<R::Span> for CompositeSession<C, R, D>
 where
     Self: Lex<R, Span = R::Span>,
     C: Codebase,
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
     Self: NextToken,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<StringRef>,
@@ -40,7 +41,6 @@ where
     <Self as Lex<R>>::TokenIter: 'static,
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
-    R::FileInclusionMetadataId: 'static,
 {
     fn define_macro(
         &mut self,
@@ -82,7 +82,7 @@ where
 
         let def = &self.macros[id];
         let metadata = self.metadata.add_macro_expansion(MacroExpansionMetadata {
-            def: def.metadata.clone(),
+            def: def.metadata,
             name_span,
             arg_spans,
         });
@@ -102,28 +102,28 @@ where
     }
 }
 
-pub struct MacroExpansionIter<E, D> {
-    metadata: E,
-    def: Rc<MacroDef<D>>,
+pub struct MacroExpansionIter {
+    metadata: MacroExpansionId,
+    def: Rc<MacroDef>,
     args: Box<[Box<[SemanticToken]>]>,
     pos: Option<MacroExpansionPos>,
 }
 
 #[derive(Debug)]
-pub(crate) struct MacroExpansion<E, D> {
+pub(crate) struct MacroExpansion<E> {
     metadata: E,
-    def: Rc<MacroDef<D>>,
+    def: Rc<MacroDef>,
     args: Box<[Box<[SemanticToken]>]>,
 }
 
 #[derive(Debug)]
-pub(crate) struct MacroDef<D> {
-    metadata: D,
+pub(crate) struct MacroDef {
+    metadata: MacroDefId,
     params: Box<[StringRef]>,
     body: Box<[SemanticToken]>,
 }
 
-impl<D> MacroDef<D> {
+impl MacroDef {
     fn mk_macro_expansion_pos(&self, token: usize) -> Option<MacroExpansionPos> {
         if token >= self.body.len() {
             return None;
@@ -146,21 +146,21 @@ impl<D> MacroDef<D> {
     }
 }
 
-impl<E: Clone + 'static, D> MacroExpansionIter<E, D> {
+impl MacroExpansionIter {
     fn token_and_span<RR>(
         &self,
         pos: MacroExpansionPos,
         registry: &mut RR,
     ) -> (SemanticToken, RR::Span)
     where
-        RR: SpanSystem<BufId, MacroExpansionMetadataId = E>,
+        RR: SpanSystem,
     {
         (
             self.token(&pos),
-            registry.encode_span(Span::MacroExpansion(
-                self.metadata.clone(),
-                pos.clone()..=pos,
-            )),
+            registry.encode_span(Span::MacroExpansion {
+                metadata: self.metadata,
+                range: pos.clone()..=pos,
+            }),
         )
     }
 
@@ -216,8 +216,12 @@ impl<I, L> Token<I, L> {
     }
 }
 
-impl<E, D> MacroExpansionIter<E, D> {
-    fn new(metadata: E, def: Rc<MacroDef<D>>, args: Box<[Box<[SemanticToken]>]>) -> Self {
+impl MacroExpansionIter {
+    fn new(
+        metadata: MacroExpansionId,
+        def: Rc<MacroDef>,
+        args: Box<[Box<[SemanticToken]>]>,
+    ) -> Self {
         let pos = def.mk_macro_expansion_pos(0);
         MacroExpansionIter {
             metadata,
@@ -228,9 +232,9 @@ impl<E, D> MacroExpansionIter<E, D> {
     }
 }
 
-impl<R> TokenStream<R> for MacroExpansionIter<R::MacroExpansionMetadataId, R::MacroDefMetadataId>
+impl<R> TokenStream<R> for MacroExpansionIter
 where
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
 {
     fn next_token(&mut self, registry: &mut R) -> Option<LexItem<R::Span>> {
         self.pos.take().map(|pos| {

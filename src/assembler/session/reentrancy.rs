@@ -6,7 +6,7 @@ use super::*;
 use crate::assembler::semantics::{Semantics, TokenStreamState};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
-use crate::codebase::{BufId, Codebase, CodebaseError};
+use crate::codebase::{Codebase, CodebaseError};
 use crate::span::{SpanSource, SpanSystem};
 
 impl<C, R, D> ReentrancyActions<R::Span> for CompositeSession<C, R, D>
@@ -15,7 +15,7 @@ where
     Self: Lex<R, Span = R::Span>,
     Self: NextToken,
     Self: MacroTable<<Self as SpanSource>::Span>,
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<StringRef>,
     Self: Backend<R::Span>,
@@ -23,7 +23,6 @@ where
     <Self as Lex<R>>::TokenIter: 'static,
     for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
-    R::FileInclusionMetadataId: 'static,
 {
     fn analyze_file(
         &mut self,

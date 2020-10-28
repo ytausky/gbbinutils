@@ -55,7 +55,7 @@ impl<S> ObjectBuilder<S> {
 
 impl<C, R, D> Backend<R::Span> for CompositeSession<C, R, D>
 where
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
     Self: Diagnostics<R::Span>,
     for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
 {
@@ -126,7 +126,7 @@ where
 
 impl<C, R, D> AllocSymbol<R::Span> for CompositeSession<C, R, D>
 where
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
 {
     fn alloc_symbol(&mut self, _: R::Span) -> SymbolId {
         self.builder.data.content.symbols.alloc().into()

@@ -1,4 +1,4 @@
-use crate::codebase::{BufId, BufRange, CodebaseError, TextCache};
+use crate::codebase::{CodebaseError, TextCache};
 use crate::object::Width;
 use crate::span::StrippedBufSpan;
 use crate::IncDec;
@@ -104,7 +104,7 @@ pub enum ValueKind {
     Symbol,
 }
 
-impl Message<StrippedBufSpan<BufId, BufRange>> {
+impl Message<StrippedBufSpan> {
     pub fn render<'a>(&self, codebase: &'a TextCache) -> String {
         use self::Message::*;
         match self {

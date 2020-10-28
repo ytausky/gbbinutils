@@ -1,8 +1,9 @@
 use crate::assembler::session::{CompositeSession, TokenStream};
 use crate::assembler::string_ref::StringRef;
 use crate::assembler::syntax::*;
-use crate::codebase::{BufId, Codebase, CodebaseError};
-use crate::span::{FileInclusionMetadata, Span, SpanSource, SpanSystem};
+use crate::codebase::{Codebase, CodebaseError};
+use crate::object::{FileInclusionMetadata, SourceFileInclusionId, Span};
+use crate::span::{SpanSource, SpanSystem};
 
 use std::rc::Rc;
 
@@ -22,9 +23,9 @@ where
 impl<'a, C, R, D> Lex<R> for CompositeSession<C, R, D>
 where
     C: Codebase,
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
 {
-    type TokenIter = TokenizedSrc<R::FileInclusionMetadataId>;
+    type TokenIter = TokenizedSrc;
 
     fn lex_file(
         &mut self,
@@ -41,13 +42,13 @@ where
     }
 }
 
-pub struct TokenizedSrc<I> {
+pub struct TokenizedSrc {
     tokens: Lexer,
-    inclusion: I,
+    inclusion: SourceFileInclusionId,
 }
 
-impl<I> TokenizedSrc<I> {
-    fn new(src: Rc<str>, inclusion: I) -> Self {
+impl TokenizedSrc {
+    fn new(src: Rc<str>, inclusion: SourceFileInclusionId) -> Self {
         TokenizedSrc {
             tokens: Lexer::new(src),
             inclusion,
@@ -55,15 +56,18 @@ impl<I> TokenizedSrc<I> {
     }
 }
 
-impl<R> TokenStream<R> for TokenizedSrc<R::FileInclusionMetadataId>
+impl<R> TokenStream<R> for TokenizedSrc
 where
-    R: SpanSystem<BufId>,
+    R: SpanSystem,
 {
     fn next_token(&mut self, registry: &mut R) -> Option<LexItem<R::Span>> {
         self.tokens.next_token(registry).map(|(t, r)| {
             (
                 t,
-                registry.encode_span(Span::File(self.inclusion.clone(), r)),
+                registry.encode_span(Span::SourceFile {
+                    inclusion_metadata: self.inclusion,
+                    range: r,
+                }),
             )
         })
     }
