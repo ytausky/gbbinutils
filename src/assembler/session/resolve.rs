@@ -58,7 +58,7 @@ impl<R> BiLevelNameTable<R> {
     }
 }
 
-impl<C, R: SpanSystem, D> NameTable<StringRef> for CompositeSession<C, R, D>
+impl<'a, R: SpanSystem> NameTable<StringRef> for CompositeSession<'a, R>
 where
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
 {
@@ -102,7 +102,7 @@ where
     }
 }
 
-impl<C, R, D> StartScope for CompositeSession<C, R, D>
+impl<'a, R> StartScope for CompositeSession<'a, R>
 where
     R: SpanSystem,
 {
@@ -118,14 +118,14 @@ where
 mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::MockSession;
     use crate::object::{Symbol, UserDefId};
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
         let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
-        let mut session = MockSession::<()>::default();
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
         session.define_name_with_visibility(name.into(), Visibility::Global, entry.clone());
         assert_eq!(
             session.resolve_name_with_visibility(&name.into(), Visibility::Global),
@@ -136,7 +136,8 @@ mod tests {
     #[test]
     fn retrieve_local_name() {
         let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
-        let mut session = MockSession::<()>::default();
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
         session.start_scope();
         session.define_name_with_visibility("_local".into(), Visibility::Local, entry.clone());
         assert_eq!(
@@ -147,7 +148,8 @@ mod tests {
 
     #[test]
     fn local_name_not_accessible_after_new_global_name() {
-        let mut session = MockSession::<()>::default();
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
         session.start_scope();
         session.define_name_with_visibility(
             "_local".into(),

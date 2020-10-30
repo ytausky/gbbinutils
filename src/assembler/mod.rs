@@ -1,7 +1,7 @@
 use self::session::{ReentrancyActions, Session};
 
-use crate::codebase::{CodebaseError, FileCodebase, FileSystem, StdFileSystem};
-use crate::diagnostics::{Clause, Diagnostic, OutputForwarder, Tag};
+use crate::codebase::{CodebaseError, FileSystem, StdFileSystem};
+use crate::diagnostics::{Clause, Diagnostic, Tag};
 use crate::link::Program;
 use crate::object::Object;
 use crate::{Config, DiagnosticsConfig, InputConfig};
@@ -61,9 +61,7 @@ fn try_assemble<'a>(
     input: &'a mut dyn FileSystem,
     output: &'a mut dyn FnMut(Diagnostic),
 ) -> Result<Program, CodebaseError> {
-    let codebase = FileCodebase::new(input);
-    let diagnostics = OutputForwarder { output };
-    let mut session = Session::new(codebase, diagnostics);
+    let mut session = Session::new(input, output);
     session.analyze_file(name.into(), None)?;
 
     let result = Program::link(

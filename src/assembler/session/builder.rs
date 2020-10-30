@@ -53,11 +53,11 @@ impl<S> ObjectBuilder<S> {
     }
 }
 
-impl<C, R, D> Backend<R::Span> for CompositeSession<C, R, D>
+impl<'a, R> Backend<R::Span> for CompositeSession<'a, R>
 where
     R: SpanSystem,
     Self: Diagnostics<R::Span>,
-    for<'a> DiagnosticsContext<'a, C, R, D>: Diagnostics<R::Span>,
+    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
 {
     fn define_symbol(&mut self, name: SymbolId, _span: R::Span, expr: Expr<SymbolId, R::Span>) {
         #[cfg(test)]
@@ -124,7 +124,7 @@ where
     }
 }
 
-impl<C, R, D> AllocSymbol<R::Span> for CompositeSession<C, R, D>
+impl<'a, R> AllocSymbol<R::Span> for CompositeSession<'a, R>
 where
     R: SpanSystem,
 {
@@ -138,7 +138,6 @@ mod tests {
     use super::*;
 
     use crate::assembler::session::mock::MockSession;
-    use crate::diagnostics::*;
     use crate::expr::{Atom, ExprOp};
     use crate::object::SectionId;
     use crate::span::WithSpan;
@@ -203,7 +202,8 @@ mod tests {
     }
 
     fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(f: F) -> Data<S> {
-        let mut session = MockSession::default();
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
         f(&mut session);
         session.builder.data
     }

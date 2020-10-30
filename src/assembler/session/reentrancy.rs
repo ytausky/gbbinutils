@@ -1,27 +1,25 @@
-use super::lex::Lex;
 use super::macros::MacroTable;
 use super::resolve::StartScope;
 use super::*;
 
-use crate::assembler::semantics::{Semantics, TokenStreamState};
+use crate::assembler::semantics::SemanticActions;
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParserFactory};
 use crate::assembler::syntax::{LexError, Literal, ParseTokenStream};
-use crate::codebase::{Codebase, CodebaseError};
+use crate::codebase::CodebaseError;
 use crate::span::{SpanSource, SpanSystem};
 
-impl<C, R, D> ReentrancyActions<R::Span> for CompositeSession<C, R, D>
+impl<'a, R> ReentrancyActions<R::Span> for CompositeSession<'a, R>
 where
-    C: Codebase,
-    Self: Lex<R, Span = R::Span>,
     Self: NextToken,
     Self: MacroTable<<Self as SpanSource>::Span>,
     R: SpanSystem,
+    Self: SpanSource<Span = R::Span>,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<StringRef>,
     Self: Backend<R::Span>,
-    <Self as SpanSource>::Span: 'static,
-    <Self as Lex<R>>::TokenIter: 'static,
-    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+        EmitDiag<R::Span, R::Stripped>,
+    R::Span: 'static,
     R::Stripped: Clone,
 {
     fn analyze_file(
@@ -43,11 +41,7 @@ where
             LexError,
             <Self as SpanSource>::Span,
         >>::mk_parser(&mut DefaultParserFactory);
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-        };
-        parser.parse_token_stream(semantics);
+        parser.parse_token_stream(self.semantic_actions());
         Ok(())
     }
 }

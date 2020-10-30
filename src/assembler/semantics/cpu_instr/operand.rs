@@ -188,7 +188,6 @@ impl<I: Iterator> Iterator for OperandCounter<I> {
 pub mod tests {
     use super::*;
 
-    use crate::assembler::session::mock::MockSession;
     use crate::assembler::session::MacroId;
     use crate::object::SymbolId;
 
@@ -231,7 +230,8 @@ pub mod tests {
         expr: Arg<MockSpan<S>>,
         context: Context,
     ) -> OperandResult<MockSpan<S>> {
-        let mut session = MockSession::default();
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
         let result = super::analyze_operand(expr, context, &mut session);
         result.map_err(|_| session.log().to_vec())
     }

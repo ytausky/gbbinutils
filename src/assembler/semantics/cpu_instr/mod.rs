@@ -1878,9 +1878,9 @@ mod tests {
         I: IntoIterator<Item = Input>,
     {
         use super::operand::analyze_operand;
-        use crate::assembler::session::mock::MockSession;
 
-        let mut session = MockSession::default();
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
         let operands: Vec<_> = operands
             .into_iter()
             .enumerate()

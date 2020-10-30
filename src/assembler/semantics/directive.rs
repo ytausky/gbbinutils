@@ -207,8 +207,6 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::tests::Event;
-    use crate::assembler::semantics::tests::*;
-    use crate::assembler::session::mock::*;
     use crate::assembler::session::NameEntry;
     use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
@@ -218,13 +216,24 @@ mod tests {
     use std::borrow::Borrow;
 
     #[test]
-    fn build_include_item() {
+    fn include_file() {
         let filename = "file.asm";
-        let actions = unary_directive("INCLUDE", |arg| {
-            arg.act_on_atom(ExprAtom::Literal(Literal::String(filename.into())), ());
-        });
+        let mut fixture = TestFixture::new();
+        fixture.fs.add(filename, &[]);
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("INCLUDE".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Literal(Literal::String(filename.into())), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::AnalyzeFile {
                 path: filename.into(),
                 from: Some(())
@@ -235,9 +244,21 @@ mod tests {
     #[test]
     fn set_origin() {
         let origin = 0x3000;
-        let actions = unary_directive("ORG", |arg| arg.act_on_atom(mk_literal(origin), ()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("ORG".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(mk_literal(origin), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::SetOrigin {
                 addr: origin.into()
             }]
@@ -267,16 +288,24 @@ mod tests {
         mk_item: impl Fn(i32) -> Fragment<Expr<SymbolId, ()>>,
         data: impl Borrow<[i32]>,
     ) {
-        let actions = with_directive(directive, |mut command| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(directive.into(), ())
+                .into_builtin_instr();
             for datum in data.borrow().iter() {
-                let mut arg = command.will_parse_arg();
+                let mut arg = actions.will_parse_arg();
                 arg.act_on_atom(mk_literal(*datum), ());
-                command = arg.did_parse_arg();
+                actions = arg.did_parse_arg();
             }
-            command
-        });
+            actions.did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             data.borrow()
                 .iter()
                 .cloned()
@@ -288,9 +317,21 @@ mod tests {
 
     #[test]
     fn reserve_3_bytes() {
-        let actions = ds(|arg| arg.act_on_atom(mk_literal(3), ()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DS".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(mk_literal(3), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitFragment {
                 fragment: Fragment::Reserved(3.into())
             }]
@@ -303,9 +344,21 @@ mod tests {
 
     #[test]
     fn ds_with_malformed_expr() {
-        let actions = ds(|arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DS".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("A".into()), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::KeywordInExpr { keyword: () }.at(()).into()
             }]
@@ -329,9 +382,21 @@ mod tests {
 
     #[test]
     fn include_with_number() {
-        let actions = unary_directive("INCLUDE", |arg| arg.act_on_atom(mk_literal(7), ()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("INCLUDE".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(mk_literal(7), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::ExpectedString.at(()).into()
             }]
@@ -340,9 +405,21 @@ mod tests {
 
     #[test]
     fn data_with_malformed_expr() {
-        let actions = unary_directive("DB", |arg| arg.act_on_atom(ExprAtom::Ident("A".into()), ()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DB".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("A".into()), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::KeywordInExpr { keyword: () }.at(()).into()
             }]
@@ -352,8 +429,11 @@ mod tests {
     #[test]
     fn include_file_with_invalid_utf8() {
         let name = "invalid_utf8.s";
-        let log = collect_semantic_actions(|actions| {
-            actions.session.fail(CodebaseError::Utf8Error);
+        let mut fixture = TestFixture::new();
+        fixture.fs.add(name, &[0x5a, 0x0a, 0xf6, 0xa6]);
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -361,10 +441,10 @@ mod tests {
                 .into_builtin_instr()
                 .will_parse_arg();
             context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
-            context.did_parse_arg().did_parse_instr().did_parse_line(())
-        });
+            context.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [
                 Event::AnalyzeFile {
                     path: name.into(),
@@ -384,9 +464,10 @@ mod tests {
     #[test]
     fn include_nonexistent_file() {
         let name = "nonexistent.s";
-        let message = "some message";
-        let log = collect_semantic_actions(|actions| {
-            actions.session.fail(CodebaseError::IoError(message.into()));
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -394,10 +475,10 @@ mod tests {
                 .into_builtin_instr()
                 .will_parse_arg();
             context.act_on_atom(ExprAtom::Literal(Literal::String(name.into())), ());
-            context.did_parse_arg().did_parse_instr().did_parse_line(())
-        });
+            context.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [
                 Event::AnalyzeFile {
                     path: name.into(),
@@ -405,7 +486,7 @@ mod tests {
                 },
                 Event::EmitDiag {
                     diag: Message::CodebaseError {
-                        error: CodebaseError::IoError(message.to_string())
+                        error: CodebaseError::IoError("file does not exist".to_string())
                     }
                     .at(())
                     .into()
@@ -418,11 +499,23 @@ mod tests {
     fn define_symbol() {
         let symbol = "sym";
         let value = 3;
-        let actions = with_labeled_directive(symbol, "EQU", |arg| {
-            arg.act_on_atom(ExprAtom::Literal(Literal::Number(value)), ())
-        });
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_label((symbol.into(), ()))
+                .did_parse_label()
+                .will_parse_instr("EQU".into(), ())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Literal(Literal::Number(value)), ());
+            actions.did_parse_arg().did_parse_instr().did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::DefineNameWithVisibility {
                     ident: symbol.into(),
@@ -442,8 +535,11 @@ mod tests {
     fn define_fn_with_param() {
         let name = "my_fn";
         let param = "param";
-        let actions = collect_semantic_actions(|builder| {
-            let mut label_actions = builder
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut label_actions = actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_label((name.into(), ()));
@@ -458,10 +554,10 @@ mod tests {
                 .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::DefineNameWithVisibility {
                     ident: name.into(),
@@ -480,7 +576,10 @@ mod tests {
     #[test]
     fn start_section() {
         let name = "hot_stuff";
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             actions
                 .will_parse_line()
                 .into_instr_line()
@@ -490,10 +589,10 @@ mod tests {
                 .into_builtin_instr()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::DefineNameWithVisibility {
                     ident: name.into(),
@@ -510,65 +609,57 @@ mod tests {
 
     #[test]
     fn taken_if_remains_in_instr_mode() {
-        collect_semantic_actions(|session| {
-            let session = analyze_directive(
-                (Directive::If, ()),
-                None,
-                vec![ParsedArg::Bare(Expr::from_atom(1.into(), ()))],
-                session,
-            );
-            assert_eq!(
-                session.state,
-                TokenStreamState {
-                    mode: LineRule::InstrLine(InstrLineState { label: None })
-                }
-            );
-            session
-        });
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        let session = analyze_directive(
+            (Directive::If, ()),
+            None,
+            vec![ParsedArg::Bare(Expr::from_atom(1.into(), ()))],
+            session.semantic_actions(),
+        );
+        assert_eq!(
+            session.state,
+            TokenStreamState {
+                mode: LineRule::InstrLine(InstrLineState { label: None })
+            }
+        );
     }
 
     #[test]
     fn ignore_instrs_in_untaken_if() {
-        collect_semantic_actions(|session| {
-            let session = analyze_directive(
-                (Directive::If, ()),
-                None,
-                vec![ParsedArg::Bare(Expr::from_atom(0.into(), ()))],
-                session,
-            );
-            assert_eq!(
-                session.state,
-                TokenStreamState {
-                    mode: LineRule::TokenLine(TokenLineState {
-                        context: TokenContext::FalseIf
-                    })
-                }
-            );
-            session
-        });
-    }
-
-    fn ds(f: impl FnOnce(&mut TestExprContext<()>)) -> Vec<Event<()>> {
-        unary_directive("DS", f)
-    }
-
-    type TestExprContext<'a, S> = ArgSemantics<'a, MockSession<S>>;
-
-    fn unary_directive<F>(directive: &str, f: F) -> Vec<Event<()>>
-    where
-        F: FnOnce(&mut TestExprContext<()>),
-    {
-        with_directive(directive, |command| {
-            let mut arg = command.will_parse_arg();
-            f(&mut arg);
-            arg.did_parse_arg()
-        })
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        let session = analyze_directive(
+            (Directive::If, ()),
+            None,
+            vec![ParsedArg::Bare(Expr::from_atom(0.into(), ()))],
+            session.semantic_actions(),
+        );
+        assert_eq!(
+            session.state,
+            TokenStreamState {
+                mode: LineRule::TokenLine(TokenLineState {
+                    context: TokenContext::FalseIf
+                })
+            }
+        );
     }
 
     fn test_unary_directive_without_args(directive: &str) {
-        let actions = with_directive(directive, |command| command);
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr(directive.into(), ())
+                .into_builtin_instr()
+                .did_parse_instr()
+                .did_parse_line(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::OperandCount {
                     actual: 0,
@@ -578,47 +669,5 @@ mod tests {
                 .into()
             }]
         )
-    }
-
-    type TestBuiltinInstrSemantics<'a, S> = BuiltinInstrSemantics<'a, MockSession<S>>;
-
-    fn with_directive<F>(directive: &str, f: F) -> Vec<Event<()>>
-    where
-        F: for<'a, 'b> FnOnce(
-            TestBuiltinInstrSemantics<'a, ()>,
-        ) -> TestBuiltinInstrSemantics<'a, ()>,
-    {
-        collect_semantic_actions(|actions| {
-            let command = actions
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_instr(directive.into(), ())
-                .into_builtin_instr();
-            f(command)
-                .did_parse_instr()
-                .did_parse_line(())
-                .act_on_eos(())
-        })
-    }
-
-    fn with_labeled_directive<F>(label: &str, directive: &str, f: F) -> Vec<Event<()>>
-    where
-        F: FnOnce(&mut TestExprContext<()>),
-    {
-        collect_semantic_actions(|actions| {
-            let mut arg = actions
-                .will_parse_line()
-                .into_instr_line()
-                .will_parse_label((label.into(), ()))
-                .did_parse_label()
-                .will_parse_instr(directive.into(), ())
-                .into_builtin_instr()
-                .will_parse_arg();
-            f(&mut arg);
-            arg.did_parse_arg()
-                .did_parse_instr()
-                .did_parse_line(())
-                .act_on_eos(())
-        })
     }
 }

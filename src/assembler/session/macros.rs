@@ -1,12 +1,10 @@
-use super::lex::Lex;
 use super::*;
 
-use crate::assembler::semantics::{Semantics, TokenStreamState};
+use crate::assembler::semantics::SemanticActions;
 use crate::assembler::session::resolve::StartScope;
 use crate::assembler::session::{Backend, NameTable, TokenStream};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::assembler::syntax::{LexError, LexItem, Literal, SemanticToken, Token};
-use crate::codebase::Codebase;
 use crate::diagnostics::EmitDiag;
 use crate::object::*;
 
@@ -28,18 +26,17 @@ pub(crate) type VecMacroTable = Vec<Rc<MacroDef>>;
 
 pub type MacroArgs<S> = (Box<[Box<[SemanticToken]>]>, Box<[Box<[S]>]>);
 
-impl<C, R, D> MacroTable<R::Span> for CompositeSession<C, R, D>
+impl<'a, R> MacroTable<R::Span> for CompositeSession<'a, R>
 where
-    Self: Lex<R, Span = R::Span>,
-    C: Codebase,
     R: SpanSystem,
+    Self: SpanSource<Span = R::Span>,
     Self: NextToken,
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<StringRef>,
     Self: Backend<R::Span>,
-    <Self as SpanSource>::Span: 'static,
-    <Self as Lex<R>>::TokenIter: 'static,
-    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+        EmitDiag<R::Span, R::Stripped>,
+    R::Span: 'static,
     R::Stripped: Clone,
 {
     fn define_macro(
@@ -94,11 +91,7 @@ where
             LexError,
             R::Span,
         >>::mk_parser(&mut DefaultParserFactory);
-        let semantics = Semantics {
-            session: self,
-            state: TokenStreamState::new(),
-        };
-        parser.parse_token_stream(semantics);
+        parser.parse_token_stream(self.semantic_actions());
     }
 }
 

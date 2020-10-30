@@ -218,21 +218,21 @@ impl From<FromUtf8Error> for CodebaseError {
     }
 }
 
-pub struct FileCodebase<'a, FS: FileSystem + ?Sized + 'a> {
-    fs: &'a mut FS,
+pub struct FileCodebase<'a> {
+    fs: &'a mut dyn FileSystem,
     pub cache: RefCell<TextCache>,
 }
 
-impl<'a, FS: FileSystem + ?Sized> FileCodebase<'a, FS> {
-    pub fn new(fs: &'a mut FS) -> FileCodebase<FS> {
-        FileCodebase {
+impl<'a> FileCodebase<'a> {
+    pub fn new(fs: &'a mut dyn FileSystem) -> Self {
+        Self {
             fs,
             cache: RefCell::new(TextCache::new()),
         }
     }
 }
 
-impl<'a, FS: FileSystem + ?Sized> Codebase for FileCodebase<'a, FS> {
+impl<'a> Codebase for FileCodebase<'a> {
     fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError> {
         let data = self.fs.read_file(path)?;
         Ok(self
@@ -251,31 +251,6 @@ pub mod fake {
     use super::*;
 
     use std::collections::HashMap;
-
-    #[derive(Default)]
-    pub struct FakeCodebase {
-        error: Option<CodebaseError>,
-    }
-
-    impl FakeCodebase {
-        pub fn fail(&mut self, error: CodebaseError) {
-            self.error = Some(error)
-        }
-    }
-
-    impl Codebase for FakeCodebase {
-        fn open(&mut self, _path: &str) -> Result<SourceFileId, CodebaseError> {
-            if let Some(error) = self.error.take() {
-                Err(error)
-            } else {
-                Ok(SourceFileId(0))
-            }
-        }
-
-        fn buf(&self, _: SourceFileId) -> Rc<str> {
-            String::new().into()
-        }
-    }
 
     pub struct MockFileSystem {
         files: HashMap<String, Vec<u8>>,

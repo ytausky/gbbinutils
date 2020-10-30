@@ -3,35 +3,19 @@ use crate::assembler::string_ref::StringRef;
 use crate::assembler::syntax::*;
 use crate::codebase::{Codebase, CodebaseError};
 use crate::object::{FileInclusionMetadata, SourceFileInclusionId, Span};
-use crate::span::{SpanSource, SpanSystem};
+use crate::span::SpanSystem;
 
 use std::rc::Rc;
 
-pub(crate) trait Lex<R>: SpanSource
+impl<'a, R> CompositeSession<'a, R>
 where
-    R: SpanSource,
-{
-    type TokenIter: TokenStream<R>;
-
-    fn lex_file(
-        &mut self,
-        path: StringRef,
-        from: Option<R::Span>,
-    ) -> Result<Self::TokenIter, CodebaseError>;
-}
-
-impl<'a, C, R, D> Lex<R> for CompositeSession<C, R, D>
-where
-    C: Codebase,
     R: SpanSystem,
 {
-    type TokenIter = TokenizedSrc;
-
-    fn lex_file(
+    pub fn lex_file(
         &mut self,
         path: StringRef,
         from: Option<R::Span>,
-    ) -> Result<Self::TokenIter, CodebaseError> {
+    ) -> Result<TokenizedSrc, CodebaseError> {
         let buf_id = self.codebase.open(&path)?;
         let rc_src = self.codebase.buf(buf_id);
         Ok(TokenizedSrc::new(

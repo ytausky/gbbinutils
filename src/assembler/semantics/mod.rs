@@ -22,8 +22,27 @@ mod cpu_instr;
 mod directive;
 
 pub(super) struct Semantics<'a, S, T> {
-    pub session: &'a mut S,
-    pub state: T,
+    session: &'a mut S,
+    state: T,
+}
+
+pub(super) trait SemanticActions<'a> {
+    type SemanticActions: TokenStreamContext;
+    fn semantic_actions(&'a mut self) -> Self::SemanticActions;
+}
+
+impl<'a, T: Analysis + 'a> SemanticActions<'a> for T
+where
+    T::Span: 'static,
+{
+    type SemanticActions = Semantics<'a, T, TokenStreamState<T::Span>>;
+
+    fn semantic_actions(&'a mut self) -> Self::SemanticActions {
+        Semantics {
+            session: self,
+            state: TokenStreamState::new(),
+        }
+    }
 }
 
 impl<'a, 'b, S: Analysis, T> Semantics<'a, S, T> {
@@ -937,39 +956,36 @@ mod tests {
     use super::*;
 
     use crate::assembler::session::mock::Expr;
-    use crate::assembler::session::mock::*;
     use crate::assembler::session::MacroId;
     use crate::assembler::syntax::{SemanticToken, Sigil, Token};
-    use crate::diagnostics::mock::{Merge, MockSpan};
+    use crate::diagnostics::mock::MockSpan;
     use crate::expr::{Atom, BinOp, ExprOp, LocationCounter};
     use crate::object::{Fragment, Symbol, SymbolId, UserDefId, Width};
 
     use std::borrow::Borrow;
-    use std::fmt::Debug;
 
     pub(super) type Event<S> = crate::assembler::session::Event<SymbolId, MacroId, S, S>;
 
     #[test]
     fn ident_with_underscore_prefix_is_local() {
-        let session = MockSession::<()>::default();
-        assert_eq!(
-            session.name_visibility(&"_loop".to_owned()),
-            Visibility::Local
-        )
+        let mut fixture = TestFixture::<()>::new();
+        let session = fixture.session();
+        assert_eq!(session.name_visibility("_loop"), Visibility::Local)
     }
 
     #[test]
     fn ident_without_underscore_prefix_is_global() {
-        let session = MockSession::<()>::default();
-        assert_eq!(
-            session.name_visibility(&"start".to_owned()),
-            Visibility::Global
-        )
+        let mut fixture = TestFixture::<()>::new();
+        let session = fixture.session();
+        assert_eq!(session.name_visibility("start"), Visibility::Global)
     }
 
     #[test]
     fn emit_ld_b_deref_hl() {
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut command = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -984,10 +1000,10 @@ mod tests {
             arg2.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitFragment {
                 fragment: Fragment::Byte(0x46)
             }]
@@ -1005,9 +1021,10 @@ mod tests {
     }
 
     fn test_rst_1_op_1(op: BinOp) {
-        use crate::expr::*;
-
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let command = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1020,10 +1037,10 @@ mod tests {
             expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitFragment {
                 fragment: Fragment::Embedded(
                     0b11_000_111,
@@ -1036,7 +1053,10 @@ mod tests {
     #[test]
     fn emit_rst_f_of_1() {
         let name = "f";
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let command = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1049,10 +1069,10 @@ mod tests {
             expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::DefineNameWithVisibility {
                     ident: name.into(),
@@ -1076,7 +1096,10 @@ mod tests {
     #[test]
     fn emit_label_word() {
         let label = "my_label";
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut arg = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1087,10 +1110,10 @@ mod tests {
             arg.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::DefineNameWithVisibility {
                     ident: label.into(),
@@ -1110,17 +1133,20 @@ mod tests {
     #[test]
     fn analyze_label() {
         let label = "label";
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_label((label.into(), ()))
                 .did_parse_label()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [
                 Event::StartScope,
                 Event::DefineNameWithVisibility {
@@ -1139,7 +1165,10 @@ mod tests {
 
     #[test]
     fn analyze_org_dot() {
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut actions = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1151,10 +1180,10 @@ mod tests {
                 .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::SetOrigin {
                 addr: LocationCounter.into()
             }]
@@ -1182,7 +1211,10 @@ mod tests {
 
     #[test]
     fn define_nameless_macro() {
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1195,10 +1227,10 @@ mod tests {
                 .act_on_mnemonic("ENDM".into(), ())
                 .into_line_end()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::MacroRequiresName.at(()).into()
             }]
@@ -1210,7 +1242,10 @@ mod tests {
         params: impl Borrow<[&'static str]>,
         body: impl Borrow<[SemanticToken]>,
     ) {
-        let actions = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut params_actions = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1233,8 +1268,8 @@ mod tests {
                 .act_on_mnemonic("ENDM".into(), ())
                 .into_line_end()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         let params = params
             .borrow()
             .iter()
@@ -1247,7 +1282,7 @@ mod tests {
         body.push(Sigil::Eos.into());
         let body_spans = vec![(); body.len()].into_boxed_slice();
         assert_eq!(
-            actions,
+            session.log(),
             [Event::DefineMacro {
                 name: (name.into(), ()),
                 params: (params, param_spans),
@@ -1259,12 +1294,15 @@ mod tests {
     #[test]
     fn diagnose_parsing_error() {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
-        let actions = collect_semantic_actions(|mut actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let mut actions = session.semantic_actions();
             actions.emit_diag(diagnostic.clone());
-            actions.did_parse_line(()).act_on_eos(())
-        });
+            actions.did_parse_line(()).act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: diagnostic.into()
             }]
@@ -1274,8 +1312,11 @@ mod tests {
     #[test]
     fn recover_from_malformed_expr() {
         let diagnostic = Message::UnexpectedToken { token: () }.at(());
-        let actions = collect_semantic_actions(|file| {
-            let mut expr = file
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut expr = actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr("ADD".into(), ())
@@ -1286,10 +1327,10 @@ mod tests {
             expr.did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            actions,
+            session.log(),
             [Event::EmitDiag {
                 diag: diagnostic.into()
             }]
@@ -1298,7 +1339,10 @@ mod tests {
 
     #[test]
     fn diagnose_eos_in_macro_body() {
-        let log = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1311,48 +1355,24 @@ mod tests {
                 .will_parse_line()
                 .into_token_line()
                 .did_parse_line("eos".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::UnexpectedEof.at("eos".into()).into()
             }]
         )
     }
 
-    pub(super) fn collect_semantic_actions<F, S>(f: F) -> Vec<Event<S>>
-    where
-        F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
-        S: Clone + Default + Debug + Merge,
-    {
-        log_with_predefined_names(std::iter::empty(), f)
-    }
-
-    pub(super) fn log_with_predefined_names<I, F, S>(entries: I, f: F) -> Vec<Event<S>>
-    where
-        I: IntoIterator<Item = (StringRef, NameEntry)>,
-        F: for<'a> FnOnce(TestTokenStreamSemantics<'a, S>) -> TestTokenStreamSemantics<'a, S>,
-        S: Clone + Default + Debug + Merge,
-    {
-        let mut session = MockSession::default();
-        for (ident, resolution) in entries {
-            session.define_name(ident, resolution)
-        }
-        f(Semantics {
-            session: &mut session,
-            state: TokenStreamState::new(),
-        });
-        session.log().to_vec()
-    }
-
-    pub(super) type TestTokenStreamSemantics<'a, S> = TokenStreamSemantics<'a, MockSession<S>>;
-
     #[test]
     fn diagnose_unknown_mnemonic() {
         let name = "unknown";
-        let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
-            session
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr(name.into(), name.into())
@@ -1360,10 +1380,10 @@ mod tests {
                 .unwrap()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::NotAMnemonic { name: name.into() }
                     .at(name.into())
@@ -1375,8 +1395,11 @@ mod tests {
     #[test]
     fn diagnose_operand_as_mnemonic() {
         let name = "HL";
-        let log = collect_semantic_actions::<_, MockSpan<_>>(|session| {
-            session
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_instr(name.into(), name.into())
@@ -1384,10 +1407,10 @@ mod tests {
                 .unwrap()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::NotAMnemonic { name: name.into() }
                     .at(name.into())
@@ -1400,7 +1423,10 @@ mod tests {
     fn call_nullary_macro() {
         let name = "my_macro";
         let macro_id = MacroId(0);
-        let log = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1421,10 +1447,10 @@ mod tests {
                 .into_macro_instr()
                 .did_parse_instr()
                 .did_parse_line(())
-                .act_on_eos(())
-        });
+                .act_on_eos(());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [
                 Event::DefineMacro {
                     name: (name.into(), ()),
@@ -1444,7 +1470,10 @@ mod tests {
         let name = "my_macro";
         let arg_token = Token::Ident("A".into());
         let macro_id = MacroId(0);
-        let log = collect_semantic_actions(|actions| {
+        let mut fixture = TestFixture::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut params = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1470,10 +1499,10 @@ mod tests {
                 arg.act_on_token((arg_token.clone(), ()));
                 arg.did_parse_macro_arg()
             };
-            call.did_parse_instr().did_parse_line(()).act_on_eos(())
-        });
+            call.did_parse_instr().did_parse_line(()).act_on_eos(());
+        }
         assert_eq!(
-            log,
+            session.log(),
             [
                 Event::DefineMacro {
                     name: (name.into(), ()),
@@ -1494,22 +1523,26 @@ mod tests {
     #[ignore]
     #[test]
     fn diagnose_literal_as_fn_name() {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DB".into(), "db".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Literal(Literal::Number(7)), "literal".into());
+            actions.act_on_operator(Operator::FnCall(0), "call".into());
+            actions
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into());
+        }
         assert_eq!(
-            collect_semantic_actions::<_, MockSpan<_>>(|actions| {
-                let mut actions = actions
-                    .will_parse_line()
-                    .into_instr_line()
-                    .will_parse_instr("DB".into(), "db".into())
-                    .into_builtin_instr()
-                    .will_parse_arg();
-                actions.act_on_atom(ExprAtom::Literal(Literal::Number(7)), "literal".into());
-                actions.act_on_operator(Operator::FnCall(0), "call".into());
-                actions
-                    .did_parse_arg()
-                    .did_parse_instr()
-                    .did_parse_line("eol".into())
-                    .act_on_eos("eos".into())
-            }),
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::OnlyIdentsCanBeCalled.at("literal".into()).into()
             }]
@@ -1518,23 +1551,27 @@ mod tests {
 
     #[test]
     fn diagnose_keyword_in_expr() {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut actions = actions
+                .will_parse_line()
+                .into_instr_line()
+                .will_parse_instr("DB".into(), "db".into())
+                .into_builtin_instr()
+                .will_parse_arg();
+            actions.act_on_atom(ExprAtom::Ident("A".into()), "keyword".into());
+            actions.act_on_atom(ExprAtom::Literal(Literal::Number(1)), "one".into());
+            actions.act_on_operator(Operator::Binary(BinOp::Plus), "plus".into());
+            actions
+                .did_parse_arg()
+                .did_parse_instr()
+                .did_parse_line("eol".into())
+                .act_on_eos("eos".into());
+        }
         assert_eq!(
-            collect_semantic_actions::<_, MockSpan<_>>(|actions| {
-                let mut actions = actions
-                    .will_parse_line()
-                    .into_instr_line()
-                    .will_parse_instr("DB".into(), "db".into())
-                    .into_builtin_instr()
-                    .will_parse_arg();
-                actions.act_on_atom(ExprAtom::Ident("A".into()), "keyword".into());
-                actions.act_on_atom(ExprAtom::Literal(Literal::Number(1)), "one".into());
-                actions.act_on_operator(Operator::Binary(BinOp::Plus), "plus".into());
-                actions
-                    .did_parse_arg()
-                    .did_parse_instr()
-                    .did_parse_line("eol".into())
-                    .act_on_eos("eos".into())
-            }),
+            session.log(),
             [Event::EmitDiag {
                 diag: Message::KeywordInExpr {
                     keyword: "keyword".into()
@@ -1547,7 +1584,10 @@ mod tests {
 
     #[test]
     fn handle_unknown_name() {
-        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut actions = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1559,8 +1599,8 @@ mod tests {
                 .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         let expected = [
             Event::DefineNameWithVisibility {
                 ident: "f".into(),
@@ -1574,12 +1614,15 @@ mod tests {
                 ),
             },
         ];
-        assert_eq!(actual, expected)
+        assert_eq!(session.log(), expected)
     }
 
     #[test]
     fn act_on_known_symbol_name() {
-        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut actions = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1593,8 +1636,8 @@ mod tests {
                 .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         let expected = [
             Event::DefineNameWithVisibility {
                 ident: "f".into(),
@@ -1614,12 +1657,15 @@ mod tests {
                 ),
             },
         ];
-        assert_eq!(actual, expected)
+        assert_eq!(session.log(), expected)
     }
 
     #[test]
     fn handle_deref_const() {
-        let actual = collect_semantic_actions::<_, MockSpan<_>>(|actions| {
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
             let mut actions = actions
                 .will_parse_line()
                 .into_instr_line()
@@ -1634,8 +1680,8 @@ mod tests {
                 .did_parse_arg()
                 .did_parse_instr()
                 .did_parse_line("eol".into())
-                .act_on_eos("eos".into())
-        });
+                .act_on_eos("eos".into());
+        }
         let expected = [
             Event::DefineNameWithVisibility {
                 ident: "const".into(),
@@ -1649,13 +1695,16 @@ mod tests {
                 ),
             },
         ];
-        assert_eq!(actual, expected)
+        assert_eq!(session.log(), expected)
     }
 
     #[test]
     fn handle_param() {
-        let actual = collect_semantic_actions::<_, MockSpan<_>>(|context| {
-            let mut context = context
+        let mut fixture = TestFixture::<MockSpan<_>>::new();
+        let mut session = fixture.session();
+        {
+            let actions = session.semantic_actions();
+            let mut context = actions
                 .will_parse_line()
                 .into_instr_line()
                 .will_parse_label(("label".into(), "label".into()));
@@ -1669,8 +1718,8 @@ mod tests {
             context
                 .did_parse_arg()
                 .did_parse_instr()
-                .did_parse_line("eol".into())
-        });
+                .did_parse_line("eol".into());
+        }
         let expected = [
             Event::DefineNameWithVisibility {
                 ident: "label".into(),
@@ -1683,6 +1732,6 @@ mod tests {
                 expr: Expr::from_atom(Atom::Param(ParamId(0)), "param2".into()),
             },
         ];
-        assert_eq!(actual, expected)
+        assert_eq!(session.log(), expected)
     }
 }

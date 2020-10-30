@@ -6,10 +6,12 @@
 
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 
-use crate::codebase::{FileCodebase, FileSystem, TextBuf, TextCache};
+use crate::codebase::{FileCodebase, TextBuf, TextCache};
 #[cfg(test)]
 use crate::log::Log;
 use crate::object::{SourceFileId, SourceFileRange, Span, SpanData};
+#[cfg(test)]
+use crate::span::fake::FakeSpanSystem;
 use crate::span::*;
 
 use std::fmt;
@@ -219,8 +221,8 @@ where
     }
 }
 
-impl<'a, 'b, F: FileSystem + ?Sized> EmitDiag<Span, StrippedBufSpan>
-    for DiagnosticsContext<'b, FileCodebase<'a, F>, SpanData, OutputForwarder<'a>>
+impl<'a, 'b> EmitDiag<Span, StrippedBufSpan>
+    for DiagnosticsContext<'b, FileCodebase<'a>, SpanData, OutputForwarder<'a>>
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan>>) {
         (self.diagnostics.output)(
@@ -229,6 +231,13 @@ impl<'a, 'b, F: FileSystem + ?Sized> EmitDiag<Span, StrippedBufSpan>
                 .render(&self.codebase.cache.borrow()),
         )
     }
+}
+
+#[cfg(test)]
+impl<'a, 'b, S> EmitDiag<S, S>
+    for DiagnosticsContext<'b, FileCodebase<'a>, FakeSpanSystem<S>, OutputForwarder<'a>>
+{
+    fn emit_diag(&mut self, _: impl Into<CompactDiag<S, S>>) {}
 }
 
 pub(crate) struct IgnoreDiagnostics;

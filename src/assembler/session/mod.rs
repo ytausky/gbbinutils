@@ -2,6 +2,8 @@ use self::builder::ObjectBuilder;
 #[cfg(test)]
 use self::macros::MacroArgs;
 use self::macros::{MacroTable, VecMacroTable};
+#[cfg(test)]
+use self::mock::MockSession;
 use self::resolve::*;
 
 use super::keywords::{BuiltinMnemonic, Keyword, OperandKeyword, KEYWORDS};
@@ -10,14 +12,18 @@ use super::string_ref::StringRef;
 use super::syntax::SemanticToken;
 use super::syntax::{LexItem, Sigil, Token};
 
-use crate::codebase::{Codebase, CodebaseError, FileCodebase, FileSystem};
-use crate::diagnostics::{CompactDiag, Diagnostics, DiagnosticsContext, EmitDiag, OutputForwarder};
+#[cfg(test)]
+use crate::codebase::fake::MockFileSystem;
+use crate::codebase::{CodebaseError, FileCodebase, FileSystem};
+use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::object::{Fragment, SpanData, SymbolId};
 use crate::span::*;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
+#[cfg(test)]
+use std::marker::PhantomData;
 
 mod builder;
 mod lex;
@@ -83,14 +89,13 @@ pub(crate) enum NameEntry {
     Symbol(SymbolId),
 }
 
-pub(super) type Session<'a> =
-    CompositeSession<FileCodebase<'a, dyn FileSystem>, SpanData, OutputForwarder<'a>>;
+pub(super) type Session<'a> = CompositeSession<'a, SpanData>;
 
-impl<C, R, D> CompositeSession<C, R, D>
+impl<'a, R> CompositeSession<'a, R>
 where
     R: Default + SpanSystem,
 {
-    pub fn new(codebase: C, diagnostics: D) -> Self {
+    pub fn new(fs: &'a mut dyn FileSystem, diagnostics: &'a mut dyn FnMut(Diagnostic)) -> Self {
         let mut mnemonics = HashMap::new();
         let mut names = BiLevelNameTable::new();
         for (ident, keyword) in KEYWORDS {
@@ -113,8 +118,10 @@ where
         }
         Self {
             builder: ObjectBuilder::new(),
-            codebase,
-            diagnostics,
+            codebase: FileCodebase::new(fs),
+            diagnostics: OutputForwarder {
+                output: diagnostics,
+            },
             #[cfg(test)]
             log: Vec::new(),
             macros: Vec::new(),
@@ -126,10 +133,10 @@ where
     }
 }
 
-impl<C, R, D> Analysis for CompositeSession<C, R, D>
+impl<'a, R> Analysis for CompositeSession<'a, R>
 where
-    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
-    C: Codebase,
+    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+        EmitDiag<R::Span, R::Stripped>,
     R: SpanSystem,
     R::Span: 'static,
     R::Stripped: Clone,
@@ -155,15 +162,15 @@ pub(crate) trait TokenStream<R: SpanSource> {
     fn next_token(&mut self, registry: &mut R) -> Option<LexItem<R::Span>>;
 }
 
-pub(super) struct CompositeSession<C, R: SpanSystem, D> {
-    pub codebase: C,
+pub(super) struct CompositeSession<'a, R: SpanSystem> {
+    pub codebase: FileCodebase<'a>,
     tokens: Vec<Box<dyn TokenStream<R>>>,
     macros: VecMacroTable,
     pub metadata: R,
     mnemonics: HashMap<StringRef, MnemonicEntry>,
     names: BiLevelNameTable<StringRef>,
     pub builder: ObjectBuilder<R::Span>,
-    pub diagnostics: D,
+    pub diagnostics: OutputForwarder<'a>,
     #[cfg(test)]
     log: Vec<Event<SymbolId, MacroId, R::Span, R::Stripped>>,
 }
@@ -174,11 +181,11 @@ pub(super) enum MnemonicEntry {
     Macro(MacroId),
 }
 
-impl<C, R: SpanSystem, D> SpanSource for CompositeSession<C, R, D> {
+impl<'a, R: SpanSystem> SpanSource for CompositeSession<'a, R> {
     type Span = R::Span;
 }
 
-impl<C, R: SpanSystem, D> NextToken for CompositeSession<C, R, D> {
+impl<'a, R: SpanSystem> NextToken for CompositeSession<'a, R> {
     fn next_token(&mut self) -> Option<LexItem<Self::Span>> {
         let token = self
             .tokens
@@ -193,9 +200,10 @@ impl<C, R: SpanSystem, D> NextToken for CompositeSession<C, R, D> {
     }
 }
 
-impl<C, R: SpanSystem, D> EmitDiag<R::Span, R::Stripped> for CompositeSession<C, R, D>
+impl<'a, R: SpanSystem> EmitDiag<R::Span, R::Stripped> for CompositeSession<'a, R>
 where
-    for<'a> DiagnosticsContext<'a, C, R, D>: EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+        EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<R::Span, R::Stripped>>) {
@@ -208,8 +216,8 @@ where
     }
 }
 
-impl<C, R: SpanSystem, D> CompositeSession<C, R, D> {
-    fn diagnostics(&mut self) -> DiagnosticsContext<C, R, D> {
+impl<'a, R: SpanSystem> CompositeSession<'a, R> {
+    fn diagnostics(&mut self) -> DiagnosticsContext<FileCodebase<'a>, R, OutputForwarder<'a>> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
             registry: &mut self.metadata,
@@ -218,13 +226,13 @@ impl<C, R: SpanSystem, D> CompositeSession<C, R, D> {
     }
 }
 
-impl<C, R: SpanSystem, D> MergeSpans<R::Span> for CompositeSession<C, R, D> {
+impl<'a, R: SpanSystem> MergeSpans<R::Span> for CompositeSession<'a, R> {
     fn merge_spans(&mut self, left: &R::Span, right: &R::Span) -> R::Span {
         self.metadata.merge_spans(left, right)
     }
 }
 
-impl<C, R: SpanSystem, D> StripSpan<R::Span> for CompositeSession<C, R, D> {
+impl<'a, R: SpanSystem> StripSpan<R::Span> for CompositeSession<'a, R> {
     type Stripped = R::Stripped;
 
     fn strip_span(&mut self, span: &R::Span) -> Self::Stripped {
@@ -233,7 +241,7 @@ impl<C, R: SpanSystem, D> StripSpan<R::Span> for CompositeSession<C, R, D> {
 }
 
 #[cfg(test)]
-impl<C, R: SpanSystem, D> CompositeSession<C, R, D> {
+impl<'a, R: SpanSystem> CompositeSession<'a, R> {
     pub fn log(&self) -> &[Event<SymbolId, MacroId, R::Span, R::Stripped>] {
         &self.log
     }
@@ -286,28 +294,34 @@ pub(super) enum Event<B, M, S, T> {
 }
 
 #[cfg(test)]
+pub(super) struct TestFixture<S> {
+    pub fs: MockFileSystem,
+    drop: fn(Diagnostic),
+    _phantom_data: PhantomData<S>,
+}
+
+#[cfg(test)]
+impl<S: Clone + Default + Merge> TestFixture<S> {
+    pub fn new() -> Self {
+        Self {
+            fs: MockFileSystem::new(),
+            drop: drop,
+            _phantom_data: PhantomData,
+        }
+    }
+
+    pub fn session(&mut self) -> MockSession<S> {
+        MockSession::new(&mut self.fs, &mut self.drop)
+    }
+}
+
+#[cfg(test)]
 pub mod mock {
     use super::*;
 
-    use crate::codebase::fake::FakeCodebase;
-    use crate::diagnostics::mock::Merge;
-    use crate::diagnostics::IgnoreDiagnostics;
     use crate::span::fake::FakeSpanSystem;
 
     pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
 
-    pub(in crate::assembler) type MockSession<S> =
-        CompositeSession<FakeCodebase, FakeSpanSystem<S>, IgnoreDiagnostics>;
-
-    impl<S: Clone + Default + Merge> Default for MockSession<S> {
-        fn default() -> Self {
-            Self::new(FakeCodebase::default(), IgnoreDiagnostics)
-        }
-    }
-
-    impl<S: Clone + Default + Merge> MockSession<S> {
-        pub fn fail(&mut self, error: CodebaseError) {
-            self.codebase.fail(error)
-        }
-    }
+    pub(in crate::assembler) type MockSession<'a, S> = CompositeSession<'a, FakeSpanSystem<S>>;
 }
