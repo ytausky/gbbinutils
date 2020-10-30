@@ -186,11 +186,6 @@ impl FileSystem for StdFileSystem {
     }
 }
 
-pub trait Codebase {
-    fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError>;
-    fn buf(&self, buf_id: SourceFileId) -> Rc<str>;
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum CodebaseError {
     IoError(String),
@@ -218,22 +213,20 @@ impl From<FromUtf8Error> for CodebaseError {
     }
 }
 
-pub struct FileCodebase<'a> {
+pub struct Codebase<'a> {
     fs: &'a mut dyn FileSystem,
     pub cache: RefCell<TextCache>,
 }
 
-impl<'a> FileCodebase<'a> {
+impl<'a> Codebase<'a> {
     pub fn new(fs: &'a mut dyn FileSystem) -> Self {
         Self {
             fs,
             cache: RefCell::new(TextCache::new()),
         }
     }
-}
 
-impl<'a> Codebase for FileCodebase<'a> {
-    fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError> {
+    pub fn open(&mut self, path: &str) -> Result<SourceFileId, CodebaseError> {
         let data = self.fs.read_file(path)?;
         Ok(self
             .cache
@@ -241,7 +234,7 @@ impl<'a> Codebase for FileCodebase<'a> {
             .add_src_buf(path.to_string(), String::from_utf8(data)?))
     }
 
-    fn buf(&self, buf_id: SourceFileId) -> Rc<str> {
+    pub fn buf(&self, buf_id: SourceFileId) -> Rc<str> {
         self.cache.borrow().buf(buf_id).text()
     }
 }

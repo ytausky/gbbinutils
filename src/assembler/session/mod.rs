@@ -14,7 +14,7 @@ use super::syntax::{LexItem, Sigil, Token};
 
 #[cfg(test)]
 use crate::codebase::fake::MockFileSystem;
-use crate::codebase::{CodebaseError, FileCodebase, FileSystem};
+use crate::codebase::{Codebase, CodebaseError, FileSystem};
 use crate::diagnostics::*;
 use crate::expr::Expr;
 use crate::object::{Fragment, SpanData, SymbolId};
@@ -118,7 +118,7 @@ where
         }
         Self {
             builder: ObjectBuilder::new(),
-            codebase: FileCodebase::new(fs),
+            codebase: Codebase::new(fs),
             diagnostics: OutputForwarder {
                 output: diagnostics,
             },
@@ -135,7 +135,7 @@ where
 
 impl<'a, R> Analysis for CompositeSession<'a, R>
 where
-    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>:
         EmitDiag<R::Span, R::Stripped>,
     R: SpanSystem,
     R::Span: 'static,
@@ -163,7 +163,7 @@ pub(crate) trait TokenStream<R: SpanSource> {
 }
 
 pub(super) struct CompositeSession<'a, R: SpanSystem> {
-    pub codebase: FileCodebase<'a>,
+    pub codebase: Codebase<'a>,
     tokens: Vec<Box<dyn TokenStream<R>>>,
     macros: VecMacroTable,
     pub metadata: R,
@@ -202,7 +202,7 @@ impl<'a, R: SpanSystem> NextToken for CompositeSession<'a, R> {
 
 impl<'a, R: SpanSystem> EmitDiag<R::Span, R::Stripped> for CompositeSession<'a, R>
 where
-    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>:
+    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>:
         EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
 {
@@ -217,7 +217,7 @@ where
 }
 
 impl<'a, R: SpanSystem> CompositeSession<'a, R> {
-    fn diagnostics(&mut self) -> DiagnosticsContext<FileCodebase<'a>, R, OutputForwarder<'a>> {
+    fn diagnostics(&mut self) -> DiagnosticsContext<Codebase<'a>, R, OutputForwarder<'a>> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
             registry: &mut self.metadata,

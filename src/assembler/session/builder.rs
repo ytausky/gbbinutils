@@ -57,7 +57,7 @@ impl<'a, R> Backend<R::Span> for CompositeSession<'a, R>
 where
     R: SpanSystem,
     Self: Diagnostics<R::Span>,
-    for<'r> DiagnosticsContext<'r, FileCodebase<'a>, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
+    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
 {
     fn define_symbol(&mut self, name: SymbolId, _span: R::Span, expr: Expr<SymbolId, R::Span>) {
         #[cfg(test)]

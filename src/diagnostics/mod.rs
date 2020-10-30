@@ -6,7 +6,7 @@
 
 pub(crate) use self::message::{KeywordOperandCategory, Message, ValueKind};
 
-use crate::codebase::{FileCodebase, TextBuf, TextCache};
+use crate::codebase::{Codebase, TextBuf, TextCache};
 #[cfg(test)]
 use crate::log::Log;
 use crate::object::{SourceFileId, SourceFileRange, Span, SpanData};
@@ -222,7 +222,7 @@ where
 }
 
 impl<'a, 'b> EmitDiag<Span, StrippedBufSpan>
-    for DiagnosticsContext<'b, FileCodebase<'a>, SpanData, OutputForwarder<'a>>
+    for DiagnosticsContext<'b, Codebase<'a>, SpanData, OutputForwarder<'a>>
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan>>) {
         (self.diagnostics.output)(
@@ -235,7 +235,7 @@ impl<'a, 'b> EmitDiag<Span, StrippedBufSpan>
 
 #[cfg(test)]
 impl<'a, 'b, S> EmitDiag<S, S>
-    for DiagnosticsContext<'b, FileCodebase<'a>, FakeSpanSystem<S>, OutputForwarder<'a>>
+    for DiagnosticsContext<'b, Codebase<'a>, FakeSpanSystem<S>, OutputForwarder<'a>>
 {
     fn emit_diag(&mut self, _: impl Into<CompactDiag<S, S>>) {}
 }

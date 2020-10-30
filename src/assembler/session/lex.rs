@@ -1,7 +1,7 @@
 use crate::assembler::session::{CompositeSession, TokenStream};
 use crate::assembler::string_ref::StringRef;
 use crate::assembler::syntax::*;
-use crate::codebase::{Codebase, CodebaseError};
+use crate::codebase::CodebaseError;
 use crate::object::{FileInclusionMetadata, SourceFileInclusionId, Span};
 use crate::span::SpanSystem;
 
