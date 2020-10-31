@@ -6,7 +6,8 @@
 #![allow(clippy::type_complexity)]
 
 pub use crate::codebase::FileSystem;
-pub use crate::link::{Program, Rom};
+pub use crate::link::{Linker, Program, Rom};
+pub use crate::object::Object;
 
 use crate::diagnostics::*;
 

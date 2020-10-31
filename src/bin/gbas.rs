@@ -15,8 +15,13 @@ fn main() {
         input: InputConfig::default(),
         diagnostics: DiagnosticsConfig::Output(&mut diagnostics),
     };
-    let mut assembler = assembler::Assembler::new(&mut config);
-    if let Some(program) = assembler.assemble(filename) {
+    let object = {
+        let mut assembler = assembler::Assembler::new(&mut config);
+        assembler.assemble(filename)
+    };
+    if let Some(object) = object {
+        let mut linker = Linker::new(&mut config);
+        let program = linker.link(vec![object]).unwrap();
         let mut rom_file = File::create(filename.to_owned() + ".o").unwrap();
         rom_file.write_all(&program.into_rom().data).unwrap()
     }

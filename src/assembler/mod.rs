@@ -1,8 +1,7 @@
 use self::session::{ReentrancyActions, Session};
 
-use crate::codebase::{CodebaseError, FileSystem, StdFileSystem};
+use crate::codebase::{FileSystem, StdFileSystem};
 use crate::diagnostics::{Clause, Diagnostic, Tag};
-use crate::link::Program;
 use crate::object::Object;
 use crate::{Config, DiagnosticsConfig, InputConfig};
 
@@ -12,12 +11,12 @@ pub mod session;
 mod string_ref;
 mod syntax;
 
-pub struct Assembler<'a> {
-    config: &'a mut Config<'a>,
+pub struct Assembler<'r, 'a> {
+    config: &'r mut Config<'a>,
 }
 
-impl<'a> Assembler<'a> {
-    pub fn new(config: &'a mut Config<'a>) -> Self {
+impl<'r, 'a> Assembler<'r, 'a> {
+    pub fn new(config: &'r mut Config<'a>) -> Self {
         Self { config }
     }
 
@@ -30,7 +29,7 @@ impl<'a> Assembler<'a> {
     /// let mut assembler = gbbinutils::assembler::Assembler::new(&mut config);
     /// assembler.assemble("game.s");
     /// ```
-    pub fn assemble(&mut self, name: &str) -> Option<Program> {
+    pub fn assemble(&mut self, name: &str) -> Option<Object> {
         let mut input_holder = None;
         let mut diagnostics_holder = None;
         let input: &mut dyn FileSystem = match &mut self.config.input {
@@ -42,17 +41,6 @@ impl<'a> Assembler<'a> {
             DiagnosticsConfig::Output(diagnostics) => *diagnostics,
         };
         try_assemble(name, input, diagnostics)
-            .map_err(|error| {
-                diagnostics(Diagnostic {
-                    clauses: vec![Clause {
-                        file: name.into(),
-                        tag: Tag::Error,
-                        message: error.to_string(),
-                        excerpt: None,
-                    }],
-                })
-            })
-            .ok()
     }
 }
 
@@ -60,19 +48,22 @@ fn try_assemble<'a>(
     name: &str,
     input: &'a mut dyn FileSystem,
     output: &'a mut dyn FnMut(Diagnostic),
-) -> Result<Program, CodebaseError> {
+) -> Option<Object> {
     let mut session = Session::new(input, output);
-    session.analyze_file(name.into(), None)?;
-
-    let result = Program::link(
-        Object {
-            data: session.builder.data,
-            metadata: session.metadata,
-        },
-        session.codebase,
-        session.diagnostics,
-    );
-    Ok(result)
+    match session.analyze_file(name.into(), None) {
+        Ok(()) => Some(Object(session.try_into_object_data())),
+        Err(error) => {
+            output(Diagnostic {
+                clauses: vec![Clause {
+                    file: name.into(),
+                    tag: Tag::Error,
+                    message: error.to_string(),
+                    excerpt: None,
+                }],
+            });
+            None
+        }
+    }
 }
 
 #[cfg(test)]

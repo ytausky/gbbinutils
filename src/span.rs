@@ -18,11 +18,11 @@ pub trait WithSpan: Sized {
 
 impl<T> WithSpan for T {}
 
-pub trait SpanSource {
+pub(crate) trait SpanSource {
     type Span: Clone;
 }
 
-pub trait Source: SpanSource {
+pub(crate) trait Source: SpanSource {
     fn span(&self) -> Self::Span;
 }
 

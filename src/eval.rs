@@ -276,6 +276,8 @@ pub const BUILTIN_SYMBOLS: &[(&str, SymbolId)] =
 mod tests {
     use super::*;
 
+    use crate::codebase::fake::MockFileSystem;
+    use crate::codebase::Codebase;
     use crate::diagnostics::*;
     use crate::log::Log;
 
@@ -433,8 +435,10 @@ mod tests {
         let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut fs = MockFileSystem::new();
+        let codebase = &mut Codebase::new(&mut fs);
         let mut view = DiagnosticsContext {
-            codebase: &mut (),
+            codebase,
             registry,
             diagnostics: &mut diagnostics,
         };
@@ -470,8 +474,10 @@ mod tests {
         let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut fs = MockFileSystem::new();
+        let codebase = &mut Codebase::new(&mut fs);
         let mut view = DiagnosticsContext {
-            codebase: &mut (),
+            codebase,
             registry,
             diagnostics: &mut diagnostics,
         };
@@ -534,8 +540,10 @@ mod tests {
         let log = Log::default();
         let registry = &mut TestDiagnosticsListener::new();
         let mut diagnostics = MockDiagnostics::new(log.clone());
+        let mut fs = MockFileSystem::new();
+        let codebase = &mut Codebase::new(&mut fs);
         let mut view = DiagnosticsContext {
-            codebase: &mut (),
+            codebase,
             registry,
             diagnostics: &mut diagnostics,
         };

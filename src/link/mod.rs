@@ -1,25 +1,80 @@
-use crate::diagnostics::{Diagnostics, DiagnosticsContext, IgnoreDiagnostics};
+use crate::codebase::{Codebase, FileSystem, StdFileSystem};
+use crate::diagnostics::*;
 use crate::object::var::Var;
 use crate::object::*;
 use crate::span::SpanSource;
+use crate::{Config, DiagnosticsConfig, InputConfig};
 
 use std::borrow::Borrow;
 
 mod translate;
 
-pub struct Program {
-    pub sections: Vec<BinarySection>,
+pub struct Linker<'a> {
+    config: &'a mut Config<'a>,
 }
 
-impl Program {
-    pub(crate) fn link<C, D, M: SpanSource>(
-        mut object: Object<M>,
-        mut codebase: C,
-        mut diagnostics: D,
-    ) -> Self
+impl<'a> Linker<'a> {
+    pub fn new(config: &'a mut Config<'a>) -> Self {
+        Self { config }
+    }
+
+    pub fn link<I>(&mut self, objects: I) -> Option<Program>
     where
-        for<'a> DiagnosticsContext<'a, C, M, D>: Diagnostics<M::Span>,
+        I: IntoIterator<Item = Object>,
     {
+        let mut input_holder = None;
+        let mut diagnostics_holder = None;
+        let input: &mut dyn FileSystem = match &mut self.config.input {
+            InputConfig::Default => input_holder.get_or_insert_with(StdFileSystem::new),
+            InputConfig::Custom(input) => *input,
+        };
+        let diagnostics: &mut dyn FnMut(Diagnostic) = match &mut self.config.diagnostics {
+            DiagnosticsConfig::Ignore => diagnostics_holder.get_or_insert(|_| {}),
+            DiagnosticsConfig::Output(diagnostics) => *diagnostics,
+        };
+        try_link(objects, input, diagnostics)
+    }
+}
+
+fn try_link<I>(
+    objects: I,
+    input: &mut dyn FileSystem,
+    diagnostics: &mut dyn FnMut(Diagnostic),
+) -> Option<Program>
+where
+    I: IntoIterator<Item = Object>,
+{
+    let session = Session::<_, SpanData>::new(
+        input,
+        OutputForwarder {
+            output: diagnostics,
+        },
+    );
+    Some(session.link(objects.into_iter().next().unwrap().0))
+}
+
+struct Session<'a, D, M> {
+    codebase: Codebase<'a>,
+    diagnostics: D,
+    metadata: M,
+}
+
+impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
+    fn new(fs: &'a mut dyn FileSystem, diagnostics: D) -> Self {
+        Self {
+            codebase: Codebase::new(fs),
+            diagnostics,
+            metadata: M::default(),
+        }
+    }
+
+    pub(super) fn link(mut self, mut object: ObjectData<M::Span>) -> Program
+    where
+        for<'r> DiagnosticsContext<'r, 'a, M, D>: Diagnostics<M::Span>,
+    {
+        for path in Vec::from(object.metadata.source_files) {
+            self.codebase.open(&path).unwrap();
+        }
         object.data.vars.resolve(&object.data.content);
         let mut context = LinkageContext {
             content: &object.data.content,
@@ -27,11 +82,11 @@ impl Program {
             location: 0.into(),
         };
         let mut diagnostics = DiagnosticsContext {
-            codebase: &mut codebase,
-            registry: &mut object.metadata,
-            diagnostics: &mut diagnostics,
+            codebase: &mut self.codebase,
+            registry: &mut self.metadata,
+            diagnostics: &mut self.diagnostics,
         };
-        Self {
+        Program {
             sections: object
                 .data
                 .content
@@ -40,7 +95,13 @@ impl Program {
                 .collect(),
         }
     }
+}
 
+pub struct Program {
+    pub sections: Vec<BinarySection>,
+}
+
+impl Program {
     pub fn into_rom(self) -> Rom {
         let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
@@ -157,6 +218,7 @@ impl Width {
 mod tests {
     use super::*;
 
+    use crate::codebase::fake::MockFileSystem;
     use crate::diagnostics::{IgnoreDiagnostics, Message, MockSpan, TestDiagnosticsListener};
     use crate::expr::Expr;
     use crate::expr::*;
@@ -203,7 +265,7 @@ mod tests {
 
     #[test]
     fn section_with_immediate_byte_fragment() {
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -219,15 +281,19 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
-            metadata: FakeSpanSystem::<()>::default(),
+            metadata: Metadata::default(),
         };
-        let program = Program::link(object, (), IgnoreDiagnostics);
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
         assert_eq!(program.sections[0].data, [0xff])
     }
 
     #[test]
     fn section_with_two_immediate_byte_fragments() {
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -249,9 +315,13 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<()>::default(),
+            metadata: Metadata::default(),
         };
-        let program = Program::link(object, (), IgnoreDiagnostics);
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
         assert_eq!(program.sections[0].data, [0x12, 0x34])
     }
 
@@ -266,7 +336,7 @@ mod tests {
     }
 
     fn test_diagnostic_for_out_of_range_immediate_byte_fragment(value: i32) {
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -282,11 +352,13 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 1.into()]),
             },
-            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
+            metadata: Metadata::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
-        Program::link(object, (), listener);
+        let mut fs = MockFileSystem::new();
+        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.link(object);
         assert_eq!(
             *diagnostics.into_inner(),
             [Message::ValueOutOfRange {
@@ -301,7 +373,7 @@ mod tests {
     #[test]
     fn diagnose_unresolved_symbol() {
         // DW   name
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -320,11 +392,13 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
+            metadata: Metadata::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
-        Program::link(object, (), listener);
+        let mut fs = MockFileSystem::new();
+        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.link(object);
         assert_eq!(
             *diagnostics.into_inner(),
             [Message::UnresolvedSymbol {
@@ -338,7 +412,7 @@ mod tests {
     #[test]
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         // DW   name1 - name2
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -360,11 +434,13 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into()]),
             },
-            metadata: FakeSpanSystem::<MockSpan<_>>::default(),
+            metadata: Metadata::default(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
-        Program::link(object, (), listener);
+        let mut fs = MockFileSystem::new();
+        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.link(object);
         assert_eq!(
             *diagnostics.into_inner(),
             [
@@ -385,7 +461,7 @@ mod tests {
     #[test]
     fn emit_symbol_after_definition() {
         // name DB  name
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -407,16 +483,20 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
             },
-            metadata: FakeSpanSystem::<_>::default(),
+            metadata: Metadata::default(),
         };
-        let program = Program::link(object, (), IgnoreDiagnostics);
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
         assert_eq!(program.sections[0].data, [0x00, 0x00])
     }
 
     #[test]
     fn emit_symbol_before_definition() {
         // name DB  name
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -438,9 +518,13 @@ mod tests {
                 },
                 vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
             },
-            metadata: FakeSpanSystem::<_>::default(),
+            metadata: Metadata::default(),
         };
-        let program = Program::link(object, (), IgnoreDiagnostics);
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
         assert_eq!(program.sections[0].data, [0x02, 0x00])
     }
 
@@ -453,7 +537,7 @@ mod tests {
         // NOP
         // ORG . + $10
         // HALT
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![
@@ -487,12 +571,16 @@ mod tests {
                     1.into(),
                 ]),
             },
-            metadata: FakeSpanSystem::<_>::default(),
+            metadata: Metadata::default(),
         };
 
-        let binary = Program::link(object, (), IgnoreDiagnostics);
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
         assert_eq!(
-            binary.sections[1].addr,
+            program.sections[1].addr,
             (origin1 + 1 + skipped_bytes) as usize
         )
     }
@@ -628,7 +716,7 @@ mod tests {
         // my_section   SECTION
         //              ORG     $1337
         //              DW      my_section
-        let object = Object {
+        let object = ObjectData {
             data: Data {
                 content: Content {
                     sections: vec![Section {
@@ -646,11 +734,15 @@ mod tests {
                 },
                 vars: VarTable(vec![0x1337.into(), 2.into()]),
             },
-            metadata: FakeSpanSystem::<_>::default(),
+            metadata: Metadata::default(),
         };
 
-        let binary = Program::link(object, (), IgnoreDiagnostics);
-        assert_eq!(binary.sections[0].data, [0x37, 0x13])
+        let program = {
+            let mut fs = MockFileSystem::new();
+            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.link(object)
+        };
+        assert_eq!(program.sections[0].data, [0x37, 0x13])
     }
 
     #[test]

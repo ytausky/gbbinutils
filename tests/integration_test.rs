@@ -92,10 +92,16 @@ fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<Diagnostic>) {
         input: InputConfig::Custom(&mut fs),
         diagnostics: DiagnosticsConfig::Output(&mut output),
     };
-    let mut assembler = Assembler::new(&mut config);
-    let binary = assembler.assemble(name);
+    let object = {
+        let mut assembler = Assembler::new(&mut config);
+        assembler.assemble(name)
+    };
+    let program = object.and_then(|object| {
+        let mut linker = Linker::new(&mut config);
+        linker.link(vec![object])
+    });
     (
-        binary.map(|mut binary| binary.sections.pop().unwrap().data.into()),
+        program.map(|mut program| program.sections.pop().unwrap().data.into()),
         diagnostics,
     )
 }

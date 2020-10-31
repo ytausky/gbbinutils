@@ -34,8 +34,7 @@ where
     Self: EmitDiag<R::Span, R::Stripped>,
     Self: StartScope + NameTable<StringRef>,
     Self: Backend<R::Span>,
-    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>:
-        EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: EmitDiag<R::Span, R::Stripped>,
     R::Span: 'static,
     R::Stripped: Clone,
 {

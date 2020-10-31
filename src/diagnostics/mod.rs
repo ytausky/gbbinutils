@@ -195,13 +195,13 @@ pub(crate) struct OutputForwarder<'a> {
     pub output: &'a mut dyn FnMut(Diagnostic),
 }
 
-pub(crate) struct DiagnosticsContext<'a, C, R, D> {
-    pub codebase: &'a mut C,
-    pub registry: &'a mut R,
-    pub diagnostics: &'a mut D,
+pub(crate) struct DiagnosticsContext<'r, 'a, R, D> {
+    pub codebase: &'r mut Codebase<'a>,
+    pub registry: &'r mut R,
+    pub diagnostics: &'r mut D,
 }
 
-impl<'a, C, R, D, S> MergeSpans<S> for DiagnosticsContext<'a, C, R, D>
+impl<'r, 'a, R, D, S> MergeSpans<S> for DiagnosticsContext<'r, 'a, R, D>
 where
     R: MergeSpans<S>,
 {
@@ -210,7 +210,7 @@ where
     }
 }
 
-impl<'a, C, R, D, S> StripSpan<S> for DiagnosticsContext<'a, C, R, D>
+impl<'r, 'a, R, D, S> StripSpan<S> for DiagnosticsContext<'r, 'a, R, D>
 where
     R: StripSpan<S>,
 {
@@ -221,28 +221,28 @@ where
     }
 }
 
-impl<'a, 'b> EmitDiag<Span, StrippedBufSpan>
-    for DiagnosticsContext<'b, Codebase<'a>, SpanData, OutputForwarder<'a>>
+impl<'r, 'a> EmitDiag<Span, StrippedBufSpan>
+    for DiagnosticsContext<'r, 'a, SpanData, OutputForwarder<'a>>
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<Span, StrippedBufSpan>>) {
         (self.diagnostics.output)(
             diag.into()
                 .expand(self.registry)
-                .render(&self.codebase.cache.borrow()),
+                .render(&self.codebase.cache),
         )
     }
 }
 
 #[cfg(test)]
-impl<'a, 'b, S> EmitDiag<S, S>
-    for DiagnosticsContext<'b, Codebase<'a>, FakeSpanSystem<S>, OutputForwarder<'a>>
+impl<'r, 'a, S> EmitDiag<S, S>
+    for DiagnosticsContext<'r, 'a, FakeSpanSystem<S>, OutputForwarder<'a>>
 {
     fn emit_diag(&mut self, _: impl Into<CompactDiag<S, S>>) {}
 }
 
 pub(crate) struct IgnoreDiagnostics;
 
-impl<'a, C, R, S, T> EmitDiag<S, T> for DiagnosticsContext<'a, C, R, IgnoreDiagnostics> {
+impl<'r, 'a, R, S, T> EmitDiag<S, T> for DiagnosticsContext<'r, 'a, R, IgnoreDiagnostics> {
     fn emit_diag(&mut self, _: impl Into<CompactDiag<S, T>>) {}
 }
 
@@ -294,7 +294,7 @@ impl<S: Clone> StripSpan<S> for TestDiagnosticsListener<S> {
 }
 
 #[cfg(test)]
-impl<'a, C, R, S> EmitDiag<S, S> for DiagnosticsContext<'a, C, R, TestDiagnosticsListener<S>> {
+impl<'r, 'a, R, S> EmitDiag<S, S> for DiagnosticsContext<'r, 'a, R, TestDiagnosticsListener<S>> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S>>) {
         self.diagnostics.diagnostics.push(diag.into())
     }
@@ -499,7 +499,7 @@ pub(crate) mod mock {
         }
     }
 
-    impl<'a, C, R, T, S> EmitDiag<S, S> for DiagnosticsContext<'a, C, R, MockDiagnostics<T, S>>
+    impl<'r, 'a, R, T, S> EmitDiag<S, S> for DiagnosticsContext<'r, 'a, R, MockDiagnostics<T, S>>
     where
         T: From<DiagnosticsEvent<S>>,
     {

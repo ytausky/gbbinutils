@@ -1,15 +1,16 @@
 use self::var::Var;
 
 use crate::expr::{Atom, ExprOp};
-use crate::span::SpanSource;
 
 use std::ops::{Index, IndexMut, Range, RangeInclusive};
 
 pub mod var;
 
-pub struct Object<M: SpanSource> {
-    pub data: Data<M::Span>,
-    pub metadata: M,
+pub struct Object(pub(crate) ObjectData<Span>);
+
+pub struct ObjectData<S> {
+    pub(crate) data: Data<S>,
+    pub(crate) metadata: Metadata,
 }
 
 pub struct Data<S> {
@@ -89,10 +90,18 @@ pub struct SectionId(pub usize);
 
 pub struct VarTable(pub Vec<Var>);
 
-pub(crate) struct SpanData {
-    pub source_file_inclusions: Vec<FileInclusionMetadata<Span>>,
-    pub macro_defs: Vec<MacroDefMetadata<Span>>,
-    pub macro_expansions: Vec<MacroExpansionMetadata<Span>>,
+#[derive(Default)]
+pub struct Metadata {
+    pub source_files: SourceFileTable,
+    pub span_data: SpanData,
+}
+
+pub type SourceFileTable = Box<[Box<str>]>;
+
+pub struct SpanData {
+    pub(crate) source_file_inclusions: Vec<FileInclusionMetadata<Span>>,
+    pub(crate) macro_defs: Vec<MacroDefMetadata<Span>>,
+    pub(crate) macro_expansions: Vec<MacroExpansionMetadata<Span>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -128,7 +137,7 @@ pub struct MacroExpansionMetadata<S> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Span {
+pub enum Span {
     SourceFile {
         inclusion_metadata: SourceFileInclusionId,
         range: SourceFileRange,

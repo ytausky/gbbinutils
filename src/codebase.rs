@@ -1,7 +1,6 @@
 use crate::diagnostics::{LineIndex, LineNumber, TextPosition, TextRange};
-use crate::object::{SourceFileId, SourceFileRange};
+use crate::object::{SourceFileId, SourceFileRange, SourceFileTable};
 
-use std::cell::RefCell;
 use std::fmt::{Display, Error, Formatter};
 use std::io;
 use std::rc::Rc;
@@ -215,14 +214,14 @@ impl From<FromUtf8Error> for CodebaseError {
 
 pub struct Codebase<'a> {
     fs: &'a mut dyn FileSystem,
-    pub cache: RefCell<TextCache>,
+    pub cache: TextCache,
 }
 
 impl<'a> Codebase<'a> {
     pub fn new(fs: &'a mut dyn FileSystem) -> Self {
         Self {
             fs,
-            cache: RefCell::new(TextCache::new()),
+            cache: TextCache::new(),
         }
     }
 
@@ -230,12 +229,22 @@ impl<'a> Codebase<'a> {
         let data = self.fs.read_file(path)?;
         Ok(self
             .cache
-            .borrow_mut()
             .add_src_buf(path.to_string(), String::from_utf8(data)?))
     }
 
     pub fn buf(&self, buf_id: SourceFileId) -> Rc<str> {
-        self.cache.borrow().buf(buf_id).text()
+        self.cache.buf(buf_id).text()
+    }
+
+    pub fn export_source_file_table(&self) -> SourceFileTable {
+        self.cache
+            .bufs
+            .iter()
+            .map(StringSrcBuf::name)
+            .map(ToOwned::to_owned)
+            .map(Into::into)
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 }
 

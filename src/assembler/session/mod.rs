@@ -17,7 +17,7 @@ use crate::codebase::fake::MockFileSystem;
 use crate::codebase::{Codebase, CodebaseError, FileSystem};
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::{Fragment, SpanData, SymbolId};
+use crate::object::{Fragment, Metadata, ObjectData, Span, SpanData, SymbolId};
 use crate::span::*;
 
 use std::collections::HashMap;
@@ -133,10 +133,21 @@ where
     }
 }
 
+impl<'a> CompositeSession<'a, SpanData> {
+    pub fn try_into_object_data(self) -> ObjectData<Span> {
+        ObjectData {
+            data: self.builder.data,
+            metadata: Metadata {
+                source_files: self.codebase.export_source_file_table(),
+                span_data: self.metadata,
+            },
+        }
+    }
+}
+
 impl<'a, R> Analysis for CompositeSession<'a, R>
 where
-    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>:
-        EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: EmitDiag<R::Span, R::Stripped>,
     R: SpanSystem,
     R::Span: 'static,
     R::Stripped: Clone,
@@ -163,14 +174,14 @@ pub(crate) trait TokenStream<R: SpanSource> {
 }
 
 pub(super) struct CompositeSession<'a, R: SpanSystem> {
-    pub codebase: Codebase<'a>,
+    codebase: Codebase<'a>,
     tokens: Vec<Box<dyn TokenStream<R>>>,
     macros: VecMacroTable,
-    pub metadata: R,
+    metadata: R,
     mnemonics: HashMap<StringRef, MnemonicEntry>,
     names: BiLevelNameTable<StringRef>,
-    pub builder: ObjectBuilder<R::Span>,
-    pub diagnostics: OutputForwarder<'a>,
+    builder: ObjectBuilder<R::Span>,
+    diagnostics: OutputForwarder<'a>,
     #[cfg(test)]
     log: Vec<Event<SymbolId, MacroId, R::Span, R::Stripped>>,
 }
@@ -202,8 +213,7 @@ impl<'a, R: SpanSystem> NextToken for CompositeSession<'a, R> {
 
 impl<'a, R: SpanSystem> EmitDiag<R::Span, R::Stripped> for CompositeSession<'a, R>
 where
-    for<'r> DiagnosticsContext<'r, Codebase<'a>, R, OutputForwarder<'a>>:
-        EmitDiag<R::Span, R::Stripped>,
+    for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: EmitDiag<R::Span, R::Stripped>,
     R::Stripped: Clone,
 {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<R::Span, R::Stripped>>) {
@@ -217,7 +227,7 @@ where
 }
 
 impl<'a, R: SpanSystem> CompositeSession<'a, R> {
-    fn diagnostics(&mut self) -> DiagnosticsContext<Codebase<'a>, R, OutputForwarder<'a>> {
+    fn diagnostics<'r>(&'r mut self) -> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>> {
         DiagnosticsContext {
             codebase: &mut self.codebase,
             registry: &mut self.metadata,
@@ -305,7 +315,7 @@ impl<S: Clone + Default + Merge> TestFixture<S> {
     pub fn new() -> Self {
         Self {
             fs: MockFileSystem::new(),
-            drop: drop,
+            drop,
             _phantom_data: PhantomData,
         }
     }
