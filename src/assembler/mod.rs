@@ -7,7 +7,7 @@ use crate::{Config, DiagnosticsConfig, InputConfig};
 
 mod keywords;
 mod semantics;
-pub mod session;
+mod session;
 mod string_ref;
 mod syntax;
 
@@ -24,9 +24,9 @@ impl<'r, 'a> Assembler<'r, 'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```
     /// let mut config = gbbinutils::Config::default();
-    /// let mut assembler = gbbinutils::assembler::Assembler::new(&mut config);
+    /// let mut assembler = gbbinutils::Assembler::new(&mut config);
     /// assembler.assemble("game.s");
     /// ```
     pub fn assemble(&mut self, name: &str) -> Option<Object> {

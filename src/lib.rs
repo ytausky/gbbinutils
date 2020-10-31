@@ -5,16 +5,15 @@
 
 #![allow(clippy::type_complexity)]
 
+pub use crate::assembler::Assembler;
 pub use crate::codebase::FileSystem;
-pub use crate::link::{Linker, Program, Rom};
+pub use crate::diagnostics::*;
+pub use crate::link::{BinarySection, Linker, Program};
 pub use crate::object::Object;
 
-use crate::diagnostics::*;
-
-pub mod assembler;
-pub mod diagnostics;
-
+mod assembler;
 mod codebase;
+mod diagnostics;
 mod eval;
 mod expr;
 mod link;

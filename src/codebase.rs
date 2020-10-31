@@ -7,11 +7,11 @@ use std::rc::Rc;
 use std::string::FromUtf8Error;
 use std::{cmp, fs, ops};
 
-pub trait TextBuf {
+pub(crate) trait TextBuf {
     fn text_range(&self, buf_range: &SourceFileRange) -> TextRange;
 }
 
-pub struct StringSrcBuf {
+pub(crate) struct StringSrcBuf {
     name: String,
     src: Rc<str>,
     line_ranges: Vec<SourceFileRange>,
@@ -58,7 +58,7 @@ impl StringSrcBuf {
         let line_range = &self.line_ranges[line.0];
         TextPosition {
             line,
-            column_index: buf_offset - line_range.start,
+            column_index: (buf_offset - line_range.start) as u32,
         }
     }
 
@@ -118,7 +118,7 @@ impl TextBuf for StringSrcBuf {
     }
 }
 
-pub struct TextCache {
+pub(crate) struct TextCache {
     bufs: Vec<StringSrcBuf>,
 }
 
@@ -212,7 +212,7 @@ impl From<FromUtf8Error> for CodebaseError {
     }
 }
 
-pub struct Codebase<'a> {
+pub(crate) struct Codebase<'a> {
     fs: &'a mut dyn FileSystem,
     pub cache: TextCache,
 }

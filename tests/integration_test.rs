@@ -1,5 +1,3 @@
-use gbbinutils::assembler::Assembler;
-use gbbinutils::diagnostics::Diagnostic;
 use gbbinutils::*;
 
 use std::io;

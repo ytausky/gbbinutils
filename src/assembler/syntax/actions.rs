@@ -916,7 +916,7 @@ pub mod mock {
         EmitDiag(CompactDiag<S>),
     }
 
-    pub type Label<I, S> = ((I, S), Vec<ParamsAction<I, S>>);
+    pub(crate) type Label<I, S> = ((I, S), Vec<ParamsAction<I, S>>);
 
     #[derive(Clone, Debug, PartialEq)]
     pub(crate) enum InstrAction<I, L, S> {
@@ -946,31 +946,31 @@ pub mod mock {
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub enum ParamsAction<I, S> {
+    pub(crate) enum ParamsAction<I, S> {
         AddParameter(I, S),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub enum TokenLineAction<I, L, S> {
+    pub(crate) enum TokenLineAction<I, L, S> {
         Token((Token<I, L>, S)),
         Ident((I, S)),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub enum TokenSeqAction<I, L, S> {
+    pub(crate) enum TokenSeqAction<I, L, S> {
         PushToken((Token<I, L>, S)),
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub enum ErrorAction<S> {
+    pub(crate) enum ErrorAction<S> {
         EmitDiag(CompactDiag<S>),
     }
 
     #[derive(Clone, Debug, PartialEq)]
-    pub enum MacroInstrAction<I, L, S> {
+    pub(crate) enum MacroInstrAction<I, L, S> {
         MacroArg(Vec<TokenSeqAction<I, L, S>>),
         EmitDiag(CompactDiag<S>),
     }

@@ -23,7 +23,7 @@ impl<'a, S: Clone + 'a> Section<S> {
                 if !data.is_empty() {
                     chunks.push(BinarySection {
                         addr: addr.exact().unwrap() as usize,
-                        data: replace(&mut data, Vec::new()),
+                        data: replace(&mut data, Vec::new()).into_boxed_slice(),
                     });
                 }
                 context.location += &bytes;
@@ -35,7 +35,7 @@ impl<'a, S: Clone + 'a> Section<S> {
         if !data.is_empty() {
             chunks.push(BinarySection {
                 addr: addr.exact().unwrap() as usize,
-                data,
+                data: data.into_boxed_slice(),
             });
         }
         chunks
@@ -290,7 +290,7 @@ mod tests {
             .next()
             .unwrap()
             .translate(context, &mut IgnoreDiagnostics);
-        assert_eq!(binary[0].data, [0x00, 0x02])
+        assert_eq!(*binary[0].data, [0x00, 0x02])
     }
 
     #[test]
@@ -329,6 +329,6 @@ mod tests {
             .next()
             .unwrap()
             .translate(context, &mut IgnoreDiagnostics);
-        assert_eq!(binary[0].data, [0xe3, 0xff])
+        assert_eq!(*binary[0].data, [0xe3, 0xff])
     }
 }

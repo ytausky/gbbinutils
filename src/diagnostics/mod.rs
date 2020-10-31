@@ -60,26 +60,35 @@ pub enum Tag {
 pub struct Excerpt {
     pub line: LineNumber,
     pub source: String,
-    pub highlight: Option<TextRange>,
+    pub highlight: Option<ColumnRange>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineNumber(pub usize);
 
 #[derive(Debug, PartialEq)]
-pub struct TextPosition {
+pub struct ColumnRange {
+    pub start: ColumnNumber,
+    pub end: ColumnNumber,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColumnNumber(pub u32);
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct TextPosition {
     pub line: LineIndex,
-    pub column_index: usize,
+    pub column_index: u32,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TextRange {
+pub(crate) struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct LineIndex(pub usize);
+pub(crate) struct LineIndex(pub usize);
 
 impl Add<usize> for LineIndex {
     type Output = LineIndex;
@@ -151,16 +160,14 @@ impl fmt::Display for Tag {
     }
 }
 
-fn mk_squiggle(range: &TextRange) -> String {
-    assert_eq!(range.start.line, range.end.line);
-
+fn mk_squiggle(range: &ColumnRange) -> String {
     use std::cmp::max;
-    let space_count = range.start.column_index;
-    let caret_count = max(range.end.column_index - space_count, 1);
+    let space_count = range.start.0 - 1;
+    let caret_count = max(range.end.0 - range.start.0, 1);
 
     use std::iter::{once, repeat};
-    let spaces = repeat(' ').take(space_count);
-    let carets = repeat('^').take(caret_count);
+    let spaces = repeat(' ').take(space_count as usize);
+    let carets = repeat('^').take(caret_count as usize);
     once('\n').chain(spaces).chain(carets).collect()
 }
 
@@ -182,10 +189,6 @@ impl<T, S> BackendDiagnostics<S> for T where
 }
 
 impl<T, S> Diagnostics<S> for T where T: MergeSpans<S> + BackendDiagnostics<S> {}
-
-pub trait DiagnosticsOutput {
-    fn emit(&mut self, diagnostic: Diagnostic);
-}
 
 pub(crate) trait EmitDiag<S, T> {
     fn emit_diag(&mut self, diag: impl Into<CompactDiag<S, T>>);
@@ -301,7 +304,7 @@ impl<'r, 'a, R, S> EmitDiag<S, S> for DiagnosticsContext<'r, 'a, R, TestDiagnost
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompactDiag<S, R = S> {
+pub(crate) struct CompactDiag<S, R = S> {
     main: CompactClause<S, R>,
 }
 
@@ -387,15 +390,22 @@ impl ExpandedDiagnosticClause {
     fn render(&self, codebase: &TextCache) -> Clause {
         let buf = codebase.buf(self.buf_id);
         let excerpt = self.location.as_ref().map(|range| {
-            let highlight = buf.text_range(&range);
+            let range = buf.text_range(&range);
+            let highlight = {
+                assert_eq!(range.start.line, range.end.line);
+                ColumnRange {
+                    start: ColumnNumber(range.start.column_index + 1),
+                    end: ColumnNumber(range.end.column_index + 1),
+                }
+            };
             let source = buf
-                .lines(highlight.start.line..=highlight.end.line)
+                .lines(range.start.line..=range.end.line)
                 .next()
                 .map(|(_, line)| line.trim_end())
                 .unwrap()
                 .into();
             Excerpt {
-                line: highlight.start.line.into(),
+                line: range.start.line.into(),
                 source,
                 highlight: Some(highlight),
             }
@@ -471,7 +481,7 @@ pub(crate) mod mock {
     }
 
     #[derive(Debug, PartialEq)]
-    pub enum DiagnosticsEvent<S> {
+    pub(crate) enum DiagnosticsEvent<S> {
         EmitDiag(CompactDiag<S>),
     }
 
@@ -550,7 +560,7 @@ mod tests {
                     excerpt: Some(Excerpt {
                         line: LineNumber(2),
                         source: "    my_macro a, $12".to_string(),
-                        highlight: mk_highlight(LineNumber(2), 4, 12),
+                        highlight: mk_highlight(5, 13),
                     })
                 }]
             }
@@ -644,7 +654,7 @@ mod tests {
                 excerpt: Some(Excerpt {
                     line: LineNumber(2),
                     source: "    my_macro a, $12".to_string(),
-                    highlight: mk_highlight(LineNumber(2), 4, 12),
+                    highlight: mk_highlight(5, 13),
                 }),
             }],
         };
@@ -680,7 +690,7 @@ mod tests {
                 excerpt: Some(Excerpt {
                     line: LineNumber(2),
                     source: "dummy".to_string(),
-                    highlight: mk_highlight(LineNumber(2), 5, 5),
+                    highlight: mk_highlight(6, 6),
                 }),
             }],
         };
@@ -691,16 +701,10 @@ dummy
         assert_eq!(elaborated.to_string(), expected)
     }
 
-    fn mk_highlight(line_number: LineNumber, start: usize, end: usize) -> Option<TextRange> {
-        Some(TextRange {
-            start: TextPosition {
-                line: line_number.into(),
-                column_index: start,
-            },
-            end: TextPosition {
-                line: line_number.into(),
-                column_index: end,
-            },
+    fn mk_highlight(start: u32, end: u32) -> Option<ColumnRange> {
+        Some(ColumnRange {
+            start: ColumnNumber(start),
+            end: ColumnNumber(end),
         })
     }
 }

@@ -102,7 +102,7 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn into_rom(self) -> Rom {
+    pub fn into_rom(self) -> Box<[u8]> {
         let default = 0xffu8;
         let mut data: Vec<u8> = Vec::new();
         for section in self.sections {
@@ -117,21 +117,15 @@ impl Program {
         if data.len() < MIN_ROM_LEN {
             data.resize(MIN_ROM_LEN, default)
         }
-        Rom {
-            data: data.into_boxed_slice(),
-        }
+        data.into_boxed_slice()
     }
 }
 
 const MIN_ROM_LEN: usize = 0x8000;
 
-pub struct Rom {
-    pub data: Box<[u8]>,
-}
-
 pub struct BinarySection {
     pub addr: usize,
-    pub data: Vec<u8>,
+    pub data: Box<[u8]>,
 }
 
 impl VarTable {
@@ -231,7 +225,7 @@ mod tests {
             sections: Vec::new(),
         };
         let rom = object.into_rom();
-        assert_eq!(*rom.data, [0xffu8; MIN_ROM_LEN][..])
+        assert_eq!(*rom, [0xffu8; MIN_ROM_LEN][..])
     }
 
     #[test]
@@ -241,13 +235,13 @@ mod tests {
         let object = Program {
             sections: vec![BinarySection {
                 addr,
-                data: vec![byte],
+                data: Box::new([byte]),
             }],
         };
         let rom = object.into_rom();
         let mut expected = [0xffu8; MIN_ROM_LEN];
         expected[addr] = byte;
-        assert_eq!(*rom.data, expected[..])
+        assert_eq!(*rom, expected[..])
     }
 
     #[test]
@@ -256,11 +250,11 @@ mod tests {
         let object = Program {
             sections: vec![BinarySection {
                 addr,
-                data: Vec::new(),
+                data: Box::new([]),
             }],
         };
         let rom = object.into_rom();
-        assert_eq!(rom.data.len(), MIN_ROM_LEN)
+        assert_eq!(rom.len(), MIN_ROM_LEN)
     }
 
     #[test]
@@ -288,7 +282,7 @@ mod tests {
             let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
             session.link(object)
         };
-        assert_eq!(program.sections[0].data, [0xff])
+        assert_eq!(*program.sections[0].data, [0xff])
     }
 
     #[test]
@@ -322,7 +316,7 @@ mod tests {
             let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
             session.link(object)
         };
-        assert_eq!(program.sections[0].data, [0x12, 0x34])
+        assert_eq!(*program.sections[0].data, [0x12, 0x34])
     }
 
     #[test]
@@ -490,7 +484,7 @@ mod tests {
             let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
             session.link(object)
         };
-        assert_eq!(program.sections[0].data, [0x00, 0x00])
+        assert_eq!(*program.sections[0].data, [0x00, 0x00])
     }
 
     #[test]
@@ -525,7 +519,7 @@ mod tests {
             let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
             session.link(object)
         };
-        assert_eq!(program.sections[0].data, [0x02, 0x00])
+        assert_eq!(*program.sections[0].data, [0x02, 0x00])
     }
 
     #[test]
@@ -742,7 +736,7 @@ mod tests {
             let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
             session.link(object)
         };
-        assert_eq!(program.sections[0].data, [0x37, 0x13])
+        assert_eq!(*program.sections[0].data, [0x37, 0x13])
     }
 
     #[test]
