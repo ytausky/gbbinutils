@@ -17,7 +17,7 @@ use crate::codebase::fake::MockFileSystem;
 use crate::codebase::{Codebase, CodebaseError, FileSystem};
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::{Fragment, Metadata, ObjectData, Span, SpanData, SymbolId};
+use crate::object::{Fragment, Metadata, ObjectData, SpanData, SymbolId};
 use crate::span::*;
 
 use std::collections::HashMap;
@@ -134,13 +134,14 @@ where
 }
 
 impl<'a> CompositeSession<'a, SpanData> {
-    pub fn try_into_object_data(self) -> ObjectData<Span> {
+    pub fn try_into_object_data(self) -> ObjectData<Metadata> {
         ObjectData {
-            data: self.builder.data,
+            content: self.builder.content,
             metadata: Metadata {
                 source_files: self.codebase.export_source_file_table(),
                 span_data: self.metadata,
             },
+            vars: self.builder.vars,
         }
     }
 }

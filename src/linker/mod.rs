@@ -45,41 +45,64 @@ fn try_link<I>(
 where
     I: IntoIterator<Item = Object>,
 {
-    let session = Session::<_, SpanData>::new(
+    let mut session = Session::<_, SpanData>::new(
         input,
         OutputForwarder {
             output: diagnostics,
         },
     );
-    Some(session.link(objects.into_iter().next().unwrap().0))
+    for Object(data) in objects {
+        session.import_object(data)
+    }
+    Some(session.link())
 }
 
-struct Session<'a, D, M> {
+struct Session<'a, D, M: SpanSource> {
     codebase: Codebase<'a>,
+    content: Content<M::Span>,
     diagnostics: D,
     metadata: M,
+    vars: VarTable,
 }
 
 impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
     fn new(fs: &'a mut dyn FileSystem, diagnostics: D) -> Self {
         Self {
             codebase: Codebase::new(fs),
+            content: Content::new(),
             diagnostics,
             metadata: M::default(),
+            vars: VarTable::new(),
         }
     }
 
-    fn link(mut self, mut object: ObjectData<M::Span>) -> Program
+    fn import_object<N>(&mut self, object: ObjectData<N>)
+    where
+        N: SpanSource<Span = M::Span>,
+        Self: ImportMetadata<N>,
+        <Self as ImportMetadata<N>>::SpanPatcher: PatchSpan<M::Span>,
+    {
+        let patcher = self.import_metadata(object.metadata);
+        self.import_content(object.content, patcher);
+        self.import_vars(object.vars)
+    }
+
+    fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<M::Span>, _patcher: P) {
+        self.content = content;
+    }
+
+    fn import_vars(&mut self, vars: VarTable) {
+        self.vars.0.extend(vars.0)
+    }
+
+    fn link(mut self) -> Program
     where
         for<'r> DiagnosticsContext<'r, 'a, M, D>: Diagnostics<M::Span>,
     {
-        for path in Vec::from(object.metadata.source_files) {
-            self.codebase.open(&path).unwrap();
-        }
-        object.data.vars.resolve(&object.data.content);
+        self.vars.resolve(&self.content);
         let mut context = LinkageContext {
-            content: &object.data.content,
-            vars: &object.data.vars,
+            content: &self.content,
+            vars: &self.vars,
             location: 0.into(),
         };
         let mut diagnostics = DiagnosticsContext {
@@ -88,13 +111,41 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
             diagnostics: &mut self.diagnostics,
         };
         Program {
-            sections: object
-                .data
+            sections: self
                 .content
                 .sections()
                 .flat_map(|section| section.translate(&mut context, &mut diagnostics))
                 .collect(),
         }
+    }
+}
+
+trait ImportMetadata<M: SpanSource> {
+    type SpanPatcher: PatchSpan<M::Span>;
+    fn import_metadata(&mut self, metadata: M) -> Self::SpanPatcher;
+}
+
+trait PatchSpan<S> {
+    fn patch_span(&self, span: &mut S);
+}
+
+impl<'a, D> ImportMetadata<Metadata> for Session<'a, D, SpanData> {
+    type SpanPatcher = SpanPatcher;
+
+    fn import_metadata(&mut self, metadata: Metadata) -> Self::SpanPatcher {
+        for path in Vec::from(metadata.source_files) {
+            self.codebase.open(&path).unwrap();
+        }
+        self.metadata = metadata.span_data;
+        SpanPatcher
+    }
+}
+
+struct SpanPatcher;
+
+impl PatchSpan<Span> for SpanPatcher {
+    fn patch_span(&self, _: &mut Span) {
+        todo!()
     }
 }
 
@@ -189,30 +240,57 @@ mod tests {
     use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
 
+    use std::marker::PhantomData;
+
+    struct FakeMetadata<S>(PhantomData<S>);
+
+    impl<S> FakeMetadata<S> {
+        fn new() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    impl<S: Clone> SpanSource for FakeMetadata<S> {
+        type Span = S;
+    }
+
+    impl<'a, D, S: Clone> ImportMetadata<FakeMetadata<S>> for Session<'a, D, FakeSpanSystem<S>> {
+        type SpanPatcher = FakeSpanPatcher;
+
+        fn import_metadata(&mut self, _: FakeMetadata<S>) -> Self::SpanPatcher {
+            FakeSpanPatcher
+        }
+    }
+
+    struct FakeSpanPatcher;
+
+    impl<S> PatchSpan<S> for FakeSpanPatcher {
+        fn patch_span(&self, _: &mut S) {}
+    }
+
     #[test]
     fn section_with_immediate_byte_fragment() {
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Immediate(
-                            Expr::from_atom(Atom::Const(0xff), ()),
-                            Width::Byte,
-                        )],
-                    }],
-                    symbols: SymbolTable(vec![]),
-                },
-                vars: VarTable(vec![Var::Unknown, 1.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Const(0xff), ()),
+                        Width::Byte,
+                    )],
+                }],
+                symbols: SymbolTable(vec![]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 1.into()]),
+            metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(*program.sections[0].data, [0xff])
     }
@@ -220,33 +298,26 @@ mod tests {
     #[test]
     fn section_with_two_immediate_byte_fragments() {
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![
-                            Fragment::Immediate(
-                                Expr::from_atom(Atom::Const(0x12), ()),
-                                Width::Byte,
-                            ),
-                            Fragment::Immediate(
-                                Expr::from_atom(Atom::Const(0x34), ()),
-                                Width::Byte,
-                            ),
-                        ],
-                    }],
-                    symbols: SymbolTable(vec![]),
-                },
-                vars: VarTable(vec![Var::Unknown, 2.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::Immediate(Expr::from_atom(Atom::Const(0x12), ()), Width::Byte),
+                        Fragment::Immediate(Expr::from_atom(Atom::Const(0x34), ()), Width::Byte),
+                    ],
+                }],
+                symbols: SymbolTable(vec![]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 2.into()]),
+            metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(*program.sections[0].data, [0x12, 0x34])
     }
@@ -263,28 +334,27 @@ mod tests {
 
     fn test_diagnostic_for_out_of_range_immediate_byte_fragment(value: i32) {
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Immediate(
-                            Expr::from_atom(Atom::Const(value), MockSpan::from("byte")),
-                            Width::Byte,
-                        )],
-                    }],
-                    symbols: SymbolTable(vec![]),
-                },
-                vars: VarTable(vec![Var::Unknown, 1.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Const(value), MockSpan::from("byte")),
+                        Width::Byte,
+                    )],
+                }],
+                symbols: SymbolTable(vec![]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 1.into()]),
+            metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
-        session.link(object);
+        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.import_object(object);
+        session.link();
         assert_eq!(
             *diagnostics.into_inner(),
             [Message::ValueOutOfRange {
@@ -300,31 +370,30 @@ mod tests {
     fn diagnose_unresolved_symbol() {
         // DW   name
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Immediate(
-                            Expr::from_atom(
-                                Atom::Name(Symbol::UserDef(UserDefId(0))),
-                                MockSpan::from("name"),
-                            ),
-                            Width::Word,
-                        )],
-                    }],
-                    symbols: SymbolTable(vec![None]),
-                },
-                vars: VarTable(vec![Var::Unknown, 2.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(
+                            Atom::Name(Symbol::UserDef(UserDefId(0))),
+                            MockSpan::from("name"),
+                        ),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable(vec![None]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 2.into()]),
+            metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
-        session.link(object);
+        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.import_object(object);
+        session.link();
         assert_eq!(
             *diagnostics.into_inner(),
             [Message::UnresolvedSymbol {
@@ -339,34 +408,33 @@ mod tests {
     fn diagnose_two_unresolved_symbols_in_one_expr() {
         // DW   name1 - name2
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Immediate(
-                            Expr(vec![
-                                ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
-                                    .with_span(MockSpan::from("name1")),
-                                ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(1))))
-                                    .with_span(MockSpan::from("name2")),
-                                ExprOp::Binary(BinOp::Minus).with_span(MockSpan::from("diff")),
-                            ]),
-                            Width::Word,
-                        )],
-                    }],
-                    symbols: SymbolTable(vec![None, None]),
-                },
-                vars: VarTable(vec![Var::Unknown, 2.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr(vec![
+                            ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
+                                .with_span(MockSpan::from("name1")),
+                            ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(1))))
+                                .with_span(MockSpan::from("name2")),
+                            ExprOp::Binary(BinOp::Minus).with_span(MockSpan::from("diff")),
+                        ]),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable(vec![None, None]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 2.into()]),
+            metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
-        session.link(object);
+        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        session.import_object(object);
+        session.link();
         assert_eq!(
             *diagnostics.into_inner(),
             [
@@ -388,33 +456,32 @@ mod tests {
     fn emit_symbol_after_definition() {
         // name DB  name
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![
-                            Fragment::Reloc(VarId(2)),
-                            Fragment::Immediate(
-                                Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                                Width::Word,
-                            ),
-                        ],
-                    }],
-                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                        expr: Expr::from_atom(Atom::Location, ()),
-                        location: VarId(2),
-                    }))]),
-                },
-                vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::Reloc(VarId(2)),
+                        Fragment::Immediate(
+                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Width::Word,
+                        ),
+                    ],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                    expr: Expr::from_atom(Atom::Location, ()),
+                    location: VarId(2),
+                }))]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
+            metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(*program.sections[0].data, [0x00, 0x00])
     }
@@ -423,33 +490,32 @@ mod tests {
     fn emit_symbol_before_definition() {
         // name DB  name
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![
-                            Fragment::Immediate(
-                                Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                                Width::Word,
-                            ),
-                            Fragment::Reloc(VarId(2)),
-                        ],
-                    }],
-                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                        expr: Expr::from_atom(Atom::Location, ()),
-                        location: VarId(2),
-                    }))]),
-                },
-                vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::Immediate(
+                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Width::Word,
+                        ),
+                        Fragment::Reloc(VarId(2)),
+                    ],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                    expr: Expr::from_atom(Atom::Location, ()),
+                    location: VarId(2),
+                }))]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
+            metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(*program.sections[0].data, [0x02, 0x00])
     }
@@ -464,46 +530,45 @@ mod tests {
         // ORG . + $10
         // HALT
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![
-                        Section {
-                            constraints: Constraints {
-                                addr: Some(Expr::from_atom(Atom::Const(0x0150), ())),
-                            },
-                            addr: VarId(0),
-                            size: VarId(1),
-                            fragments: vec![Fragment::Byte(0x00)],
+            content: Content {
+                sections: vec![
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(Expr::from_atom(Atom::Const(0x0150), ())),
                         },
-                        Section {
-                            constraints: Constraints {
-                                addr: Some(Expr(vec![
-                                    ExprOp::Atom(Atom::Location).with_span(()),
-                                    ExprOp::Atom(Atom::Const(0x10)).with_span(()),
-                                    ExprOp::Binary(BinOp::Plus).with_span(()),
-                                ])),
-                            },
-                            addr: VarId(2),
-                            size: VarId(3),
-                            fragments: vec![Fragment::Byte(0x76)],
+                        addr: VarId(0),
+                        size: VarId(1),
+                        fragments: vec![Fragment::Byte(0x00)],
+                    },
+                    Section {
+                        constraints: Constraints {
+                            addr: Some(Expr(vec![
+                                ExprOp::Atom(Atom::Location).with_span(()),
+                                ExprOp::Atom(Atom::Const(0x10)).with_span(()),
+                                ExprOp::Binary(BinOp::Plus).with_span(()),
+                            ])),
                         },
-                    ],
-                    symbols: SymbolTable(vec![]),
-                },
-                vars: VarTable(vec![
-                    0x0150.into(),
-                    1.into(),
-                    (0x0150 + 1 + 0x10).into(),
-                    1.into(),
-                ]),
+                        addr: VarId(2),
+                        size: VarId(3),
+                        fragments: vec![Fragment::Byte(0x76)],
+                    },
+                ],
+                symbols: SymbolTable(vec![]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![
+                0x0150.into(),
+                1.into(),
+                (0x0150 + 1 + 0x10).into(),
+                1.into(),
+            ]),
+            metadata: FakeMetadata::new(),
         };
 
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(
             program.sections[1].addr,
@@ -517,44 +582,40 @@ mod tests {
 
         // ORG $ffe1
         // LABEL
-        let mut data = Data {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![Fragment::Reloc(VarId(2))],
-                }],
-                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                    expr: Expr::from_atom(Atom::Location, ()),
-                    location: VarId(2),
-                }))]),
-            },
-            vars: VarTable(vec![addr.into(), 0.into(), addr.into()]),
+        let content = Content {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                },
+                addr: VarId(0),
+                size: VarId(1),
+                fragments: vec![Fragment::Reloc(VarId(2))],
+            }],
+            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                expr: Expr::from_atom(Atom::Location, ()),
+                location: VarId(2),
+            }))]),
         };
+        let mut vars = VarTable(vec![addr.into(), 0.into(), addr.into()]);
 
-        data.vars.resolve(&data.content);
-        assert_eq!(data.vars[VarId(0)], addr.into());
+        vars.resolve(&content);
+        assert_eq!(vars[VarId(0)], addr.into());
     }
 
     #[test]
     fn empty_section_has_size_zero() {
         assert_section_size(
             0,
-            Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![],
-                    }],
-                    symbols: SymbolTable::new(),
-                },
-                vars: VarTable(vec![0x0000.into(), 0.into()]),
+            Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![],
+                }],
+                symbols: SymbolTable::new(),
             },
+            VarTable(vec![0x0000.into(), 0.into()]),
         )
     }
 
@@ -562,18 +623,16 @@ mod tests {
     fn section_with_one_byte_has_size_one() {
         assert_section_size(
             1,
-            Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Byte(0x00)],
-                    }],
-                    symbols: SymbolTable::new(),
-                },
-                vars: VarTable(vec![0x0000.into(), 1.into()]),
+            Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Byte(0x00)],
+                }],
+                symbols: SymbolTable::new(),
             },
+            VarTable(vec![0x0000.into(), 1.into()]),
         );
     }
 
@@ -590,18 +649,16 @@ mod tests {
     fn test_section_size_with_literal_ld_inline_addr(addr: i32, expected: i32) {
         assert_section_size(
             expected,
-            Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::LdInlineAddr(0xf0, addr.into())],
-                    }],
-                    symbols: SymbolTable::new(),
-                },
-                vars: VarTable(vec![0x0000.into(), Var::Unknown]),
+            Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::LdInlineAddr(0xf0, addr.into())],
+                }],
+                symbols: SymbolTable::new(),
             },
+            VarTable(vec![0x0000.into(), Var::Unknown]),
         );
     }
 
@@ -609,31 +666,29 @@ mod tests {
     fn ld_inline_addr_with_symbol_after_instruction_has_size_three() {
         assert_section_size(
             3,
-            Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints { addr: None },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![
-                            Fragment::LdInlineAddr(
-                                0xf0,
-                                Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
-                            ),
-                            Fragment::Reloc(VarId(2)),
-                        ],
-                    }],
-                    symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                        expr: Expr::from_atom(Atom::Location, ()),
-                        location: VarId(2),
-                    }))]),
-                },
-                vars: VarTable(vec![
-                    0x0000.into(),
-                    Var::Range { min: 2, max: 3 },
-                    Var::Range { min: 2, max: 3 },
-                ]),
+            Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![
+                        Fragment::LdInlineAddr(
+                            0xf0,
+                            Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
+                        ),
+                        Fragment::Reloc(VarId(2)),
+                    ],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                    expr: Expr::from_atom(Atom::Location, ()),
+                    location: VarId(2),
+                }))]),
             },
+            VarTable(vec![
+                0x0000.into(),
+                Var::Range { min: 2, max: 3 },
+                Var::Range { min: 2, max: 3 },
+            ]),
         )
     }
 
@@ -643,30 +698,29 @@ mod tests {
         //              ORG     $1337
         //              DW      my_section
         let object = ObjectData {
-            data: Data {
-                content: Content {
-                    sections: vec![Section {
-                        constraints: Constraints {
-                            addr: Some(Expr::from_atom(Atom::Const(0x1337), ())),
-                        },
-                        addr: VarId(0),
-                        size: VarId(1),
-                        fragments: vec![Fragment::Immediate(
-                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                            Width::Word,
-                        )],
-                    }],
-                    symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
-                },
-                vars: VarTable(vec![0x1337.into(), 2.into()]),
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints {
+                        addr: Some(Expr::from_atom(Atom::Const(0x1337), ())),
+                    },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                        Width::Word,
+                    )],
+                }],
+                symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
             },
-            metadata: Metadata::default(),
+            vars: VarTable(vec![0x1337.into(), 2.into()]),
+            metadata: FakeMetadata::new(),
         };
 
         let program = {
             let mut fs = MockFileSystem::new();
-            let session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
-            session.link(object)
+            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            session.import_object(object);
+            session.link()
         };
         assert_eq!(*program.sections[0].data, [0x37, 0x13])
     }
@@ -680,39 +734,37 @@ mod tests {
         //          ORG $0100
         //          DS  10
         // label    DW  label
-        let mut data = Data {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![
-                        Fragment::Reserved(Expr::from_atom(Atom::Const(bytes), ())),
-                        Fragment::Reloc(VarId(2)),
-                        Fragment::Immediate(
-                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                            Width::Word,
-                        ),
-                    ],
-                }],
-                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                    expr: Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
-                    location: VarId(2),
-                }))]),
-            },
-            vars: VarTable(vec![addr.into(), (bytes + 2).into(), (addr + bytes).into()]),
+        let content = Content {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                },
+                addr: VarId(0),
+                size: VarId(1),
+                fragments: vec![
+                    Fragment::Reserved(Expr::from_atom(Atom::Const(bytes), ())),
+                    Fragment::Reloc(VarId(2)),
+                    Fragment::Immediate(
+                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                        Width::Word,
+                    ),
+                ],
+            }],
+            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
+                expr: Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                location: VarId(2),
+            }))]),
         };
+        let mut vars = VarTable(vec![addr.into(), (bytes + 2).into(), (addr + bytes).into()]);
 
-        data.vars.resolve(&data.content);
-        assert_eq!(data.vars[symbol], (addr + bytes).into())
+        vars.resolve(&content);
+        assert_eq!(vars[symbol], (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Var>, mut data: Data<()>) {
-        data.vars.resolve(&data.content);
+    fn assert_section_size(expected: impl Into<Var>, content: Content<()>, mut vars: VarTable) {
+        vars.resolve(&content);
         assert_eq!(
-            data.vars[data.content.sections().next().unwrap().size],
+            vars[content.sections().next().unwrap().size],
             expected.into()
         );
     }

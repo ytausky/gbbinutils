@@ -1,20 +1,17 @@
 use self::var::Var;
 
 use crate::expr::{Atom, ExprOp};
+use crate::span::SpanSource;
 
 use std::ops::{Index, IndexMut, Range, RangeInclusive};
 
 pub mod var;
 
-pub struct Object(pub(crate) ObjectData<Span>);
+pub struct Object(pub(crate) ObjectData<Metadata>);
 
-pub struct ObjectData<S> {
-    pub(crate) data: Data<S>,
-    pub(crate) metadata: Metadata,
-}
-
-pub struct Data<S> {
-    pub content: Content<S>,
+pub(crate) struct ObjectData<M: SpanSource> {
+    pub content: Content<M::Span>,
+    pub metadata: M,
     pub vars: VarTable,
 }
 
@@ -162,13 +159,8 @@ pub struct ParamExpansionPos {
     pub arg_token: usize,
 }
 
-impl<S> Data<S> {
-    pub fn new() -> Self {
-        Data {
-            content: Content::new(),
-            vars: VarTable::new(),
-        }
-    }
+impl SpanSource for Metadata {
+    type Span = Span;
 }
 
 impl<S> Content<S> {

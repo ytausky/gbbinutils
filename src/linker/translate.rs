@@ -161,7 +161,7 @@ mod tests {
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
     use crate::object::var::Var;
-    use crate::object::{Constraints, Content, Data, SymbolId, SymbolTable, VarId};
+    use crate::object::{Constraints, Content, SymbolId, SymbolTable, VarId};
 
     use std::borrow::Borrow;
 
@@ -229,29 +229,26 @@ mod tests {
 
         // ORG $7ff0
         // NOP
-        let mut data = Data {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![Fragment::Byte(0x00)],
-                }],
-                symbols: SymbolTable::new(),
-            },
-            vars: VarTable(vec![addr.into(), 1.into()]),
+        let content = Content {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                },
+                addr: VarId(0),
+                size: VarId(1),
+                fragments: vec![Fragment::Byte(0x00)],
+            }],
+            symbols: SymbolTable::new(),
         };
+        let mut vars = VarTable(vec![addr.into(), 1.into()]);
 
-        data.vars.resolve(&data.content);
+        vars.resolve(&content);
         let context = &mut LinkageContext {
-            content: &data.content,
-            vars: &data.vars,
+            content: &content,
+            vars: &vars,
             location: 0.into(),
         };
-        let translated = data
-            .content
+        let translated = content
             .sections()
             .next()
             .unwrap()
@@ -263,30 +260,27 @@ mod tests {
     fn translate_expr_with_location_counter() {
         // NOP
         // DB   .
-        let mut data = Data {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints { addr: None },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![
-                        Fragment::Byte(0x00),
-                        Fragment::Immediate(Expr::from_atom(Atom::Location, ()), Width::Byte),
-                    ],
-                }],
-                symbols: SymbolTable::new(),
-            },
-            vars: VarTable(vec![0.into(), 2.into()]),
+        let content = Content {
+            sections: vec![Section {
+                constraints: Constraints { addr: None },
+                addr: VarId(0),
+                size: VarId(1),
+                fragments: vec![
+                    Fragment::Byte(0x00),
+                    Fragment::Immediate(Expr::from_atom(Atom::Location, ()), Width::Byte),
+                ],
+            }],
+            symbols: SymbolTable::new(),
         };
+        let mut vars = VarTable(vec![0.into(), 2.into()]);
 
-        data.vars.resolve(&data.content);
+        vars.resolve(&content);
         let context = &mut LinkageContext {
-            content: &data.content,
-            vars: &data.vars,
+            content: &content,
+            vars: &vars,
             location: 0.into(),
         };
-        let binary = data
-            .content
+        let binary = content
             .sections()
             .next()
             .unwrap()
@@ -300,32 +294,29 @@ mod tests {
 
         // ORG  $ffe1
         // DW   .
-        let mut data = Data {
-            content: Content {
-                sections: vec![Section {
-                    constraints: Constraints {
-                        addr: Some(Expr::from_atom(Atom::Const(addr), ())),
-                    },
-                    addr: VarId(0),
-                    size: VarId(1),
-                    fragments: vec![Fragment::Immediate(
-                        Expr::from_atom(Atom::Location, ()),
-                        Width::Word,
-                    )],
-                }],
-                symbols: SymbolTable::new(),
-            },
-            vars: VarTable(vec![addr.into(), 2.into()]),
+        let content = Content {
+            sections: vec![Section {
+                constraints: Constraints {
+                    addr: Some(Expr::from_atom(Atom::Const(addr), ())),
+                },
+                addr: VarId(0),
+                size: VarId(1),
+                fragments: vec![Fragment::Immediate(
+                    Expr::from_atom(Atom::Location, ()),
+                    Width::Word,
+                )],
+            }],
+            symbols: SymbolTable::new(),
         };
+        let mut vars = VarTable(vec![addr.into(), 2.into()]);
 
-        data.vars.resolve(&data.content);
+        vars.resolve(&content);
         let context = &mut LinkageContext {
-            content: &data.content,
-            vars: &data.vars,
+            content: &content,
+            vars: &vars,
             location: 0.into(),
         };
-        let binary = data
-            .content
+        let binary = content
             .sections()
             .next()
             .unwrap()
