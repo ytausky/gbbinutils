@@ -8,16 +8,18 @@
 pub use crate::assembler::Assembler;
 pub use crate::codebase::FileSystem;
 pub use crate::diagnostics::*;
-pub use crate::link::{BinarySection, Linker, Program};
+pub use crate::linker::Linker;
 pub use crate::object::Object;
+pub use crate::program::{Chunk, Program};
 
 mod assembler;
 mod codebase;
 mod diagnostics;
 mod eval;
 mod expr;
-mod link;
+mod linker;
 mod object;
+mod program;
 mod span;
 
 #[cfg(test)]

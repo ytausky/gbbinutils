@@ -99,7 +99,7 @@ fn assemble_snippet(src: &str) -> (Option<Box<[u8]>>, Vec<Diagnostic>) {
         linker.link(vec![object])
     });
     (
-        program.map(|mut program| program.sections.pop().unwrap().data.into()),
+        program.map(|program| Vec::from(program.sections).pop().unwrap().data.into()),
         diagnostics,
     )
 }

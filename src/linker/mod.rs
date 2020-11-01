@@ -2,6 +2,7 @@ use crate::codebase::{Codebase, FileSystem, StdFileSystem};
 use crate::diagnostics::*;
 use crate::object::var::Var;
 use crate::object::*;
+use crate::program::Program;
 use crate::span::SpanSource;
 use crate::{Config, DiagnosticsConfig, InputConfig};
 
@@ -68,7 +69,7 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
         }
     }
 
-    pub(super) fn link(mut self, mut object: ObjectData<M::Span>) -> Program
+    fn link(mut self, mut object: ObjectData<M::Span>) -> Program
     where
         for<'r> DiagnosticsContext<'r, 'a, M, D>: Diagnostics<M::Span>,
     {
@@ -95,37 +96,6 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
                 .collect(),
         }
     }
-}
-
-pub struct Program {
-    pub sections: Vec<BinarySection>,
-}
-
-impl Program {
-    pub fn into_rom(self) -> Box<[u8]> {
-        let default = 0xffu8;
-        let mut data: Vec<u8> = Vec::new();
-        for section in self.sections {
-            if !section.data.is_empty() {
-                let end = section.addr + section.data.len();
-                if data.len() < end {
-                    data.resize(end, default)
-                }
-                data[section.addr..end].copy_from_slice(&section.data)
-            }
-        }
-        if data.len() < MIN_ROM_LEN {
-            data.resize(MIN_ROM_LEN, default)
-        }
-        data.into_boxed_slice()
-    }
-}
-
-const MIN_ROM_LEN: usize = 0x8000;
-
-pub struct BinarySection {
-    pub addr: usize,
-    pub data: Box<[u8]>,
 }
 
 impl VarTable {
@@ -218,44 +188,6 @@ mod tests {
     use crate::expr::*;
     use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
-
-    #[test]
-    fn empty_object_converted_to_all_0xff_rom() {
-        let object = Program {
-            sections: Vec::new(),
-        };
-        let rom = object.into_rom();
-        assert_eq!(*rom, [0xffu8; MIN_ROM_LEN][..])
-    }
-
-    #[test]
-    fn section_placed_in_rom_starting_at_origin() {
-        let byte = 0x42;
-        let addr = 0x150;
-        let object = Program {
-            sections: vec![BinarySection {
-                addr,
-                data: Box::new([byte]),
-            }],
-        };
-        let rom = object.into_rom();
-        let mut expected = [0xffu8; MIN_ROM_LEN];
-        expected[addr] = byte;
-        assert_eq!(*rom, expected[..])
-    }
-
-    #[test]
-    fn empty_section_does_not_extend_rom() {
-        let addr = MIN_ROM_LEN + 1;
-        let object = Program {
-            sections: vec![BinarySection {
-                addr,
-                data: Box::new([]),
-            }],
-        };
-        let rom = object.into_rom();
-        assert_eq!(rom.len(), MIN_ROM_LEN)
-    }
 
     #[test]
     fn section_with_immediate_byte_fragment() {

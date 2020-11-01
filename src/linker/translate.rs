@@ -1,7 +1,8 @@
-use super::{BinarySection, LinkageContext, VarTable};
+use super::{LinkageContext, VarTable};
 
 use crate::diagnostics::{BackendDiagnostics, Message};
 use crate::object::{Content, Expr, Fragment, Section, Width};
+use crate::program::Chunk;
 use crate::span::Source;
 
 use std::mem::replace;
@@ -12,7 +13,7 @@ impl<'a, S: Clone + 'a> Section<S> {
         &'a self,
         context: &mut LinkageContext<&'a Content<S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
-    ) -> Vec<BinarySection> {
+    ) -> Vec<Chunk> {
         let mut chunks = Vec::new();
         let mut data = Vec::new();
         let mut addr = context.vars[self.addr].clone();
@@ -21,7 +22,7 @@ impl<'a, S: Clone + 'a> Section<S> {
             if let Fragment::Reserved(expr) = fragment {
                 let bytes = expr.to_num(context, diagnostics);
                 if !data.is_empty() {
-                    chunks.push(BinarySection {
+                    chunks.push(Chunk {
                         addr: addr.exact().unwrap() as usize,
                         data: replace(&mut data, Vec::new()).into_boxed_slice(),
                     });
@@ -33,7 +34,7 @@ impl<'a, S: Clone + 'a> Section<S> {
             }
         });
         if !data.is_empty() {
-            chunks.push(BinarySection {
+            chunks.push(Chunk {
                 addr: addr.exact().unwrap() as usize,
                 data: data.into_boxed_slice(),
             });
