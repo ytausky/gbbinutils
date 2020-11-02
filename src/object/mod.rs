@@ -12,7 +12,6 @@ pub struct Object(pub(crate) ObjectData<Metadata>);
 pub(crate) struct ObjectData<M: SpanSource> {
     pub content: Content<M::Span>,
     pub metadata: M,
-    pub vars: VarTable,
 }
 
 pub struct Content<S> {
@@ -50,7 +49,7 @@ pub enum BuiltinDefId {
 pub struct UserDefId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct VarId(pub usize);
+pub struct VarId(pub u32);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fragment<E> {
@@ -228,7 +227,7 @@ impl VarTable {
     }
 
     pub fn alloc(&mut self) -> VarId {
-        let id = VarId(self.0.len());
+        let id = VarId(self.0.len() as u32);
         self.0.push(Default::default());
         id
     }
@@ -238,13 +237,13 @@ impl Index<VarId> for VarTable {
     type Output = Var;
 
     fn index(&self, VarId(id): VarId) -> &Self::Output {
-        &self.0[id]
+        &self.0[id as usize]
     }
 }
 
 impl IndexMut<VarId> for VarTable {
     fn index_mut(&mut self, VarId(id): VarId) -> &mut Self::Output {
-        &mut self.0[id]
+        &mut self.0[id as usize]
     }
 }
 

@@ -62,7 +62,7 @@ struct Session<'a, D, M: SpanSource> {
     content: Content<M::Span>,
     diagnostics: D,
     metadata: M,
-    vars: VarTable,
+    var_count: u32,
 }
 
 impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
@@ -72,7 +72,7 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
             content: Content::new(),
             diagnostics,
             metadata: M::default(),
-            vars: VarTable::new(),
+            var_count: 0,
         }
     }
 
@@ -84,25 +84,38 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
     {
         let patcher = self.import_metadata(object.metadata);
         self.import_content(object.content, patcher);
-        self.import_vars(object.vars)
     }
 
     fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<M::Span>, _patcher: P) {
-        self.content = content;
-    }
-
-    fn import_vars(&mut self, vars: VarTable) {
-        self.vars.0.extend(vars.0)
+        let base_var = self.var_count;
+        let mut max_local_var_id = 0;
+        self.content.sections.reserve(content.sections.len());
+        for mut section in content.sections {
+            max_local_var_id = std::cmp::max(max_local_var_id, section.addr.0);
+            section.addr.0 += base_var;
+            max_local_var_id = std::cmp::max(max_local_var_id, section.size.0);
+            section.size.0 += base_var;
+            for fragment in &mut section.fragments {
+                if let Fragment::Reloc(VarId(id)) = fragment {
+                    max_local_var_id = std::cmp::max(max_local_var_id, *id);
+                    *id += base_var;
+                }
+            }
+            self.content.sections.push(section)
+        }
+        self.content.symbols.0.extend(content.symbols.0);
+        self.var_count += max_local_var_id + 1;
     }
 
     fn link(mut self) -> Program
     where
         for<'r> DiagnosticsContext<'r, 'a, M, D>: Diagnostics<M::Span>,
     {
-        self.vars.resolve(&self.content);
+        let mut vars = VarTable(vec![Var::Unknown; self.var_count as usize]);
+        vars.resolve(&self.content);
         let mut context = LinkageContext {
             content: &self.content,
-            vars: &self.vars,
+            vars: &vars,
             location: 0.into(),
         };
         let mut diagnostics = DiagnosticsContext {
@@ -283,7 +296,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![]),
             },
-            vars: VarTable(vec![Var::Unknown, 1.into()]),
             metadata: FakeMetadata::new(),
         };
         let program = {
@@ -310,7 +322,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![]),
             },
-            vars: VarTable(vec![Var::Unknown, 2.into()]),
             metadata: FakeMetadata::new(),
         };
         let program = {
@@ -346,7 +357,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![]),
             },
-            vars: VarTable(vec![Var::Unknown, 1.into()]),
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
@@ -385,7 +395,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![None]),
             },
-            vars: VarTable(vec![Var::Unknown, 2.into()]),
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
@@ -426,7 +435,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![None, None]),
             },
-            vars: VarTable(vec![Var::Unknown, 2.into()]),
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
@@ -474,7 +482,6 @@ mod tests {
                     location: VarId(2),
                 }))]),
             },
-            vars: VarTable(vec![Var::Unknown, 2.into(), 0.into()]),
             metadata: FakeMetadata::new(),
         };
         let program = {
@@ -508,7 +515,6 @@ mod tests {
                     location: VarId(2),
                 }))]),
             },
-            vars: VarTable(vec![Var::Unknown, 2.into(), 2.into()]),
             metadata: FakeMetadata::new(),
         };
         let program = {
@@ -555,12 +561,6 @@ mod tests {
                 ],
                 symbols: SymbolTable(vec![]),
             },
-            vars: VarTable(vec![
-                0x0150.into(),
-                1.into(),
-                (0x0150 + 1 + 0x10).into(),
-                1.into(),
-            ]),
             metadata: FakeMetadata::new(),
         };
 
@@ -712,7 +712,6 @@ mod tests {
                 }],
                 symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
             },
-            vars: VarTable(vec![0x1337.into(), 2.into()]),
             metadata: FakeMetadata::new(),
         };
 

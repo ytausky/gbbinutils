@@ -141,7 +141,6 @@ impl<'a> CompositeSession<'a, SpanData> {
                 source_files: self.codebase.export_source_file_table(),
                 span_data: self.metadata,
             },
-            vars: self.builder.vars,
         }
     }
 }
