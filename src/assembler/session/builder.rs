@@ -11,7 +11,7 @@ pub(crate) struct ObjectBuilder<S> {
 }
 
 enum BuilderState<S> {
-    AnonSectionPrelude { addr: Option<Expr<SymbolId, S>> },
+    AnonSectionPrelude { addr: Option<Expr<Name, S>> },
     Section(usize),
     SectionPrelude(usize),
 }
@@ -27,7 +27,7 @@ impl<S> ObjectBuilder<S> {
 }
 
 impl<S> ObjectBuilder<S> {
-    fn push(&mut self, fragment: Fragment<Expr<SymbolId, S>>) {
+    fn push(&mut self, fragment: Fragment<Expr<Name, S>>) {
         self.current_section().fragments.push(fragment)
     }
 
@@ -48,7 +48,7 @@ impl<S> ObjectBuilder<S> {
         }
     }
 
-    fn add_section(&mut self, symbol: Option<UserDefId>) {
+    fn add_section(&mut self, symbol: Option<SymbolId>) {
         self.content
             .add_section(symbol, self.vars.alloc(), self.vars.alloc())
     }
@@ -60,7 +60,7 @@ where
     Self: Diagnostics<R::Span>,
     for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
 {
-    fn define_symbol(&mut self, name: SymbolId, _span: R::Span, expr: Expr<SymbolId, R::Span>) {
+    fn define_symbol(&mut self, name: Name, _span: R::Span, expr: Expr<Name, R::Span>) {
         #[cfg(test)]
         self.log_event(Event::DefineSymbol {
             name,
@@ -76,7 +76,7 @@ where
         );
     }
 
-    fn emit_fragment(&mut self, fragment: Fragment<Expr<SymbolId, R::Span>>) {
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Name, R::Span>>) {
         #[cfg(test)]
         self.log_event(Event::EmitFragment {
             fragment: fragment.clone(),
@@ -85,7 +85,7 @@ where
         self.builder.push(fragment)
     }
 
-    fn is_non_zero(&mut self, value: Expr<SymbolId, R::Span>) -> Option<bool> {
+    fn is_non_zero(&mut self, value: Expr<Name, R::Span>) -> Option<bool> {
         let context = LinkageContext {
             content: &self.builder.content,
             vars: &self.builder.vars,
@@ -102,7 +102,7 @@ where
             .map(|n| n != 0)
     }
 
-    fn set_origin(&mut self, addr: Expr<SymbolId, R::Span>) {
+    fn set_origin(&mut self, addr: Expr<Name, R::Span>) {
         #[cfg(test)]
         self.log_event(Event::SetOrigin { addr: addr.clone() });
 
@@ -115,7 +115,7 @@ where
         }
     }
 
-    fn start_section(&mut self, name: SymbolId, _span: R::Span) {
+    fn start_section(&mut self, name: Name, _span: R::Span) {
         #[cfg(test)]
         self.log_event(Event::StartSection { name, span: _span });
 
@@ -129,7 +129,7 @@ impl<'a, R> AllocSymbol<R::Span> for CompositeSession<'a, R>
 where
     R: SpanSystem,
 {
-    fn alloc_symbol(&mut self, _: R::Span) -> SymbolId {
+    fn alloc_symbol(&mut self, _: R::Span) -> Name {
         self.builder.content.symbols.alloc().into()
     }
 }

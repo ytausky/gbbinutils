@@ -4,7 +4,7 @@ use crate::assembler::keywords::*;
 use crate::assembler::session::Backend;
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::{Fragment, SymbolId, Width};
+use crate::object::{Fragment, Name, Width};
 use crate::span::Source;
 use crate::IncDec;
 
@@ -416,7 +416,7 @@ impl<S: Clone> Operand<S> {
         }
     }
 
-    fn expect_const<D>(self, diagnostics: &mut D) -> Result<Expr<SymbolId, S>, ()>
+    fn expect_const<D>(self, diagnostics: &mut D) -> Result<Expr<Name, S>, ()>
     where
         D: Diagnostics<S>,
     {
@@ -500,7 +500,7 @@ mod tests {
     use crate::assembler::semantics::*;
     use crate::assembler::syntax::Literal;
     use crate::expr::Atom;
-    use crate::object::SymbolId;
+    use crate::object::Name;
 
     #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
     pub(super) enum TokenId {
@@ -510,7 +510,7 @@ mod tests {
 
     pub(super) type TokenSpan = MockSpan<TokenId>;
 
-    type Expr<S> = crate::expr::Expr<SymbolId, S>;
+    type Expr<S> = crate::expr::Expr<Name, S>;
     type Input = Arg<()>;
 
     impl From<Literal> for Input {
@@ -530,7 +530,7 @@ mod tests {
         Expr::from_atom(n.into(), span.into())
     }
 
-    pub(super) fn name(symbol: SymbolId, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
+    pub(super) fn name(symbol: Name, span: impl Into<TokenSpan>) -> Expr<TokenSpan> {
         Expr::from_atom(Atom::Name(symbol), span.into())
     }
 
@@ -538,7 +538,7 @@ mod tests {
         Arg::Deref(BareArg::OperandKeyword(symbol.into(), ()), ())
     }
 
-    pub(super) fn deref_ident(ident: SymbolId) -> Input {
+    pub(super) fn deref_ident(ident: Name) -> Input {
         Arg::Deref(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())), ())
     }
 
@@ -610,8 +610,8 @@ mod tests {
         }
     }
 
-    impl From<SymbolId> for Input {
-        fn from(ident: SymbolId) -> Self {
+    impl From<Name> for Input {
+        fn from(ident: Name) -> Self {
             Arg::Bare(BareArg::Const(Expr::from_atom(Atom::Name(ident), ())))
         }
     }

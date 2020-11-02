@@ -161,7 +161,7 @@ mod tests {
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
     use crate::object::var::Var;
-    use crate::object::{Constraints, Content, SymbolId, SymbolTable, VarId};
+    use crate::object::{Constraints, Content, Name, SymbolTable, VarId};
 
     use std::borrow::Borrow;
 
@@ -208,9 +208,7 @@ mod tests {
         assert_eq!(actual, [0x01])
     }
 
-    fn translate_section_item<S: Clone + PartialEq>(
-        fragment: Fragment<Expr<SymbolId, S>>,
-    ) -> Vec<u8> {
+    fn translate_section_item<S: Clone + PartialEq>(fragment: Fragment<Expr<Name, S>>) -> Vec<u8> {
         fragment
             .translate(
                 &LinkageContext {

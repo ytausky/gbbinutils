@@ -30,23 +30,21 @@ pub struct Constraints<S> {
     pub addr: Option<Expr<S>>,
 }
 
-pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
-
-pub type SymbolId = Symbol<BuiltinDefId, UserDefId>;
+pub type Expr<S> = crate::expr::Expr<Name, S>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Symbol<B, C> {
-    Builtin(B),
-    UserDef(C),
+pub enum Name {
+    Builtin(BuiltinId),
+    Symbol(SymbolId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BuiltinDefId {
+pub enum BuiltinId {
     Sizeof,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UserDefId(pub usize);
+pub struct SymbolId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarId(pub u32);
@@ -67,12 +65,12 @@ pub enum Width {
     Word,
 }
 
-pub struct SymbolTable<S>(pub Vec<Option<UserDef<Closure<S>, SectionId>>>);
+pub struct SymbolTable<S>(pub Vec<Option<UserDef<S>>>);
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum UserDef<F, S> {
-    Closure(F),
-    Section(S),
+pub enum UserDef<S> {
+    Closure(Closure<S>),
+    Section(SectionId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -81,7 +79,7 @@ pub struct Closure<S> {
     pub location: VarId,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SectionId(pub usize);
 
 pub struct VarTable(pub Vec<Var>);
@@ -174,7 +172,7 @@ impl<S> Content<S> {
         self.sections.iter()
     }
 
-    pub fn add_section(&mut self, name: Option<UserDefId>, addr: VarId, size: VarId) {
+    pub fn add_section(&mut self, name: Option<SymbolId>, addr: VarId, size: VarId) {
         let section = SectionId(self.sections.len());
         self.sections.push(Section::new(addr, size));
         if let Some(name) = name {
@@ -199,18 +197,18 @@ impl<S> SymbolTable<S> {
         Self(Vec::new())
     }
 
-    pub fn alloc(&mut self) -> UserDefId {
-        let id = UserDefId(self.0.len());
+    pub fn alloc(&mut self) -> SymbolId {
+        let id = SymbolId(self.0.len());
         self.0.push(None);
         id
     }
 
-    pub fn define(&mut self, UserDefId(id): UserDefId, def: UserDef<Closure<S>, SectionId>) {
+    pub fn define(&mut self, SymbolId(id): SymbolId, def: UserDef<S>) {
         assert!(self.0[id].is_none());
         self.0[id] = Some(def);
     }
 
-    pub fn get(&self, UserDefId(id): UserDefId) -> Option<&UserDef<Closure<S>, SectionId>> {
+    pub fn get(&self, SymbolId(id): SymbolId) -> Option<&UserDef<S>> {
         self.0[id].as_ref()
     }
 }
@@ -247,57 +245,57 @@ impl IndexMut<VarId> for VarTable {
     }
 }
 
-impl From<SymbolId> for Atom<SymbolId> {
-    fn from(id: SymbolId) -> Self {
+impl From<Name> for Atom<Name> {
+    fn from(id: Name) -> Self {
         Atom::Name(id)
     }
 }
 
 #[cfg(test)]
-impl From<UserDefId> for Atom<SymbolId> {
-    fn from(id: UserDefId) -> Self {
+impl From<SymbolId> for Atom<Name> {
+    fn from(id: SymbolId) -> Self {
         Atom::Name(id.into())
     }
 }
 
-impl From<SymbolId> for ExprOp<SymbolId> {
+impl From<Name> for ExprOp<Name> {
+    fn from(id: Name) -> Self {
+        Atom::from(id).into()
+    }
+}
+
+#[cfg(test)]
+impl From<BuiltinId> for ExprOp<Name> {
+    fn from(builtin: BuiltinId) -> Self {
+        Atom::from(Name::from(builtin)).into()
+    }
+}
+
+#[cfg(test)]
+impl From<SymbolId> for ExprOp<Name> {
     fn from(id: SymbolId) -> Self {
         Atom::from(id).into()
     }
 }
 
-#[cfg(test)]
-impl From<BuiltinDefId> for ExprOp<SymbolId> {
-    fn from(builtin: BuiltinDefId) -> Self {
-        Atom::from(Symbol::from(builtin)).into()
-    }
-}
-
-#[cfg(test)]
-impl From<UserDefId> for ExprOp<SymbolId> {
-    fn from(id: UserDefId) -> Self {
-        Atom::from(id).into()
-    }
-}
-
-impl<B, C> Symbol<B, C> {
-    pub fn content(self) -> Option<C> {
+impl Name {
+    pub fn content(self) -> Option<SymbolId> {
         match self {
-            Symbol::Builtin(_) => None,
-            Symbol::UserDef(id) => Some(id),
+            Name::Builtin(_) => None,
+            Name::Symbol(id) => Some(id),
         }
     }
 }
 
-impl From<BuiltinDefId> for SymbolId {
-    fn from(builtin: BuiltinDefId) -> Self {
-        Symbol::Builtin(builtin)
+impl From<BuiltinId> for Name {
+    fn from(builtin: BuiltinId) -> Self {
+        Name::Builtin(builtin)
     }
 }
 
-impl From<UserDefId> for SymbolId {
-    fn from(id: UserDefId) -> Self {
-        Symbol::UserDef(id)
+impl From<SymbolId> for Name {
+    fn from(id: SymbolId) -> Self {
+        Name::Symbol(id)
     }
 }
 

@@ -199,7 +199,7 @@ impl<S: Clone> Operand<S> {
 }
 
 enum LdOperand<T, S> {
-    Const(Expr<SymbolId, S>),
+    Const(Expr<Name, S>),
     Other(T),
 }
 
@@ -218,7 +218,7 @@ impl<S> From<LdDest16<S>> for LdOperand<LdDest16<S>, S> {
 enum LdDest<S> {
     Byte(LdDest8<S>),
     Word(LdDest16<S>),
-    DerefExpr(Expr<SymbolId, S>),
+    DerefExpr(Expr<Name, S>),
 }
 
 enum LdDest8<S> {
@@ -227,14 +227,14 @@ enum LdDest8<S> {
 }
 
 enum LdSpecial<S> {
-    Deref(Expr<SymbolId, S>),
+    Deref(Expr<Name, S>),
     DerefC(S),
     DerefPtrReg(PtrReg, S),
 }
 
 enum LdDest16<S> {
     Reg16(Reg16, S),
-    DerefNn(Expr<SymbolId, S>),
+    DerefNn(Expr<Name, S>),
 }
 
 trait DataWidth {
@@ -376,7 +376,7 @@ mod tests {
 
     use crate::assembler::keywords::LD;
     use crate::diagnostics::Merge;
-    use crate::object::{Symbol, UserDefId};
+    use crate::object::{Name, SymbolId};
 
     #[test]
     fn ld_a_a() {
@@ -795,7 +795,7 @@ mod tests {
 
     #[test]
     fn ld_a_deref_expr() {
-        let symbol = Symbol::UserDef(UserDefId(7));
+        let symbol = Name::Symbol(SymbolId(7));
         analyze(LD, vec![literal(A), deref_ident(symbol)]).expect_fragments(vec![
             Fragment::LdInlineAddr(0xf0, name(symbol, TokenId::Operand(1, 1))),
         ])
@@ -803,7 +803,7 @@ mod tests {
 
     #[test]
     fn ld_deref_expr_a() {
-        let symbol = Symbol::UserDef(UserDefId(7));
+        let symbol = Name::Symbol(SymbolId(7));
         analyze(LD, vec![deref_ident(symbol), literal(A)]).expect_fragments(vec![
             Fragment::LdInlineAddr(0xe0, name(symbol, TokenId::Operand(0, 1))),
         ])
@@ -882,7 +882,7 @@ mod tests {
 
     #[test]
     fn ld_deref_nn_sp() {
-        let symbol = Symbol::UserDef(UserDefId(0));
+        let symbol = Name::Symbol(SymbolId(0));
         analyze(LD, vec![deref_ident(symbol), literal(Sp)]).expect_fragments(vec![
             Fragment::Byte(0x08),
             Fragment::Immediate(name(symbol, TokenId::Operand(0, 1)), Width::Word),

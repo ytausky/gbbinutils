@@ -211,7 +211,7 @@ mod tests {
     use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
-    use crate::object::{Symbol, SymbolId, UserDefId};
+    use crate::object::{Name, SymbolId};
 
     use std::borrow::Borrow;
 
@@ -275,17 +275,17 @@ mod tests {
         test_data_items_emission("DW", mk_word, [0x4332, 0x780f])
     }
 
-    fn mk_byte(byte: i32) -> Fragment<Expr<SymbolId, ()>> {
+    fn mk_byte(byte: i32) -> Fragment<Expr<Name, ()>> {
         Fragment::Immediate((byte).into(), Width::Byte)
     }
 
-    fn mk_word(word: i32) -> Fragment<Expr<SymbolId, ()>> {
+    fn mk_word(word: i32) -> Fragment<Expr<Name, ()>> {
         Fragment::Immediate((word).into(), Width::Word)
     }
 
     fn test_data_items_emission(
         directive: &str,
-        mk_item: impl Fn(i32) -> Fragment<Expr<SymbolId, ()>>,
+        mk_item: impl Fn(i32) -> Fragment<Expr<Name, ()>>,
         data: impl Borrow<[i32]>,
     ) {
         let mut fixture = TestFixture::new();
@@ -517,13 +517,13 @@ mod tests {
         assert_eq!(
             session.log(),
             [
-                Event::DefineNameWithVisibility {
+                Event::DefineIdent {
                     ident: symbol.into(),
                     visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
                 },
                 Event::DefineSymbol {
-                    name: Symbol::UserDef(UserDefId(0)),
+                    name: Name::Symbol(SymbolId(0)),
                     span: (),
                     expr: value.into()
                 }
@@ -559,13 +559,13 @@ mod tests {
         assert_eq!(
             session.log(),
             [
-                Event::DefineNameWithVisibility {
+                Event::DefineIdent {
                     ident: name.into(),
                     visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
                 },
                 Event::DefineSymbol {
-                    name: Symbol::UserDef(UserDefId(0)),
+                    name: Name::Symbol(SymbolId(0)),
                     span: (),
                     expr: Atom::from(ParamId(0)).into()
                 },
@@ -594,13 +594,13 @@ mod tests {
         assert_eq!(
             session.log(),
             [
-                Event::DefineNameWithVisibility {
+                Event::DefineIdent {
                     ident: name.into(),
                     visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Symbol::UserDef(UserDefId(0)))
+                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
                 },
                 Event::StartSection {
-                    name: Symbol::UserDef(UserDefId(0)),
+                    name: Name::Symbol(SymbolId(0)),
                     span: ()
                 }
             ]

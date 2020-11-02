@@ -387,7 +387,7 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![Fragment::Immediate(
                         Expr::from_atom(
-                            Atom::Name(Symbol::UserDef(UserDefId(0))),
+                            Atom::Name(Name::Symbol(SymbolId(0))),
                             MockSpan::from("name"),
                         ),
                         Width::Word,
@@ -424,9 +424,9 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![Fragment::Immediate(
                         Expr(vec![
-                            ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0))))
+                            ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0))))
                                 .with_span(MockSpan::from("name1")),
-                            ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(1))))
+                            ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(1))))
                                 .with_span(MockSpan::from("name2")),
                             ExprOp::Binary(BinOp::Minus).with_span(MockSpan::from("diff")),
                         ]),
@@ -472,7 +472,7 @@ mod tests {
                     fragments: vec![
                         Fragment::Reloc(VarId(2)),
                         Fragment::Immediate(
-                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
                             Width::Word,
                         ),
                     ],
@@ -504,7 +504,7 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![
                         Fragment::Immediate(
-                            Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                            Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
                             Width::Word,
                         ),
                         Fragment::Reloc(VarId(2)),
@@ -672,10 +672,7 @@ mod tests {
                     addr: VarId(0),
                     size: VarId(1),
                     fragments: vec![
-                        Fragment::LdInlineAddr(
-                            0xf0,
-                            Atom::Name(Symbol::UserDef(UserDefId(0))).into(),
-                        ),
+                        Fragment::LdInlineAddr(0xf0, Atom::Name(Name::Symbol(SymbolId(0))).into()),
                         Fragment::Reloc(VarId(2)),
                     ],
                 }],
@@ -706,7 +703,7 @@ mod tests {
                     addr: VarId(0),
                     size: VarId(1),
                     fragments: vec![Fragment::Immediate(
-                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                        Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
                         Width::Word,
                     )],
                 }],
@@ -744,13 +741,13 @@ mod tests {
                     Fragment::Reserved(Expr::from_atom(Atom::Const(bytes), ())),
                     Fragment::Reloc(VarId(2)),
                     Fragment::Immediate(
-                        Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                        Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
                         Width::Word,
                     ),
                 ],
             }],
             symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_atom(Atom::Name(Symbol::UserDef(UserDefId(0))), ()),
+                expr: Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
                 location: VarId(2),
             }))]),
         };

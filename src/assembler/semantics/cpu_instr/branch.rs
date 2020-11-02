@@ -3,7 +3,7 @@ use super::{Analysis, AtomKind, Backend, Condition, Expr, Fragment, Operand, Wid
 use crate::assembler::keywords::{BranchKind, ExplicitBranch, ImplicitBranch};
 use crate::diagnostics::{Diagnostics, EmitDiag, Message};
 use crate::expr::{Atom, BinOp, ExprOp};
-use crate::object::SymbolId;
+use crate::object::Name;
 use crate::span::WithSpan;
 use crate::span::{Source, SpanSource};
 
@@ -100,7 +100,7 @@ type BranchOperands<S> = (Option<(Condition, S)>, Option<BranchTarget<S>>);
 
 enum BranchTarget<S> {
     DerefHl(S),
-    Expr(Expr<SymbolId, S>),
+    Expr(Expr<Name, S>),
 }
 
 impl<S: Clone> SpanSource for BranchTarget<S> {
@@ -145,7 +145,7 @@ enum BranchVariant<S> {
 
 #[derive(Clone, Debug, PartialEq)]
 enum Branch<S> {
-    Explicit(ExplicitBranch, Expr<SymbolId, S>),
+    Explicit(ExplicitBranch, Expr<Name, S>),
     Ret,
 }
 
@@ -200,11 +200,11 @@ mod tests {
     use crate::assembler::keywords::*;
     use crate::diagnostics::Merge;
     use crate::expr::{Atom, BinOp, Expr, ExprOp};
-    use crate::object::{Symbol, UserDefId};
+    use crate::object::{Name, SymbolId};
 
     #[test]
     fn jp_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JP, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc3),
             Fragment::Immediate(name(nn, TokenId::Operand(0, 0)), Width::Word),
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn jp_nz_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JP, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc2),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn jp_z_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JP, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xca),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn jp_nc_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JP, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xd2),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn jp_c_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JP, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xda),
             Fragment::Immediate(name(nn, TokenId::Operand(1, 0)), Width::Word),
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn jr_e() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JR, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x18),
             Fragment::Immediate(
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn jr_nz_e() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JR, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x20),
             Fragment::Immediate(
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn jr_z_e() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JR, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x28),
             Fragment::Immediate(
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn jr_nc_e() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JR, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x30),
             Fragment::Immediate(
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn jr_c_e() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(JR, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0x38),
             Fragment::Immediate(
@@ -334,7 +334,7 @@ mod tests {
 
     #[test]
     fn call_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(CALL, vec![nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xcd),
             Fragment::Immediate(
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn call_nz_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(CALL, vec![Condition::Nz.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xc4),
             Fragment::Immediate(
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn call_z_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(CALL, vec![Condition::Z.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xcc),
             Fragment::Immediate(
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn call_nc_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(CALL, vec![Condition::Nc.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xd4),
             Fragment::Immediate(
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn call_c_nn() {
-        let nn = Symbol::UserDef(UserDefId(7));
+        let nn = Name::Symbol(SymbolId(7));
         analyze(CALL, vec![Condition::C.into(), nn.into()]).expect_fragments(vec![
             Fragment::Byte(0xdc),
             Fragment::Immediate(
@@ -462,14 +462,14 @@ mod tests {
 
     #[test]
     fn reti_ident() {
-        analyze(RETI, vec![Symbol::UserDef(UserDefId(7)).into()]).expect_diag(
+        analyze(RETI, vec![Name::Symbol(SymbolId(7)).into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(0, 0)),
         )
     }
 
     #[test]
     fn analyze_ret_z_ident() {
-        analyze(RET, vec![literal(Z), Symbol::UserDef(UserDefId(7)).into()]).expect_diag(
+        analyze(RET, vec![literal(Z), Name::Symbol(SymbolId(7)).into()]).expect_diag(
             ExpectedDiag::new(Message::CannotSpecifyTarget).with_highlight(TokenId::Operand(1, 0)),
         )
     }

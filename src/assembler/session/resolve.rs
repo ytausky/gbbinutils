@@ -58,15 +58,11 @@ impl<R> BiLevelNameTable<R> {
     }
 }
 
-impl<'a, R: SpanSystem> NameTable<StringRef> for CompositeSession<'a, R>
+impl<'a, R: SpanSystem> IdentTable<StringRef> for CompositeSession<'a, R>
 where
     R: SpanSource + StripSpan<<R as SpanSource>::Span>,
 {
-    fn resolve_name_with_visibility(
-        &mut self,
-        ident: &StringRef,
-        visibility: Visibility,
-    ) -> Option<NameEntry> {
+    fn look_up_ident(&mut self, ident: &StringRef, visibility: Visibility) -> Option<NameEntry> {
         let table = self.names.select_table_mut(visibility);
         table.get(ident).cloned().map_or_else(
             || {
@@ -84,14 +80,9 @@ where
         )
     }
 
-    fn define_name_with_visibility(
-        &mut self,
-        ident: StringRef,
-        visibility: Visibility,
-        entry: NameEntry,
-    ) {
+    fn define_ident(&mut self, ident: StringRef, visibility: Visibility, entry: NameEntry) {
         #[cfg(test)]
-        self.log_event(Event::DefineNameWithVisibility {
+        self.log_event(Event::DefineIdent {
             ident: ident.clone(),
             visibility,
             entry: entry.clone(),
@@ -118,30 +109,30 @@ where
 mod tests {
     use super::*;
 
-    use crate::object::{Symbol, UserDefId};
+    use crate::object::{Name, SymbolId};
 
     #[test]
     fn retrieve_global_name() {
         let name = "start";
-        let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
+        let entry = NameEntry::Symbol(Name::Symbol(SymbolId(42)));
         let mut fixture = TestFixture::<()>::new();
         let mut session = fixture.session();
-        session.define_name_with_visibility(name.into(), Visibility::Global, entry.clone());
+        session.define_ident(name.into(), Visibility::Global, entry.clone());
         assert_eq!(
-            session.resolve_name_with_visibility(&name.into(), Visibility::Global),
+            session.look_up_ident(&name.into(), Visibility::Global),
             Some(entry)
         )
     }
 
     #[test]
     fn retrieve_local_name() {
-        let entry = NameEntry::Symbol(Symbol::UserDef(UserDefId(42)));
+        let entry = NameEntry::Symbol(Name::Symbol(SymbolId(42)));
         let mut fixture = TestFixture::<()>::new();
         let mut session = fixture.session();
         session.start_scope();
-        session.define_name_with_visibility("_local".into(), Visibility::Local, entry.clone());
+        session.define_ident("_local".into(), Visibility::Local, entry.clone());
         assert_eq!(
-            session.resolve_name_with_visibility(&"_local".into(), Visibility::Local),
+            session.look_up_ident(&"_local".into(), Visibility::Local),
             Some(entry)
         )
     }
@@ -151,14 +142,14 @@ mod tests {
         let mut fixture = TestFixture::<()>::new();
         let mut session = fixture.session();
         session.start_scope();
-        session.define_name_with_visibility(
+        session.define_ident(
             "_local".into(),
             Visibility::Local,
-            NameEntry::Symbol(Symbol::UserDef(UserDefId(42))),
+            NameEntry::Symbol(Name::Symbol(SymbolId(42))),
         );
         session.start_scope();
         assert_eq!(
-            session.resolve_name_with_visibility(&"_local".into(), Visibility::Local),
+            session.look_up_ident(&"_local".into(), Visibility::Local),
             None
         )
     }

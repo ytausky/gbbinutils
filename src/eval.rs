@@ -55,7 +55,12 @@ enum Value<'a, S: Clone> {
     Num(Var),
 }
 
-type DefRef<'a, S> = Symbol<BuiltinDefId, UserDef<&'a Closure<S>, &'a Section<S>>>;
+#[derive(Clone)]
+enum DefRef<'a, S> {
+    Builtin(BuiltinId),
+    Closure(&'a Closure<S>),
+    Section(&'a Section<S>),
+}
 
 impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
     type Output = Var;
@@ -123,7 +128,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
         diagnostics: &mut D,
     ) -> Self::Output {
         match self.item {
-            Symbol::Builtin(BuiltinDefId::Sizeof) => context
+            DefRef::Builtin(BuiltinId::Sizeof) => context
                 .args
                 .get(0)
                 .map(|value| value.sizeof(context.linkage, diagnostics))
@@ -134,21 +139,19 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
                     );
                     Var::Unknown
                 }),
-            Symbol::UserDef(UserDef::Closure(def)) => def.expr.eval_subst(
+            DefRef::Closure(closure) => closure.expr.eval_subst(
                 &EvalContext {
-                    location_var: Some(def.location),
+                    location_var: Some(closure.location),
                     ..*context
                 },
                 diagnostics,
             ),
-            Symbol::UserDef(UserDef::Section(section)) => {
-                context.linkage.vars.borrow()[section.addr].clone()
-            }
+            DefRef::Section(section) => context.linkage.vars.borrow()[section.addr].clone(),
         }
     }
 }
 
-impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<SymbolId>, &S> {
+impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<Name>, &S> {
     type Output = Value<'a, S>;
 
     fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
@@ -167,7 +170,7 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<SymbolId>, &S> {
     }
 }
 
-impl<S: Clone> Spanned<SymbolId, &S> {
+impl<S: Clone> Spanned<Name, &S> {
     fn to_value<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
         &self,
         context: &'a LinkageContext<C, V>,
@@ -182,13 +185,13 @@ impl<S: Clone> Spanned<SymbolId, &S> {
         diagnostics: &mut D,
     ) -> Option<DefRef<'a, S>> {
         match self.item {
-            Symbol::Builtin(BuiltinDefId::Sizeof) => Some(Symbol::Builtin(BuiltinDefId::Sizeof)),
-            Symbol::UserDef(id) => id.with_span(self.span).resolve(context, diagnostics),
+            Name::Builtin(BuiltinId::Sizeof) => Some(DefRef::Builtin(BuiltinId::Sizeof)),
+            Name::Symbol(id) => id.with_span(self.span).resolve(context, diagnostics),
         }
     }
 }
 
-impl<S: Clone> Spanned<UserDefId, &S> {
+impl<S: Clone> Spanned<SymbolId, &S> {
     fn resolve<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
         &self,
         context: &'a LinkageContext<C, V>,
@@ -201,16 +204,16 @@ impl<S: Clone> Spanned<UserDefId, &S> {
             .symbols
             .get(id)
             .map(|def| match def {
-                UserDef::Closure(formula) => UserDef::Closure(formula),
+                UserDef::Closure(closure) => DefRef::Closure(closure),
                 UserDef::Section(SectionId(id)) => {
-                    UserDef::Section(&context.content.borrow().sections[*id])
+                    DefRef::Section(&context.content.borrow().sections[*id])
                 }
             });
         if resolved.is_none() {
             let symbol = diagnostics.strip_span(self.span);
             diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
         }
-        resolved.map(Symbol::UserDef)
+        resolved
     }
 }
 
@@ -238,7 +241,7 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
         D: BackendDiagnostics<S>,
     {
         match self.item {
-            Value::Symbol(Some(Symbol::UserDef(UserDef::Section(section)))) => {
+            Value::Symbol(Some(DefRef::Section(section))) => {
                 context.vars.borrow()[section.size].clone()
             }
             ref other => {
@@ -260,17 +263,16 @@ impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> Value<'a, S> {
     fn kind(&self) -> Option<ValueKind> {
         match self {
-            Value::Symbol(Some(Symbol::Builtin(_))) => Some(ValueKind::Builtin),
-            Value::Symbol(Some(Symbol::UserDef(UserDef::Closure(_)))) => Some(ValueKind::Symbol),
-            Value::Symbol(Some(Symbol::UserDef(UserDef::Section(_)))) => Some(ValueKind::Section),
+            Value::Symbol(Some(DefRef::Builtin(_))) => Some(ValueKind::Builtin),
+            Value::Symbol(Some(DefRef::Closure(_))) => Some(ValueKind::Symbol),
+            Value::Symbol(Some(DefRef::Section(_))) => Some(ValueKind::Section),
             Value::Symbol(None) => None,
             Value::Num(_) => Some(ValueKind::Num),
         }
     }
 }
 
-pub const BUILTIN_SYMBOLS: &[(&str, SymbolId)] =
-    &[("sizeof", Symbol::Builtin(BuiltinDefId::Sizeof))];
+pub const BUILTIN_SYMBOLS: &[(&str, Name)] = &[("sizeof", Name::Builtin(BuiltinId::Sizeof))];
 
 #[cfg(test)]
 mod tests {
@@ -294,7 +296,7 @@ mod tests {
             location: Var::Unknown,
         };
         assert_eq!(
-            Expr::from_atom(UserDefId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
+            Expr::from_atom(SymbolId(0).into(), ()).to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
         )
     }
@@ -311,8 +313,8 @@ mod tests {
         };
         assert_eq!(
             Expr::from_items(&[
-                BuiltinDefId::Sizeof.into(),
-                UserDefId(0).into(),
+                BuiltinId::Sizeof.into(),
+                SymbolId(0).into(),
                 ExprOp::FnCall(1).into()
             ])
             .to_num(context, &mut IgnoreDiagnostics),
@@ -323,7 +325,7 @@ mod tests {
     #[test]
     fn eval_fn_call_in_immediate() {
         let immediate =
-            Expr::from_items(&[UserDefId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
+            Expr::from_items(&[SymbolId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
         let content = &Content::<()> {
             sections: vec![],
             symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
@@ -344,7 +346,7 @@ mod tests {
     fn eval_complex_expression() {
         let immediate = Expr::from_items(&[
             0.into(),
-            UserDefId(0).into(),
+            SymbolId(0).into(),
             42.into(),
             ExprOp::FnCall(1).into(),
             BinOp::Plus.into(),
@@ -375,7 +377,7 @@ mod tests {
             vars,
             location: Var::Unknown,
         };
-        let immediate = Expr::from_items(&[UserDefId(0).into(), ExprOp::FnCall(0).into()]);
+        let immediate = Expr::from_items(&[SymbolId(0).into(), ExprOp::FnCall(0).into()]);
         assert_eq!(
             immediate.to_num(&context, &mut IgnoreDiagnostics),
             addr.into()
@@ -443,7 +445,7 @@ mod tests {
             diagnostics: &mut diagnostics,
         };
         let immediate = Expr::from_atom(
-            Atom::Name(Symbol::Builtin(BuiltinDefId::Sizeof)),
+            Atom::Name(Name::Builtin(BuiltinId::Sizeof)),
             MockSpan::from(0),
         );
         let value = eval_in_empty_program(immediate, &mut view);
@@ -484,7 +486,7 @@ mod tests {
         let name_span = MockSpan::from("name");
         let call_span = MockSpan::from("call");
         let immediate = crate::expr::Expr(vec![
-            ExprOp::Atom(Atom::Name(Symbol::UserDef(UserDefId(0)))).with_span(name_span.clone()),
+            ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0)))).with_span(name_span.clone()),
             ExprOp::FnCall(0).with_span(MockSpan::merge(name_span.clone(), call_span)),
         ]);
         let value = immediate.to_num(&context, &mut view);
@@ -504,16 +506,13 @@ mod tests {
 
     #[test]
     fn diagnose_sizeof_of_symbol() {
-        test_diagnosis_of_wrong_sizeof_arg(
-            Atom::Name(Symbol::UserDef(UserDefId(0))),
-            ValueKind::Symbol,
-        )
+        test_diagnosis_of_wrong_sizeof_arg(Atom::Name(Name::Symbol(SymbolId(0))), ValueKind::Symbol)
     }
 
     #[test]
     fn diagnose_sizeof_of_sizeof() {
         test_diagnosis_of_wrong_sizeof_arg(
-            Atom::Name(Symbol::Builtin(BuiltinDefId::Sizeof)),
+            Atom::Name(Name::Builtin(BuiltinId::Sizeof)),
             ValueKind::Builtin,
         )
     }
@@ -523,7 +522,7 @@ mod tests {
         test_diagnosis_of_wrong_sizeof_arg(Atom::Const(42), ValueKind::Num)
     }
 
-    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<SymbolId>, found: ValueKind) {
+    fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<Name>, found: ValueKind) {
         let content = &Content {
             sections: vec![],
             symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
@@ -550,7 +549,7 @@ mod tests {
         let inner_span = MockSpan::from("inner");
         let sizeof_span = MockSpan::from("sizeof");
         let immediate = crate::expr::Expr(vec![
-            ExprOp::Atom(Atom::Name(Symbol::Builtin(BuiltinDefId::Sizeof)))
+            ExprOp::Atom(Atom::Name(Name::Builtin(BuiltinId::Sizeof)))
                 .with_span(sizeof_span.clone()),
             ExprOp::Atom(inner).with_span(inner_span.clone()),
             ExprOp::FnCall(1).with_span(MockSpan::merge(sizeof_span, MockSpan::from("paren_r"))),

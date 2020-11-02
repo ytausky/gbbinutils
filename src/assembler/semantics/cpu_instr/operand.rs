@@ -8,8 +8,8 @@ use crate::span::{Source, SpanSource};
 #[derive(Debug, PartialEq)]
 pub(in super::super) enum Operand<S> {
     Atom(AtomKind, S),
-    Const(Expr<SymbolId, S>),
-    Deref(Expr<SymbolId, S>),
+    Const(Expr<Name, S>),
+    Deref(Expr<Name, S>),
 }
 
 impl<S: Clone> SpanSource for Operand<S> {
@@ -189,7 +189,7 @@ pub mod tests {
     use super::*;
 
     use crate::assembler::session::MacroId;
-    use crate::object::SymbolId;
+    use crate::object::Name;
 
     use std::fmt::Debug;
 
@@ -222,7 +222,7 @@ pub mod tests {
     }
 
     pub(in crate::assembler::semantics::cpu_instr) type Event<S> =
-        crate::assembler::session::Event<SymbolId, MacroId, S, S>;
+        crate::assembler::session::Event<Name, MacroId, S, S>;
 
     type OperandResult<S> = Result<Operand<S>, Vec<Event<S>>>;
 

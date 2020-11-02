@@ -17,7 +17,7 @@ use crate::codebase::fake::MockFileSystem;
 use crate::codebase::{Codebase, CodebaseError, FileSystem};
 use crate::diagnostics::*;
 use crate::expr::Expr;
-use crate::object::{Fragment, Metadata, ObjectData, SpanData, SymbolId};
+use crate::object::{Fragment, Metadata, Name, ObjectData, SpanData};
 use crate::span::*;
 
 use std::collections::HashMap;
@@ -38,7 +38,7 @@ pub(super) trait Analysis:
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
     + StartScope
-    + NameTable<StringRef>
+    + IdentTable<StringRef>
     + MacroTable<<Self as SpanSource>::Span>
 {
     fn mnemonic_lookup(&mut self, mnemonic: StringRef) -> Option<MnemonicEntry>;
@@ -53,25 +53,21 @@ pub(super) trait ReentrancyActions<S> {
 }
 
 pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
-    fn define_symbol(&mut self, name: SymbolId, span: S, expr: Expr<SymbolId, S>);
-    fn emit_fragment(&mut self, fragment: Fragment<Expr<SymbolId, S>>);
-    fn is_non_zero(&mut self, value: Expr<SymbolId, S>) -> Option<bool>;
-    fn set_origin(&mut self, origin: Expr<SymbolId, S>);
-    fn start_section(&mut self, name: SymbolId, span: S);
+    fn define_symbol(&mut self, name: Name, span: S, expr: Expr<Name, S>);
+    fn emit_fragment(&mut self, fragment: Fragment<Expr<Name, S>>);
+    fn is_non_zero(&mut self, value: Expr<Name, S>) -> Option<bool>;
+    fn set_origin(&mut self, origin: Expr<Name, S>);
+    fn start_section(&mut self, name: Name, span: S);
 }
 
 pub trait AllocSymbol<S: Clone> {
-    fn alloc_symbol(&mut self, span: S) -> SymbolId;
+    fn alloc_symbol(&mut self, span: S) -> Name;
 }
 
-pub(super) trait NameTable<I> {
-    fn resolve_name_with_visibility(
-        &mut self,
-        ident: &I,
-        visibility: Visibility,
-    ) -> Option<NameEntry>;
+pub(super) trait IdentTable<I> {
+    fn look_up_ident(&mut self, ident: &I, visibility: Visibility) -> Option<NameEntry>;
 
-    fn define_name_with_visibility(&mut self, ident: I, visibility: Visibility, entry: NameEntry);
+    fn define_ident(&mut self, ident: I, visibility: Visibility, entry: NameEntry);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,7 +82,7 @@ pub(crate) enum Visibility {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum NameEntry {
     OperandKeyword(OperandKeyword),
-    Symbol(SymbolId),
+    Symbol(Name),
 }
 
 pub(super) type Session<'a> = CompositeSession<'a, SpanData>;
@@ -183,7 +179,7 @@ pub(super) struct CompositeSession<'a, R: SpanSystem> {
     builder: ObjectBuilder<R::Span>,
     diagnostics: OutputForwarder<'a>,
     #[cfg(test)]
-    log: Vec<Event<SymbolId, MacroId, R::Span, R::Stripped>>,
+    log: Vec<Event<Name, MacroId, R::Span, R::Stripped>>,
 }
 
 #[derive(Clone)]
@@ -252,11 +248,11 @@ impl<'a, R: SpanSystem> StripSpan<R::Span> for CompositeSession<'a, R> {
 
 #[cfg(test)]
 impl<'a, R: SpanSystem> CompositeSession<'a, R> {
-    pub fn log(&self) -> &[Event<SymbolId, MacroId, R::Span, R::Stripped>] {
+    pub fn log(&self) -> &[Event<Name, MacroId, R::Span, R::Stripped>] {
         &self.log
     }
 
-    fn log_event(&mut self, event: Event<SymbolId, MacroId, R::Span, R::Stripped>) {
+    fn log_event(&mut self, event: Event<Name, MacroId, R::Span, R::Stripped>) {
         self.log.push(event)
     }
 }
@@ -273,7 +269,7 @@ pub(super) enum Event<B, M, S, T> {
         params: (Box<[StringRef]>, Box<[S]>),
         body: (Box<[SemanticToken]>, Box<[S]>),
     },
-    DefineNameWithVisibility {
+    DefineIdent {
         ident: StringRef,
         visibility: Visibility,
         entry: NameEntry,
@@ -331,7 +327,7 @@ pub mod mock {
 
     use crate::span::fake::FakeSpanSystem;
 
-    pub type Expr<S> = crate::expr::Expr<SymbolId, S>;
+    pub type Expr<S> = crate::expr::Expr<Name, S>;
 
     pub(in crate::assembler) type MockSession<'a, S> = CompositeSession<'a, FakeSpanSystem<S>>;
 }
