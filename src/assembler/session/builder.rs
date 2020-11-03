@@ -52,6 +52,10 @@ impl<S> ObjectBuilder<S> {
         self.content
             .add_section(symbol, self.vars.alloc(), self.vars.alloc())
     }
+
+    pub fn alloc_symbol(&mut self, _: StringRef) -> Name {
+        self.content.symbols.alloc().into()
+    }
 }
 
 impl<'a, R> Backend<R::Span> for CompositeSession<'a, R>
@@ -60,20 +64,37 @@ where
     Self: Diagnostics<R::Span>,
     for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
 {
-    fn define_symbol(&mut self, name: Name, _span: R::Span, expr: Expr<Name, R::Span>) {
+    fn define_symbol(&mut self, (ident, _span): (StringRef, R::Span), def: SymbolDef<R::Span>) {
         #[cfg(test)]
         self.log_event(Event::DefineSymbol {
-            name,
-            span: _span,
-            expr: expr.clone(),
+            symbol: (ident.clone(), _span.clone()),
+            def: def.clone(),
         });
 
-        let location = self.builder.vars.alloc();
-        self.builder.push(Fragment::Reloc(location));
-        self.builder.content.symbols.define(
-            name.content().unwrap(),
-            UserDef::Closure(Closure { expr, location }),
-        );
+        match self.query_term(&ident) {
+            NameEntry::Symbol(Name::Symbol(symbol)) => {
+                if !ident.starts_with('_') {
+                    self.names.local = HashMap::new();
+                }
+                match def {
+                    SymbolDef::Closure(expr) => {
+                        let location = self.builder.vars.alloc();
+                        self.builder.push(Fragment::Reloc(location));
+                        self.builder
+                            .content
+                            .symbols
+                            .define(symbol, UserDef::Closure(Closure { expr, location }));
+                    }
+                    SymbolDef::Section => {
+                        let index = self.builder.content.sections.len();
+                        self.builder.state = Some(BuilderState::SectionPrelude(index));
+                        self.builder.add_section(Some(symbol))
+                    }
+                }
+            }
+            NameEntry::Symbol(Name::Builtin(_)) => todo!(),
+            NameEntry::OperandKeyword(_) => todo!(),
+        }
     }
 
     fn emit_fragment(&mut self, fragment: Fragment<Expr<Name, R::Span>>) {
@@ -114,24 +135,6 @@ where
             _ => self.builder.state = Some(BuilderState::AnonSectionPrelude { addr: Some(addr) }),
         }
     }
-
-    fn start_section(&mut self, name: Name, _span: R::Span) {
-        #[cfg(test)]
-        self.log_event(Event::StartSection { name, span: _span });
-
-        let index = self.builder.content.sections.len();
-        self.builder.state = Some(BuilderState::SectionPrelude(index));
-        self.builder.add_section(Some(name.content().unwrap()))
-    }
-}
-
-impl<'a, R> AllocSymbol<R::Span> for CompositeSession<'a, R>
-where
-    R: SpanSystem,
-{
-    fn alloc_symbol(&mut self, _: R::Span) -> Name {
-        self.builder.content.symbols.alloc().into()
-    }
 }
 
 #[cfg(test)]
@@ -167,16 +170,11 @@ mod tests {
 
     #[test]
     fn start_section_adds_named_section() {
-        let mut wrapped_name = None;
         let content = build_object(|session| {
-            let name = session.alloc_symbol(());
-            session.start_section(name, ());
-            wrapped_name = Some(name);
+            session.define_symbol(("my_section".into(), ()), SymbolDef::Section)
         });
         assert_eq!(
-            content
-                .symbols
-                .get(wrapped_name.unwrap().content().unwrap()),
+            content.symbols.get(SymbolId(0)),
             Some(&UserDef::Section(SectionId(0)))
         )
     }
@@ -185,8 +183,7 @@ mod tests {
     fn set_origin_in_section_prelude_sets_origin() {
         let origin: Expr<_, _> = 0x0150.into();
         let content = build_object(|session| {
-            let name = session.alloc_symbol(());
-            session.start_section(name, ());
+            session.define_symbol(("my_section".into(), ()), SymbolDef::Section);
             session.set_origin(origin.clone())
         });
         assert_eq!(content.sections[0].constraints.addr, Some(origin))
@@ -195,8 +192,7 @@ mod tests {
     #[test]
     fn emit_fragment_into_named_section() {
         let content = build_object(|session| {
-            let name = session.alloc_symbol(());
-            session.start_section(name, ());
+            session.define_symbol(("my_section".into(), ()), SymbolDef::Section);
             session.emit_fragment(Fragment::Byte(0x00))
         });
         assert_eq!(content.sections[0].fragments, [Fragment::Byte(0x00)])
@@ -240,5 +236,30 @@ mod tests {
                 Some(true)
             )
         });
+    }
+
+    #[test]
+    fn local_symbol_not_accessible_after_section_definition() {
+        let name = "_local".into();
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
+        let entry1 = session.query_term(&name);
+        session.define_symbol(("my_section".into(), ()), SymbolDef::Section);
+        let entry2 = session.query_term(&name);
+        assert_ne!(entry1, entry2)
+    }
+
+    #[test]
+    fn local_symbol_not_accessible_after_closure_definition() {
+        let name = "_local".into();
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
+        let entry1 = session.query_term(&name);
+        session.define_symbol(
+            ("label".into(), ()),
+            SymbolDef::Closure(Expr::from_atom(Atom::Location, ())),
+        );
+        let entry2 = session.query_term(&name);
+        assert_ne!(entry1, entry2)
     }
 }

@@ -37,8 +37,7 @@ pub(super) trait Analysis:
     + ReentrancyActions<<Self as SpanSource>::Span>
     + Backend<<Self as SpanSource>::Span>
     + Diagnostics<<Self as SpanSource>::Span>
-    + StartScope
-    + IdentTable<StringRef>
+    + IdentTable
     + MacroTable<<Self as SpanSource>::Span>
 {
     fn mnemonic_lookup(&mut self, mnemonic: StringRef) -> Option<MnemonicEntry>;
@@ -52,22 +51,21 @@ pub(super) trait ReentrancyActions<S> {
     fn analyze_file(&mut self, path: StringRef, from: Option<S>) -> Result<(), CodebaseError>;
 }
 
-pub(crate) trait Backend<S: Clone>: AllocSymbol<S> {
-    fn define_symbol(&mut self, name: Name, span: S, expr: Expr<Name, S>);
+pub(super) trait Backend<S: Clone> {
+    fn define_symbol(&mut self, symbol: (StringRef, S), def: SymbolDef<S>);
     fn emit_fragment(&mut self, fragment: Fragment<Expr<Name, S>>);
     fn is_non_zero(&mut self, value: Expr<Name, S>) -> Option<bool>;
     fn set_origin(&mut self, origin: Expr<Name, S>);
-    fn start_section(&mut self, name: Name, span: S);
 }
 
-pub trait AllocSymbol<S: Clone> {
-    fn alloc_symbol(&mut self, span: S) -> Name;
+pub(super) trait IdentTable {
+    fn query_term(&mut self, ident: &StringRef) -> NameEntry;
 }
 
-pub(super) trait IdentTable<I> {
-    fn look_up_ident(&mut self, ident: &I, visibility: Visibility) -> Option<NameEntry>;
-
-    fn define_ident(&mut self, ident: I, visibility: Visibility, entry: NameEntry);
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum SymbolDef<S> {
+    Closure(Expr<Name, S>),
+    Section,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -269,15 +267,9 @@ pub(super) enum Event<B, M, S, T> {
         params: (Box<[StringRef]>, Box<[S]>),
         body: (Box<[SemanticToken]>, Box<[S]>),
     },
-    DefineIdent {
-        ident: StringRef,
-        visibility: Visibility,
-        entry: NameEntry,
-    },
     DefineSymbol {
-        name: B,
-        span: S,
-        expr: Expr<B, S>,
+        symbol: (StringRef, S),
+        def: SymbolDef<S>,
     },
     EmitDiag {
         diag: CompactDiag<S, T>,
@@ -291,11 +283,6 @@ pub(super) enum Event<B, M, S, T> {
     },
     SetOrigin {
         addr: Expr<B, S>,
-    },
-    StartScope,
-    StartSection {
-        name: B,
-        span: S,
     },
 }
 

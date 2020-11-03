@@ -278,15 +278,6 @@ impl From<SymbolId> for ExprOp<Name> {
     }
 }
 
-impl Name {
-    pub fn content(self) -> Option<SymbolId> {
-        match self {
-            Name::Builtin(_) => None,
-            Name::Symbol(id) => Some(id),
-        }
-    }
-}
-
 impl From<BuiltinId> for Name {
     fn from(builtin: BuiltinId) -> Self {
         Name::Builtin(builtin)

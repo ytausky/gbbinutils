@@ -1,7 +1,6 @@
 use super::*;
 
 use crate::assembler::semantics::SemanticActions;
-use crate::assembler::session::resolve::StartScope;
 use crate::assembler::session::{Backend, IdentTable, TokenStream};
 use crate::assembler::syntax::parser::{DefaultParserFactory, ParseTokenStream, ParserFactory};
 use crate::assembler::syntax::{LexError, LexItem, Literal, SemanticToken, Token};
@@ -32,7 +31,7 @@ where
     Self: SpanSource<Span = R::Span>,
     Self: NextToken,
     Self: EmitDiag<R::Span, R::Stripped>,
-    Self: StartScope + IdentTable<StringRef>,
+    Self: IdentTable,
     Self: Backend<R::Span>,
     for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: EmitDiag<R::Span, R::Stripped>,
     R::Span: 'static,

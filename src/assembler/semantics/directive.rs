@@ -77,15 +77,20 @@ where
     fn analyze_equ(mut self) -> TokenStreamSemantics<'a, S> {
         let (symbol, _) = self.label.take().unwrap();
         if let Some(arg) = single_arg(self.span, self.args, self.session.session) {
-            self.session.define_symbol_with_params(symbol, arg);
+            if let Ok(expr) = self.session.expect_const(arg) {
+                self.session
+                    .session
+                    .define_symbol(symbol, SymbolDef::Closure(expr))
+            }
         }
         self.session
     }
 
     fn analyze_section(mut self) -> TokenStreamSemantics<'a, S> {
-        let (name, span) = self.label.take().unwrap().0;
-        let id = self.session.reloc_lookup(name, span.clone());
-        self.session.session.start_section(id, span);
+        let ident = self.label.take().unwrap().0;
+        self.session
+            .session
+            .define_symbol(ident, SymbolDef::Section);
         self.session
     }
 
@@ -207,11 +212,10 @@ mod tests {
     use super::*;
 
     use crate::assembler::semantics::tests::Event;
-    use crate::assembler::session::NameEntry;
     use crate::assembler::syntax::Literal;
     use crate::codebase::CodebaseError;
     use crate::expr::{Atom, Expr, ParamId};
-    use crate::object::{Name, SymbolId};
+    use crate::object::Name;
 
     use std::borrow::Borrow;
 
@@ -516,18 +520,10 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::DefineIdent {
-                    ident: symbol.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
-                },
-                Event::DefineSymbol {
-                    name: Name::Symbol(SymbolId(0)),
-                    span: (),
-                    expr: value.into()
-                }
-            ]
+            [Event::DefineSymbol {
+                symbol: (symbol.into(), ()),
+                def: SymbolDef::Closure(value.into())
+            }]
         )
     }
 
@@ -558,18 +554,10 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::DefineIdent {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
-                },
-                Event::DefineSymbol {
-                    name: Name::Symbol(SymbolId(0)),
-                    span: (),
-                    expr: Atom::from(ParamId(0)).into()
-                },
-            ]
+            [Event::DefineSymbol {
+                symbol: (name.into(), ()),
+                def: SymbolDef::Closure(Atom::from(ParamId(0)).into())
+            },]
         )
     }
 
@@ -593,17 +581,10 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::DefineIdent {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
-                },
-                Event::StartSection {
-                    name: Name::Symbol(SymbolId(0)),
-                    span: ()
-                }
-            ]
+            [Event::DefineSymbol {
+                symbol: (name.into(), ()),
+                def: SymbolDef::Section,
+            }]
         )
     }
 

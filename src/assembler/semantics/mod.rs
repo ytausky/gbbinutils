@@ -183,34 +183,6 @@ impl<S> NameVisibility for S {
     }
 }
 
-trait DefineName<R> {
-    fn define_name(&mut self, name: R, entry: NameEntry);
-}
-
-impl<S> DefineName<StringRef> for S
-where
-    S: IdentTable<StringRef>,
-{
-    fn define_name(&mut self, name: StringRef, entry: NameEntry) {
-        let visibility = self.name_visibility(name.as_ref());
-        self.define_ident(name, visibility, entry)
-    }
-}
-
-trait ResolveName<R> {
-    fn resolve_name(&mut self, name: &R) -> Option<NameEntry>;
-}
-
-impl<S> ResolveName<StringRef> for S
-where
-    S: IdentTable<StringRef>,
-{
-    fn resolve_name(&mut self, name: &StringRef) -> Option<NameEntry> {
-        let visibility = self.name_visibility(name.as_ref());
-        self.look_up_ident(name, visibility)
-    }
-}
-
 impl<S> From<InstrLineState<S>> for TokenStreamState<S> {
     fn from(actions: InstrLineState<S>) -> Self {
         Self {
@@ -506,32 +478,10 @@ where
 impl<'a, S: Analysis> InstrLineSemantics<'a, S> {
     pub fn flush_label(&mut self) {
         if let Some(((label, span), _params)) = self.state.label.take() {
-            if self.session.name_visibility(label.as_ref()) == Visibility::Global {
-                self.session.start_scope();
-            }
-            let id = self.reloc_lookup(label, span.clone());
             self.session.define_symbol(
-                id,
-                span.clone(),
-                Expr(vec![ExprOp::Atom(Atom::Location).with_span(span)]),
-            );
-        }
-    }
-}
-
-impl<'a, S, T> Semantics<'a, S, T>
-where
-    S: Analysis,
-{
-    fn reloc_lookup(&mut self, name: StringRef, span: S::Span) -> Name {
-        match self.session.resolve_name(&name) {
-            Some(NameEntry::OperandKeyword(_)) => unimplemented!(),
-            Some(NameEntry::Symbol(id)) => id,
-            None => {
-                let id = self.session.alloc_symbol(span);
-                self.session.define_name(name, NameEntry::Symbol(id));
-                id
-            }
+                (label, span.clone()),
+                SymbolDef::Closure(Expr(vec![ExprOp::Atom(Atom::Location).with_span(span)])),
+            )
         }
     }
 }
@@ -718,17 +668,6 @@ impl<'a, S: Analysis, T> Semantics<'a, S, T> {
             _ => unimplemented!(),
         }
     }
-
-    fn define_symbol_with_params(
-        &mut self,
-        (name, span): (StringRef, S::Span),
-        expr: ParsedArg<S::Span>,
-    ) {
-        if let Ok(expr) = self.expect_const(expr) {
-            let id = self.reloc_lookup(name, span.clone());
-            self.session.define_symbol(id, span, expr);
-        }
-    }
 }
 
 impl From<Directive> for BuiltinMnemonic {
@@ -773,56 +712,38 @@ trait ClassifyExpr<I, S> {
 
 impl<T, S> Resolve<S> for T
 where
-    T: IdentTable<StringRef> + Diagnostics<S> + AllocSymbol<S>,
+    T: IdentTable + Diagnostics<S>,
     S: Clone,
 {
     fn resolve_names(&mut self, arg: ParsedArg<S>) -> Result<Arg<S>, ()> {
-        match arg {
-            ParsedArg::Bare(expr) => match self.classify_expr(expr)? {
-                BareArg::OperandKeyword(symbol, span) => {
-                    Ok(Arg::Bare(BareArg::OperandKeyword(symbol, span)))
-                }
-                BareArg::Const(expr) => Ok(Arg::Bare(BareArg::Const(expr))),
-            },
-            ParsedArg::Parenthesized(expr, span) => match self.classify_expr(expr)? {
-                BareArg::OperandKeyword(symbol, inner_span) => Ok(Arg::Deref(
-                    BareArg::OperandKeyword(symbol, inner_span),
-                    span,
-                )),
-                BareArg::Const(expr) => Ok(Arg::Deref(BareArg::Const(expr), span)),
-            },
-            ParsedArg::String(string, span) => Ok(Arg::String(string, span)),
-            ParsedArg::Error => Ok(Arg::Error),
-        }
+        Ok(match arg {
+            ParsedArg::Bare(expr) => Arg::Bare(self.classify_expr(expr)?),
+            ParsedArg::Parenthesized(expr, span) => Arg::Deref(self.classify_expr(expr)?, span),
+            ParsedArg::String(string, span) => Arg::String(string, span),
+            ParsedArg::Error => Arg::Error,
+        })
     }
 }
 
 impl<T, S> ClassifyExpr<StringRef, S> for T
 where
-    T: IdentTable<StringRef> + Diagnostics<S> + AllocSymbol<S>,
+    T: IdentTable + Diagnostics<S>,
     S: Clone,
 {
     fn classify_expr(&mut self, mut expr: Expr<StringRef, S>) -> Result<BareArg<S>, ()> {
         if expr.0.len() == 1 {
             let node = expr.0.pop().unwrap();
             match node.item {
-                ExprOp::Atom(Atom::Name(name)) => {
-                    match self.resolve_name(&name) {
-                        Some(NameEntry::OperandKeyword(operand)) => {
-                            Ok(BareArg::OperandKeyword(operand, node.span))
-                        }
-                        Some(NameEntry::Symbol(id)) => Ok(BareArg::Const(Expr(vec![
-                            ExprOp::Atom(Atom::Name(id)).with_span(node.span),
-                        ]))),
-                        None => {
-                            let id = self.alloc_symbol(node.span.clone());
-                            self.define_name(name, NameEntry::Symbol(id));
-                            Ok(BareArg::Const(Expr(vec![
-                                ExprOp::Atom(Atom::Name(id)).with_span(node.span)
-                            ])))
-                        }
+                ExprOp::Atom(Atom::Name(name)) => match self.query_term(&name) {
+                    NameEntry::OperandKeyword(operand) => {
+                        Ok(BareArg::OperandKeyword(operand, node.span))
                     }
-                }
+                    NameEntry::Symbol(id) => {
+                        Ok(BareArg::Const(Expr(vec![
+                            ExprOp::Atom(Atom::Name(id)).with_span(node.span)
+                        ])))
+                    }
+                },
                 ExprOp::Atom(Atom::Const(n)) => {
                     Ok(BareArg::Const(Expr(vec![
                         ExprOp::Atom(Atom::Const(n)).with_span(node.span)
@@ -845,18 +766,13 @@ where
             let mut error = false;
             for node in expr.0 {
                 match node.item {
-                    ExprOp::Atom(Atom::Name(name)) => match self.resolve_name(&name) {
-                        Some(NameEntry::OperandKeyword(_)) => {
+                    ExprOp::Atom(Atom::Name(name)) => match self.query_term(&name) {
+                        NameEntry::OperandKeyword(_) => {
                             let keyword = self.strip_span(&node.span);
                             self.emit_diag(Message::KeywordInExpr { keyword }.at(node.span));
                             error = true
                         }
-                        Some(NameEntry::Symbol(id)) => {
-                            nodes.push(ExprOp::Atom(Atom::Name(id)).with_span(node.span))
-                        }
-                        None => {
-                            let id = self.alloc_symbol(node.span.clone());
-                            self.define_name(name, NameEntry::Symbol(id));
+                        NameEntry::Symbol(id) => {
                             nodes.push(ExprOp::Atom(Atom::Name(id)).with_span(node.span))
                         }
                     },
@@ -1073,23 +989,16 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::DefineIdent {
-                    ident: name.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0))),
-                },
-                Event::EmitFragment {
-                    fragment: Fragment::Embedded(
-                        0b11_000_111,
-                        Expr::from_items(&[
-                            Atom::Name(Name::Symbol(SymbolId(0))).into(),
-                            1.into(),
-                            ExprOp::FnCall(1).into()
-                        ])
-                    )
-                }
-            ]
+            [Event::EmitFragment {
+                fragment: Fragment::Embedded(
+                    0b11_000_111,
+                    Expr::from_items(&[
+                        Atom::Name(Name::Symbol(SymbolId(0))).into(),
+                        1.into(),
+                        ExprOp::FnCall(1).into()
+                    ])
+                )
+            }]
         )
     }
 
@@ -1114,19 +1023,12 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::DefineIdent {
-                    ident: label.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
-                },
-                Event::EmitFragment {
-                    fragment: Fragment::Immediate(
-                        Atom::Name(Name::Symbol(SymbolId(0))).into(),
-                        Width::Word
-                    )
-                }
-            ]
+            [Event::EmitFragment {
+                fragment: Fragment::Immediate(
+                    Atom::Name(Name::Symbol(SymbolId(0))).into(),
+                    Width::Word
+                )
+            }]
         );
     }
 
@@ -1147,19 +1049,10 @@ mod tests {
         }
         assert_eq!(
             session.log(),
-            [
-                Event::StartScope,
-                Event::DefineIdent {
-                    ident: label.into(),
-                    visibility: Visibility::Global,
-                    entry: NameEntry::Symbol(Name::Symbol(SymbolId(0)))
-                },
-                Event::DefineSymbol {
-                    name: Name::Symbol(SymbolId(0)),
-                    span: (),
-                    expr: LocationCounter.into()
-                }
-            ]
+            [Event::DefineSymbol {
+                symbol: (label.into(), ()),
+                def: SymbolDef::Closure(LocationCounter.into()),
+            }]
         )
     }
 
@@ -1601,19 +1494,12 @@ mod tests {
                 .did_parse_line("eol".into())
                 .act_on_eos("eos".into());
         }
-        let expected = [
-            Event::DefineIdent {
-                ident: "f".into(),
-                visibility: Visibility::Global,
-                entry: NameEntry::Symbol(Name::Symbol(SymbolId(0))),
-            },
-            Event::EmitFragment {
-                fragment: Fragment::Immediate(
-                    Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), "f".into()),
-                    Width::Byte,
-                ),
-            },
-        ];
+        let expected = [Event::EmitFragment {
+            fragment: Fragment::Immediate(
+                Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), "f".into()),
+                Width::Byte,
+            ),
+        }];
         assert_eq!(session.log(), expected)
     }
 
@@ -1638,23 +1524,16 @@ mod tests {
                 .did_parse_line("eol".into())
                 .act_on_eos("eos".into());
         }
-        let expected = [
-            Event::DefineIdent {
-                ident: "f".into(),
-                visibility: Visibility::Global,
-                entry: NameEntry::Symbol(Name::Symbol(SymbolId(0))),
-            },
-            Event::EmitFragment {
-                fragment: Fragment::Immediate(
-                    Expr(vec![
-                        ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0)))).with_span("f1".into()),
-                        ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0)))).with_span("f2".into()),
-                        ExprOp::Binary(BinOp::Plus).with_span("plus".into()),
-                    ]),
-                    Width::Byte,
-                ),
-            },
-        ];
+        let expected = [Event::EmitFragment {
+            fragment: Fragment::Immediate(
+                Expr(vec![
+                    ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0)))).with_span("f1".into()),
+                    ExprOp::Atom(Atom::Name(Name::Symbol(SymbolId(0)))).with_span("f2".into()),
+                    ExprOp::Binary(BinOp::Plus).with_span("plus".into()),
+                ]),
+                Width::Byte,
+            ),
+        }];
         assert_eq!(session.log(), expected)
     }
 
@@ -1680,19 +1559,12 @@ mod tests {
                 .did_parse_line("eol".into())
                 .act_on_eos("eos".into());
         }
-        let expected = [
-            Event::DefineIdent {
-                ident: "const".into(),
-                visibility: Visibility::Global,
-                entry: NameEntry::Symbol(Name::Symbol(SymbolId(0))),
-            },
-            Event::EmitFragment {
-                fragment: Fragment::LdInlineAddr(
-                    0xf0,
-                    Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), "const".into()),
-                ),
-            },
-        ];
+        let expected = [Event::EmitFragment {
+            fragment: Fragment::LdInlineAddr(
+                0xf0,
+                Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), "const".into()),
+            ),
+        }];
         assert_eq!(session.log(), expected)
     }
 
@@ -1718,18 +1590,10 @@ mod tests {
                 .did_parse_instr()
                 .did_parse_line("eol".into());
         }
-        let expected = [
-            Event::DefineIdent {
-                ident: "label".into(),
-                visibility: Visibility::Global,
-                entry: NameEntry::Symbol(Name::Symbol(SymbolId(0))),
-            },
-            Event::DefineSymbol {
-                name: Name::Symbol(SymbolId(0)),
-                span: "label".into(),
-                expr: Expr::from_atom(Atom::Param(ParamId(0)), "param2".into()),
-            },
-        ];
+        let expected = [Event::DefineSymbol {
+            symbol: ("label".into(), "label".into()),
+            def: SymbolDef::Closure(Expr::from_atom(Atom::Param(ParamId(0)), "param2".into())),
+        }];
         assert_eq!(session.log(), expected)
     }
 }

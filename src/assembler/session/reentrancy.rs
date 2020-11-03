@@ -1,5 +1,4 @@
 use super::macros::MacroTable;
-use super::resolve::StartScope;
 use super::*;
 
 use crate::assembler::semantics::SemanticActions;
@@ -15,7 +14,7 @@ where
     R: SpanSystem,
     Self: SpanSource<Span = R::Span>,
     Self: EmitDiag<R::Span, R::Stripped>,
-    Self: StartScope + IdentTable<StringRef>,
+    Self: IdentTable,
     Self: Backend<R::Span>,
     for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: EmitDiag<R::Span, R::Stripped>,
     R::Span: 'static,
