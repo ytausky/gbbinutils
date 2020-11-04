@@ -5,9 +5,9 @@ use crate::expr::Expr;
 use crate::object::*;
 
 pub(crate) struct ObjectBuilder<S> {
-    pub content: Content<S>,
+    content: Content<StringRef, S>,
     state: Option<BuilderState<S>>,
-    pub vars: VarTable,
+    vars: VarTable,
 }
 
 enum BuilderState<S> {
@@ -48,13 +48,65 @@ impl<S> ObjectBuilder<S> {
         }
     }
 
-    fn add_section(&mut self, symbol: Option<SymbolId>) {
-        self.content
-            .add_section(symbol, self.vars.alloc(), self.vars.alloc())
+    fn add_section(&mut self, symbol: Option<(SymbolId, S)>) -> SectionId {
+        let section = SectionId(self.content.sections.len());
+        self.content.sections.push(Section {
+            constraints: Constraints { addr: None },
+            addr: self.vars.alloc(),
+            size: self.vars.alloc(),
+            fragments: Vec::new(),
+        });
+        if let Some((symbol, def_ident_span)) = symbol {
+            self.define_symbol(
+                symbol,
+                SymbolDefRecord {
+                    def_ident_span,
+                    meaning: SymbolMeaning::Section(section),
+                },
+            )
+        }
+        section
     }
 
-    pub fn alloc_symbol(&mut self, _: StringRef) -> Name {
-        self.content.symbols.alloc().into()
+    fn define_symbol(&mut self, SymbolId(id): SymbolId, def: SymbolDefRecord<S>) {
+        match &mut self.content.symbols[id] {
+            Symbol::Unknown { ident } => {
+                self.content.symbols[id] = if ident.starts_with('_') {
+                    Symbol::Local { def }
+                } else {
+                    let ident = std::mem::replace(ident, StringRef::default());
+                    Symbol::Exported { ident, def }
+                }
+            }
+            _ => todo!(),
+        }
+    }
+
+    pub fn alloc_symbol(&mut self, ident: StringRef) -> Name {
+        let name = Name::Symbol(SymbolId(self.content.symbols.len()));
+        self.content.symbols.push(Symbol::Unknown { ident });
+        name
+    }
+
+    pub fn into_content(self) -> Content<Box<str>, S> {
+        Content {
+            sections: self.content.sections,
+            symbols: self
+                .content
+                .symbols
+                .into_iter()
+                .map(|symbol| match symbol {
+                    Symbol::Exported { ident, def } => Symbol::Exported {
+                        ident: ident.to_string().into_boxed_str(),
+                        def,
+                    },
+                    Symbol::Local { def } => Symbol::Local { def },
+                    Symbol::Unknown { ident } => Symbol::Unknown {
+                        ident: ident.to_string().into_boxed_str(),
+                    },
+                })
+                .collect(),
+        }
     }
 }
 
@@ -64,10 +116,10 @@ where
     Self: Diagnostics<R::Span>,
     for<'r> DiagnosticsContext<'r, 'a, R, OutputForwarder<'a>>: Diagnostics<R::Span>,
 {
-    fn define_symbol(&mut self, (ident, _span): (StringRef, R::Span), def: SymbolDef<R::Span>) {
+    fn define_symbol(&mut self, (ident, span): (StringRef, R::Span), def: SymbolDef<R::Span>) {
         #[cfg(test)]
         self.log_event(Event::DefineSymbol {
-            symbol: (ident.clone(), _span.clone()),
+            symbol: (ident.clone(), span.clone()),
             def: def.clone(),
         });
 
@@ -80,15 +132,17 @@ where
                     SymbolDef::Closure(expr) => {
                         let location = self.builder.vars.alloc();
                         self.builder.push(Fragment::Reloc(location));
-                        self.builder
-                            .content
-                            .symbols
-                            .define(symbol, UserDef::Closure(Closure { expr, location }));
+                        self.builder.define_symbol(
+                            symbol,
+                            SymbolDefRecord {
+                                def_ident_span: span,
+                                meaning: SymbolMeaning::Closure(Closure { expr, location }),
+                            },
+                        )
                     }
                     SymbolDef::Section => {
-                        let index = self.builder.content.sections.len();
-                        self.builder.state = Some(BuilderState::SectionPrelude(index));
-                        self.builder.add_section(Some(symbol))
+                        let section = self.builder.add_section(Some((symbol, span)));
+                        self.builder.state = Some(BuilderState::SectionPrelude(section.0))
                     }
                 }
             }
@@ -170,12 +224,18 @@ mod tests {
 
     #[test]
     fn start_section_adds_named_section() {
-        let content = build_object(|session| {
-            session.define_symbol(("my_section".into(), ()), SymbolDef::Section)
-        });
+        let ident = StringRef::from("my_section");
+        let content =
+            build_object(|session| session.define_symbol((ident.clone(), ()), SymbolDef::Section));
         assert_eq!(
-            content.symbols.get(SymbolId(0)),
-            Some(&UserDef::Section(SectionId(0)))
+            content.symbols[0],
+            Symbol::Exported {
+                ident,
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Section(SectionId(0))
+                }
+            }
         )
     }
 
@@ -200,7 +260,7 @@ mod tests {
 
     fn build_object<F: FnOnce(&mut MockSession<S>), S: Clone + Default + Merge>(
         f: F,
-    ) -> Content<S> {
+    ) -> Content<StringRef, S> {
         let mut fixture = TestFixture::new();
         let mut session = fixture.session();
         f(&mut session);
@@ -261,5 +321,16 @@ mod tests {
         );
         let entry2 = session.query_term(&name);
         assert_ne!(entry1, entry2)
+    }
+
+    #[test]
+    fn symbol_starting_with_underscore_is_local() {
+        let mut fixture = TestFixture::<()>::new();
+        let mut session = fixture.session();
+        session.define_symbol(
+            ("_loop".into(), ()),
+            SymbolDef::Closure(Expr::from_atom(Atom::Location, ())),
+        );
+        assert!(matches!(session.builder.content.symbols[0], Symbol::Local { .. }))
     }
 }

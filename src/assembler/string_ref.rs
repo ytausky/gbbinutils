@@ -59,6 +59,15 @@ impl Debug for StringRef {
     }
 }
 
+impl Default for StringRef {
+    fn default() -> Self {
+        Self {
+            full: String::new().into(),
+            range: 0..0,
+        }
+    }
+}
+
 impl Deref for StringRef {
     type Target = str;
 

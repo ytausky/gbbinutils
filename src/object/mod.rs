@@ -7,16 +7,16 @@ use std::ops::{Index, IndexMut, Range, RangeInclusive};
 
 pub mod var;
 
-pub struct Object(pub(crate) ObjectData<Metadata>);
+pub struct Object(pub(crate) ObjectData<Metadata, Box<str>>);
 
-pub(crate) struct ObjectData<M: SpanSource> {
-    pub content: Content<M::Span>,
+pub(crate) struct ObjectData<M: SpanSource, I> {
+    pub content: Content<I, M::Span>,
     pub metadata: M,
 }
 
-pub struct Content<S> {
+pub struct Content<I, S> {
     pub sections: Vec<Section<S>>,
-    pub symbols: SymbolTable<S>,
+    pub symbols: Vec<Symbol<I, S>>,
 }
 
 pub struct Section<S> {
@@ -65,10 +65,21 @@ pub enum Width {
     Word,
 }
 
-pub struct SymbolTable<S>(pub Vec<Option<UserDef<S>>>);
+#[derive(Debug, PartialEq)]
+pub enum Symbol<I, S> {
+    Exported { ident: I, def: SymbolDefRecord<S> },
+    Local { def: SymbolDefRecord<S> },
+    Unknown { ident: I },
+}
+
+#[derive(Debug, PartialEq)]
+pub struct SymbolDefRecord<S> {
+    pub def_ident_span: S,
+    pub meaning: SymbolMeaning<S>,
+}
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum UserDef<S> {
+pub enum SymbolMeaning<S> {
     Closure(Closure<S>),
     Section(SectionId),
 }
@@ -160,56 +171,16 @@ impl SpanSource for Metadata {
     type Span = Span;
 }
 
-impl<S> Content<S> {
-    pub fn new() -> Content<S> {
+impl<I, S> Content<I, S> {
+    pub fn new() -> Content<I, S> {
         Content {
             sections: Vec::new(),
-            symbols: SymbolTable::new(),
+            symbols: Vec::new(),
         }
     }
 
     pub fn sections(&self) -> impl Iterator<Item = &Section<S>> {
         self.sections.iter()
-    }
-
-    pub fn add_section(&mut self, name: Option<SymbolId>, addr: VarId, size: VarId) {
-        let section = SectionId(self.sections.len());
-        self.sections.push(Section::new(addr, size));
-        if let Some(name) = name {
-            self.symbols.define(name, UserDef::Section(section))
-        }
-    }
-}
-
-impl<S> Section<S> {
-    pub fn new(addr: VarId, size: VarId) -> Section<S> {
-        Section {
-            constraints: Constraints { addr: None },
-            addr,
-            size,
-            fragments: Vec::new(),
-        }
-    }
-}
-
-impl<S> SymbolTable<S> {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    pub fn alloc(&mut self) -> SymbolId {
-        let id = SymbolId(self.0.len());
-        self.0.push(None);
-        id
-    }
-
-    pub fn define(&mut self, SymbolId(id): SymbolId, def: UserDef<S>) {
-        assert!(self.0[id].is_none());
-        self.0[id] = Some(def);
-    }
-
-    pub fn get(&self, SymbolId(id): SymbolId) -> Option<&UserDef<S>> {
-        self.0[id].as_ref()
     }
 }
 
@@ -287,21 +258,5 @@ impl From<BuiltinId> for Name {
 impl From<SymbolId> for Name {
     fn from(id: SymbolId) -> Self {
         Name::Symbol(id)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn add_section_defines_name() {
-        let mut program = Content::<()>::new();
-        let name = program.symbols.alloc();
-        program.add_section(Some(name), VarId(0), VarId(1));
-        assert_eq!(
-            program.symbols.get(name),
-            Some(&UserDef::Section(SectionId(0)))
-        )
     }
 }

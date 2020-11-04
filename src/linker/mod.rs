@@ -45,7 +45,7 @@ fn try_link<I>(
 where
     I: IntoIterator<Item = Object>,
 {
-    let mut session = Session::<_, SpanData>::new(
+    let mut session = Session::<_, SpanData, _>::new(
         input,
         OutputForwarder {
             output: diagnostics,
@@ -57,15 +57,15 @@ where
     Some(session.link())
 }
 
-struct Session<'a, D, M: SpanSource> {
+struct Session<'a, D, M: SpanSource, I> {
     codebase: Codebase<'a>,
-    content: Content<M::Span>,
+    content: Content<I, M::Span>,
     diagnostics: D,
     metadata: M,
     var_count: u32,
 }
 
-impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
+impl<'a, D, M: Default + SpanSource, I> Session<'a, D, M, I> {
     fn new(fs: &'a mut dyn FileSystem, diagnostics: D) -> Self {
         Self {
             codebase: Codebase::new(fs),
@@ -76,7 +76,7 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
         }
     }
 
-    fn import_object<N>(&mut self, object: ObjectData<N>)
+    fn import_object<N>(&mut self, object: ObjectData<N, I>)
     where
         N: SpanSource<Span = M::Span>,
         Self: ImportMetadata<N>,
@@ -86,7 +86,7 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
         self.import_content(object.content, patcher);
     }
 
-    fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<M::Span>, _patcher: P) {
+    fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<I, M::Span>, _patcher: P) {
         let base_var = self.var_count;
         let mut max_local_var_id = 0;
         self.content.sections.reserve(content.sections.len());
@@ -103,7 +103,7 @@ impl<'a, D, M: Default + SpanSource> Session<'a, D, M> {
             }
             self.content.sections.push(section)
         }
-        self.content.symbols.0.extend(content.symbols.0);
+        self.content.symbols.extend(content.symbols);
         self.var_count += max_local_var_id + 1;
     }
 
@@ -142,7 +142,7 @@ trait PatchSpan<S> {
     fn patch_span(&self, span: &mut S);
 }
 
-impl<'a, D> ImportMetadata<Metadata> for Session<'a, D, SpanData> {
+impl<'a, D, I> ImportMetadata<Metadata> for Session<'a, D, SpanData, I> {
     type SpanPatcher = SpanPatcher;
 
     fn import_metadata(&mut self, metadata: Metadata) -> Self::SpanPatcher {
@@ -163,12 +163,12 @@ impl PatchSpan<Span> for SpanPatcher {
 }
 
 impl VarTable {
-    fn resolve<S: Clone>(&mut self, content: &Content<S>) {
+    fn resolve<I, S: Clone>(&mut self, content: &Content<I, S>) {
         self.refine_all(content);
         self.refine_all(content);
     }
 
-    fn refine_all<S: Clone>(&mut self, content: &Content<S>) -> i32 {
+    fn refine_all<I, S: Clone>(&mut self, content: &Content<I, S>) -> i32 {
         let mut refinements = 0;
         let context = &mut LinkageContext {
             content,
@@ -190,10 +190,10 @@ impl VarTable {
 }
 
 impl<S: Clone> Section<S> {
-    fn traverse<V, F>(&self, context: &mut LinkageContext<&Content<S>, V>, mut f: F) -> Var
+    fn traverse<V, F, I>(&self, context: &mut LinkageContext<&Content<I, S>, V>, mut f: F) -> Var
     where
         V: Borrow<VarTable>,
-        F: FnMut(&Fragment<Expr<S>>, &mut LinkageContext<&Content<S>, V>),
+        F: FnMut(&Fragment<Expr<S>>, &mut LinkageContext<&Content<I, S>, V>),
     {
         let addr = context.location.clone();
         let mut offset = Var::from(0);
@@ -205,9 +205,9 @@ impl<S: Clone> Section<S> {
         offset
     }
 
-    fn eval_addr<'a, V: Borrow<VarTable>>(
+    fn eval_addr<'a, V: Borrow<VarTable>, I>(
         &self,
-        context: &LinkageContext<&'a Content<S>, V>,
+        context: &LinkageContext<&'a Content<I, S>, V>,
     ) -> Var {
         self.constraints
             .addr
@@ -218,7 +218,10 @@ impl<S: Clone> Section<S> {
 }
 
 impl<S: Clone> Fragment<Expr<S>> {
-    fn size<'a, V: Borrow<VarTable>>(&self, context: &LinkageContext<&'a Content<S>, V>) -> Var {
+    fn size<'a, V: Borrow<VarTable>, I>(
+        &self,
+        context: &LinkageContext<&'a Content<I, S>, V>,
+    ) -> Var {
         match self {
             Fragment::Byte(_) | Fragment::Embedded(..) => 1.into(),
             Fragment::Immediate(_, width) => width.len().into(),
@@ -267,7 +270,7 @@ mod tests {
         type Span = S;
     }
 
-    impl<'a, D, S: Clone> ImportMetadata<FakeMetadata<S>> for Session<'a, D, FakeSpanSystem<S>> {
+    impl<'a, D, S: Clone, I> ImportMetadata<FakeMetadata<S>> for Session<'a, D, FakeSpanSystem<S>, I> {
         type SpanPatcher = FakeSpanPatcher;
 
         fn import_metadata(&mut self, _: FakeMetadata<S>) -> Self::SpanPatcher {
@@ -283,7 +286,7 @@ mod tests {
 
     #[test]
     fn section_with_immediate_byte_fragment() {
-        let object = ObjectData {
+        let object = ObjectData::<_, &str> {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints { addr: None },
@@ -294,13 +297,13 @@ mod tests {
                         Width::Byte,
                     )],
                 }],
-                symbols: SymbolTable(vec![]),
+                symbols: vec![],
             },
             metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -309,7 +312,7 @@ mod tests {
 
     #[test]
     fn section_with_two_immediate_byte_fragments() {
-        let object = ObjectData {
+        let object = ObjectData::<_, &str> {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints { addr: None },
@@ -320,13 +323,13 @@ mod tests {
                         Fragment::Immediate(Expr::from_atom(Atom::Const(0x34), ()), Width::Byte),
                     ],
                 }],
-                symbols: SymbolTable(vec![]),
+                symbols: vec![],
             },
             metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -344,7 +347,7 @@ mod tests {
     }
 
     fn test_diagnostic_for_out_of_range_immediate_byte_fragment(value: i32) {
-        let object = ObjectData {
+        let object = ObjectData::<_, &str> {
             content: Content {
                 sections: vec![Section {
                     constraints: Constraints { addr: None },
@@ -355,14 +358,14 @@ mod tests {
                         Width::Byte,
                     )],
                 }],
-                symbols: SymbolTable(vec![]),
+                symbols: vec![],
             },
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, listener);
         session.import_object(object);
         session.link();
         assert_eq!(
@@ -393,14 +396,14 @@ mod tests {
                         Width::Word,
                     )],
                 }],
-                symbols: SymbolTable(vec![None]),
+                symbols: vec![Symbol::Unknown { ident: "name" }],
             },
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, listener);
         session.import_object(object);
         session.link();
         assert_eq!(
@@ -433,14 +436,17 @@ mod tests {
                         Width::Word,
                     )],
                 }],
-                symbols: SymbolTable(vec![None, None]),
+                symbols: vec![
+                    Symbol::Unknown { ident: "name1" },
+                    Symbol::Unknown { ident: "name2" },
+                ],
             },
             metadata: FakeMetadata::new(),
         };
         let listener = TestDiagnosticsListener::new();
         let diagnostics = listener.diagnostics.clone();
         let mut fs = MockFileSystem::new();
-        let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, listener);
+        let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, listener);
         session.import_object(object);
         session.link();
         assert_eq!(
@@ -477,16 +483,22 @@ mod tests {
                         ),
                     ],
                 }],
-                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                    expr: Expr::from_atom(Atom::Location, ()),
-                    location: VarId(2),
-                }))]),
+                symbols: vec![Symbol::Exported {
+                    ident: "name",
+                    def: SymbolDefRecord {
+                        def_ident_span: (),
+                        meaning: SymbolMeaning::Closure(Closure {
+                            expr: Expr::from_atom(Atom::Location, ()),
+                            location: VarId(2),
+                        }),
+                    },
+                }],
             },
             metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -510,16 +522,22 @@ mod tests {
                         Fragment::Reloc(VarId(2)),
                     ],
                 }],
-                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                    expr: Expr::from_atom(Atom::Location, ()),
-                    location: VarId(2),
-                }))]),
+                symbols: vec![Symbol::Exported {
+                    ident: "name",
+                    def: SymbolDefRecord {
+                        def_ident_span: (),
+                        meaning: SymbolMeaning::Closure(Closure {
+                            expr: Expr::from_atom(Atom::Location, ()),
+                            location: VarId(2),
+                        }),
+                    },
+                }],
             },
             metadata: FakeMetadata::new(),
         };
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -535,7 +553,7 @@ mod tests {
         // NOP
         // ORG . + $10
         // HALT
-        let object = ObjectData {
+        let object = ObjectData::<_, &str> {
             content: Content {
                 sections: vec![
                     Section {
@@ -559,14 +577,14 @@ mod tests {
                         fragments: vec![Fragment::Byte(0x76)],
                     },
                 ],
-                symbols: SymbolTable(vec![]),
+                symbols: vec![],
             },
             metadata: FakeMetadata::new(),
         };
 
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -591,10 +609,16 @@ mod tests {
                 size: VarId(1),
                 fragments: vec![Fragment::Reloc(VarId(2))],
             }],
-            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_atom(Atom::Location, ()),
-                location: VarId(2),
-            }))]),
+            symbols: vec![Symbol::Exported {
+                ident: "LABEL",
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
+                    }),
+                },
+            }],
         };
         let mut vars = VarTable(vec![addr.into(), 0.into(), addr.into()]);
 
@@ -613,7 +637,7 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![],
                 }],
-                symbols: SymbolTable::new(),
+                symbols: vec![],
             },
             VarTable(vec![0x0000.into(), 0.into()]),
         )
@@ -630,7 +654,7 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![Fragment::Byte(0x00)],
                 }],
-                symbols: SymbolTable::new(),
+                symbols: vec![],
             },
             VarTable(vec![0x0000.into(), 1.into()]),
         );
@@ -656,7 +680,7 @@ mod tests {
                     size: VarId(1),
                     fragments: vec![Fragment::LdInlineAddr(0xf0, addr.into())],
                 }],
-                symbols: SymbolTable::new(),
+                symbols: vec![],
             },
             VarTable(vec![0x0000.into(), Var::Unknown]),
         );
@@ -676,10 +700,16 @@ mod tests {
                         Fragment::Reloc(VarId(2)),
                     ],
                 }],
-                symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                    expr: Expr::from_atom(Atom::Location, ()),
-                    location: VarId(2),
-                }))]),
+                symbols: vec![Symbol::Exported {
+                    ident: "name",
+                    def: SymbolDefRecord {
+                        def_ident_span: (),
+                        meaning: SymbolMeaning::Closure(Closure {
+                            expr: Expr::from_atom(Atom::Location, ()),
+                            location: VarId(2),
+                        }),
+                    },
+                }],
             },
             VarTable(vec![
                 0x0000.into(),
@@ -707,14 +737,20 @@ mod tests {
                         Width::Word,
                     )],
                 }],
-                symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
+                symbols: vec![Symbol::Exported {
+                    ident: "my_section",
+                    def: SymbolDefRecord {
+                        def_ident_span: (),
+                        meaning: SymbolMeaning::Section(SectionId(0)),
+                    },
+                }],
             },
             metadata: FakeMetadata::new(),
         };
 
         let program = {
             let mut fs = MockFileSystem::new();
-            let mut session = Session::<_, FakeSpanSystem<_>>::new(&mut fs, IgnoreDiagnostics);
+            let mut session = Session::<_, FakeSpanSystem<_>, _>::new(&mut fs, IgnoreDiagnostics);
             session.import_object(object);
             session.link()
         };
@@ -746,10 +782,16 @@ mod tests {
                     ),
                 ],
             }],
-            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
-                location: VarId(2),
-            }))]),
+            symbols: vec![Symbol::Exported {
+                ident: "label",
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
+                    }),
+                },
+            }],
         };
         let mut vars = VarTable(vec![addr.into(), (bytes + 2).into(), (addr + bytes).into()]);
 
@@ -757,7 +799,11 @@ mod tests {
         assert_eq!(vars[symbol], (addr + bytes).into())
     }
 
-    fn assert_section_size(expected: impl Into<Var>, content: Content<()>, mut vars: VarTable) {
+    fn assert_section_size(
+        expected: impl Into<Var>,
+        content: Content<&str, ()>,
+        mut vars: VarTable,
+    ) {
         vars.resolve(&content);
         assert_eq!(
             vars[content.sections().next().unwrap().size],

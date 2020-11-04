@@ -7,9 +7,13 @@ use crate::span::{Spanned, WithSpan};
 use std::borrow::Borrow;
 
 impl<S: Clone> Expr<S> {
-    pub(crate) fn to_num<C, V, D>(&self, context: &LinkageContext<C, V>, diagnostics: &mut D) -> Var
+    pub(crate) fn to_num<C, V, D, I>(
+        &self,
+        context: &LinkageContext<C, V>,
+        diagnostics: &mut D,
+    ) -> Var
     where
-        C: Borrow<Content<S>>,
+        C: Borrow<Content<I, S>>,
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
@@ -27,7 +31,7 @@ impl<S: Clone> Expr<S> {
 trait EvalSubst<'a, S: Clone> {
     type Output;
 
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<I, S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>, I: 'a>(
         self,
         context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
@@ -65,7 +69,7 @@ enum DefRef<'a, S> {
 impl<'a, S: Clone> EvalSubst<'a, S> for &'a Expr<S> {
     type Output = Var;
 
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<I, S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>, I>(
         self,
         context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
@@ -106,7 +110,7 @@ type Args<'a, S> = &'a [Spanned<Value<'a, S>, &'a S>];
 impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
     type Output = Var;
 
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<I, S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>, I>(
         self,
         context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
@@ -122,7 +126,7 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<Value<'a, S>, &S> {
 impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
     type Output = Var;
 
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<C: Borrow<Content<I, S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>, I>(
         self,
         context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
@@ -154,7 +158,12 @@ impl<'a, S: Clone> EvalSubst<'a, S> for Spanned<DefRef<'a, S>, &S> {
 impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<Name>, &S> {
     type Output = Value<'a, S>;
 
-    fn eval_subst<C: Borrow<Content<S>>, V: Borrow<VarTable>, D: BackendDiagnostics<S>>(
+    fn eval_subst<
+        C: Borrow<Content<I, S>>,
+        V: Borrow<VarTable>,
+        D: BackendDiagnostics<S>,
+        I: 'a,
+    >(
         self,
         context: &'a EvalContext<'a, C, V, S>,
         diagnostics: &mut D,
@@ -171,7 +180,7 @@ impl<'a, S: Clone + 'a> EvalSubst<'a, S> for Spanned<&Atom<Name>, &S> {
 }
 
 impl<S: Clone> Spanned<Name, &S> {
-    fn to_value<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
+    fn to_value<'a, C: Borrow<Content<I, S>>, V, D: BackendDiagnostics<S>, I: 'a>(
         &self,
         context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
@@ -179,7 +188,7 @@ impl<S: Clone> Spanned<Name, &S> {
         Value::Symbol(self.resolve(context, diagnostics))
     }
 
-    fn resolve<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
+    fn resolve<'a, C: Borrow<Content<I, S>>, V, D: BackendDiagnostics<S>, I: 'a>(
         &self,
         context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
@@ -192,28 +201,25 @@ impl<S: Clone> Spanned<Name, &S> {
 }
 
 impl<S: Clone> Spanned<SymbolId, &S> {
-    fn resolve<'a, C: Borrow<Content<S>>, V, D: BackendDiagnostics<S>>(
+    fn resolve<'a, C: Borrow<Content<I, S>>, V, D: BackendDiagnostics<S>, I: 'a>(
         &self,
         context: &'a LinkageContext<C, V>,
         diagnostics: &mut D,
     ) -> Option<DefRef<'a, S>> {
-        let id = self.item;
-        let resolved = context
-            .content
-            .borrow()
-            .symbols
-            .get(id)
-            .map(|def| match def {
-                UserDef::Closure(closure) => DefRef::Closure(closure),
-                UserDef::Section(SectionId(id)) => {
+        let SymbolId(id) = self.item;
+        match &context.content.borrow().symbols[id] {
+            Symbol::Exported { def, .. } | Symbol::Local { def } => Some(match &def.meaning {
+                SymbolMeaning::Closure(closure) => DefRef::Closure(closure),
+                SymbolMeaning::Section(SectionId(id)) => {
                     DefRef::Section(&context.content.borrow().sections[*id])
                 }
-            });
-        if resolved.is_none() {
-            let symbol = diagnostics.strip_span(self.span);
-            diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()))
+            }),
+            Symbol::Unknown { .. } => {
+                let symbol = diagnostics.strip_span(self.span);
+                diagnostics.emit_diag(Message::UnresolvedSymbol { symbol }.at(self.span.clone()));
+                None
+            }
         }
-        resolved
     }
 }
 
@@ -234,9 +240,9 @@ impl BinOp {
 }
 
 impl<'a, S: Clone> Spanned<Value<'a, S>, &S> {
-    fn sizeof<C, V, D>(&self, context: &'a LinkageContext<C, V>, diagnostics: &mut D) -> Var
+    fn sizeof<C, V, D, I>(&self, context: &'a LinkageContext<C, V>, diagnostics: &mut D) -> Var
     where
-        C: Borrow<Content<S>>,
+        C: Borrow<Content<I, S>>,
         V: Borrow<VarTable>,
         D: BackendDiagnostics<S>,
     {
@@ -326,12 +332,18 @@ mod tests {
     fn eval_fn_call_in_immediate() {
         let immediate =
             Expr::from_items(&[SymbolId(0).into(), 42.into(), ExprOp::FnCall(1).into()]);
-        let content = &Content::<()> {
+        let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
-                location: VarId(0),
-            }))]),
+            symbols: vec![Symbol::Exported {
+                ident: "f",
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
+                        location: VarId(0),
+                    }),
+                },
+            }],
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -351,12 +363,18 @@ mod tests {
             ExprOp::FnCall(1).into(),
             BinOp::Plus.into(),
         ]);
-        let content = &Content::<()> {
+        let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
-                location: VarId(0),
-            }))]),
+            symbols: vec![Symbol::Exported {
+                ident: "f",
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_items(&[ParamId(0).into(), 1.into(), BinOp::Plus.into()]),
+                        location: VarId(0),
+                    }),
+                },
+            }],
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -465,7 +483,7 @@ mod tests {
     fn diagnose_calling_undefined_symbol() {
         let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![None]),
+            symbols: vec![Symbol::Unknown { ident: "f" }],
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -525,10 +543,16 @@ mod tests {
     fn test_diagnosis_of_wrong_sizeof_arg(inner: Atom<Name>, found: ValueKind) {
         let content = &Content {
             sections: vec![],
-            symbols: SymbolTable(vec![Some(UserDef::Closure(Closure {
-                expr: Expr::from_atom(42.into(), MockSpan::from("42")),
-                location: VarId(0),
-            }))]),
+            symbols: vec![Symbol::Exported {
+                ident: "f",
+                def: SymbolDefRecord {
+                    def_ident_span: MockSpan::from("f"),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_atom(42.into(), MockSpan::from("42")),
+                        location: VarId(0),
+                    }),
+                },
+            }],
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -570,7 +594,7 @@ mod tests {
         )
     }
 
-    fn mk_program_with_empty_section<S>() -> Content<S> {
+    fn mk_program_with_empty_section() -> Content<&'static str, ()> {
         Content {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
@@ -578,7 +602,13 @@ mod tests {
                 size: VarId(1),
                 fragments: vec![],
             }],
-            symbols: SymbolTable(vec![Some(UserDef::Section(SectionId(0)))]),
+            symbols: vec![Symbol::Exported {
+                ident: "my_section",
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Section(SectionId(0)),
+                },
+            }],
         }
     }
 
@@ -586,9 +616,9 @@ mod tests {
         immediate: Expr<S>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Var {
-        let content = &Content {
+        let content = &Content::<&str, _> {
             sections: vec![],
-            symbols: SymbolTable(vec![]),
+            symbols: vec![],
         };
         let vars = &VarTable(vec![]);
         let context = &LinkageContext {

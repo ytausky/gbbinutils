@@ -9,9 +9,9 @@ use std::mem::replace;
 use std::vec::IntoIter;
 
 impl<'a, S: Clone + 'a> Section<S> {
-    pub(super) fn translate(
+    pub(super) fn translate<I>(
         &'a self,
-        context: &mut LinkageContext<&'a Content<S>, &VarTable>,
+        context: &mut LinkageContext<&'a Content<I, S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> Vec<Chunk> {
         let mut chunks = Vec::new();
@@ -44,9 +44,9 @@ impl<'a, S: Clone + 'a> Section<S> {
 }
 
 impl<S: Clone> Fragment<Expr<S>> {
-    fn translate(
+    fn translate<I>(
         &self,
-        context: &LinkageContext<&Content<S>, &VarTable>,
+        context: &LinkageContext<&Content<I, S>, &VarTable>,
         diagnostics: &mut impl BackendDiagnostics<S>,
     ) -> IntoIter<u8> {
         match self {
@@ -110,10 +110,10 @@ impl Data {
     }
 }
 
-fn resolve_expr_item<S: Clone>(
+fn resolve_expr_item<I, S: Clone>(
     expr: &Expr<S>,
     width: Width,
-    context: &LinkageContext<&Content<S>, &VarTable>,
+    context: &LinkageContext<&Content<I, S>, &VarTable>,
     diagnostics: &mut impl BackendDiagnostics<S>,
 ) -> Data {
     let span = expr.span();
@@ -161,7 +161,7 @@ mod tests {
     use crate::diagnostics::IgnoreDiagnostics;
     use crate::expr::{Atom, BinOp, Expr};
     use crate::object::var::Var;
-    use crate::object::{Constraints, Content, Name, SymbolTable, VarId};
+    use crate::object::{Constraints, Content, Name, VarId};
 
     use std::borrow::Borrow;
 
@@ -212,7 +212,7 @@ mod tests {
         fragment
             .translate(
                 &LinkageContext {
-                    content: &Content::new(),
+                    content: &Content::<&str, _>::new(),
                     vars: &VarTable::new(),
                     location: Var::Unknown,
                 },
@@ -227,7 +227,7 @@ mod tests {
 
         // ORG $7ff0
         // NOP
-        let content = Content {
+        let content = Content::<&str, _> {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(Expr::from_atom(Atom::Const(addr), ())),
@@ -236,7 +236,7 @@ mod tests {
                 size: VarId(1),
                 fragments: vec![Fragment::Byte(0x00)],
             }],
-            symbols: SymbolTable::new(),
+            symbols: vec![],
         };
         let mut vars = VarTable(vec![addr.into(), 1.into()]);
 
@@ -258,7 +258,7 @@ mod tests {
     fn translate_expr_with_location_counter() {
         // NOP
         // DB   .
-        let content = Content {
+        let content = Content::<&str, _> {
             sections: vec![Section {
                 constraints: Constraints { addr: None },
                 addr: VarId(0),
@@ -268,7 +268,7 @@ mod tests {
                     Fragment::Immediate(Expr::from_atom(Atom::Location, ()), Width::Byte),
                 ],
             }],
-            symbols: SymbolTable::new(),
+            symbols: vec![],
         };
         let mut vars = VarTable(vec![0.into(), 2.into()]);
 
@@ -292,7 +292,7 @@ mod tests {
 
         // ORG  $ffe1
         // DW   .
-        let content = Content {
+        let content = Content::<&str, _> {
             sections: vec![Section {
                 constraints: Constraints {
                     addr: Some(Expr::from_atom(Atom::Const(addr), ())),
@@ -304,7 +304,7 @@ mod tests {
                     Width::Word,
                 )],
             }],
-            symbols: SymbolTable::new(),
+            symbols: vec![],
         };
         let mut vars = VarTable(vec![addr.into(), 2.into()]);
 

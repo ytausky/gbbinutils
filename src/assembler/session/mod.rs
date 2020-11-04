@@ -128,9 +128,9 @@ where
 }
 
 impl<'a> CompositeSession<'a, SpanData> {
-    pub fn try_into_object_data(self) -> ObjectData<Metadata> {
+    pub fn try_into_object_data(self) -> ObjectData<Metadata, Box<str>> {
         ObjectData {
-            content: self.builder.content,
+            content: self.builder.into_content(),
             metadata: Metadata {
                 source_files: self.codebase.export_source_file_table(),
                 span_data: self.metadata,
