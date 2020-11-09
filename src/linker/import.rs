@@ -24,32 +24,40 @@ impl<'a, D, M: Default + SpanSource, I: Clone + Eq + Hash> Session<'a, D, M, I> 
     fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<I, M::Span>, patcher: P) {
         // Import symbol identifiers and create symbol mapping
         let mut symbol_mapping = Vec::with_capacity(content.symbols.len());
+        let mut symbol_defined_in_object = Vec::with_capacity(content.symbols.len());
         for symbol in content.symbols {
             let global_id = self.content.symbols.len();
             match &symbol {
-                Symbol::Exported { ident, .. } => match self.idents.get(ident) {
-                    Some(SymbolId(id)) => {
-                        self.content.symbols[*id] = symbol;
-                        symbol_mapping.push(*id)
+                Symbol::Exported { ident, .. } => {
+                    match self.idents.get(ident) {
+                        Some(SymbolId(id)) => {
+                            self.content.symbols[*id] = symbol;
+                            symbol_mapping.push(*id)
+                        }
+                        None => {
+                            self.idents.insert(ident.clone(), SymbolId(global_id));
+                            symbol_mapping.push(global_id);
+                            self.content.symbols.push(symbol)
+                        }
                     }
-                    None => {
-                        self.idents.insert(ident.clone(), SymbolId(global_id));
-                        symbol_mapping.push(global_id);
-                        self.content.symbols.push(symbol)
-                    }
-                },
+                    symbol_defined_in_object.push(true)
+                }
                 Symbol::Local { .. } => {
                     symbol_mapping.push(global_id);
-                    self.content.symbols.push(symbol)
+                    self.content.symbols.push(symbol);
+                    symbol_defined_in_object.push(true)
                 }
-                Symbol::Unknown { ident } => match self.idents.get(&ident) {
-                    Some(id) => symbol_mapping.push(id.0),
-                    None => {
-                        self.idents.insert(ident.clone(), SymbolId(global_id));
-                        symbol_mapping.push(global_id);
-                        self.content.symbols.push(symbol)
+                Symbol::Unknown { ident } => {
+                    match self.idents.get(&ident) {
+                        Some(id) => symbol_mapping.push(id.0),
+                        None => {
+                            self.idents.insert(ident.clone(), SymbolId(global_id));
+                            symbol_mapping.push(global_id);
+                            self.content.symbols.push(symbol)
+                        }
                     }
-                },
+                    symbol_defined_in_object.push(false)
+                }
             }
         }
 
@@ -63,8 +71,10 @@ impl<'a, D, M: Default + SpanSource, I: Clone + Eq + Hash> Session<'a, D, M, I> 
         }
 
         // Import symbols
-        for id in patcher.symbol_mapping.iter() {
-            patcher.patch_symbol(&mut self.content.symbols[*id])
+        for (local_id, global_id) in patcher.symbol_mapping.iter().cloned().enumerate() {
+            if symbol_defined_in_object[local_id] {
+                patcher.patch_symbol(&mut self.content.symbols[global_id])
+            }
         }
 
         // Import variables
@@ -286,7 +296,7 @@ mod tests {
     use crate::expr::Atom;
 
     #[test]
-    fn import_symbol_required_by_object1_is_exported_from_object2() {
+    fn symbol_required_by_object1_is_exported_from_object2() {
         let ident = "my_symbol";
 
         // DW   my_symbol
@@ -344,6 +354,71 @@ mod tests {
                     meaning: SymbolMeaning::Closure(Closure {
                         expr: Expr::from_atom(Atom::Location, ()),
                         location: VarId(4),
+                    }),
+                }
+            }]
+        )
+    }
+
+    #[test]
+    fn symbol_exported_from_object1_is_required_by_object2() {
+        let ident = "my_symbol";
+
+        // my_symbol
+        let object1 = ObjectData {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Reloc(VarId(2))],
+                }],
+                symbols: vec![Symbol::Exported {
+                    ident,
+                    def: SymbolDefRecord {
+                        def_ident_span: (),
+                        meaning: SymbolMeaning::Closure(Closure {
+                            expr: Expr::from_atom(Atom::Location, ()),
+                            location: VarId(2),
+                        }),
+                    },
+                }],
+                vars: 3,
+            },
+            metadata: FakeMetadata::new(),
+        };
+
+        // DW   my_symbol
+        let object2 = ObjectData {
+            content: Content {
+                sections: vec![Section {
+                    constraints: Constraints { addr: None },
+                    addr: VarId(0),
+                    size: VarId(1),
+                    fragments: vec![Fragment::Immediate(
+                        Expr::from_atom(Atom::Name(Name::Symbol(SymbolId(0))), ()),
+                        Width::Word,
+                    )],
+                }],
+                symbols: vec![Symbol::Unknown { ident }],
+                vars: 2,
+            },
+            metadata: FakeMetadata::new(),
+        };
+
+        let fs = &mut MockFileSystem::new();
+        let mut session = Session::<_, FakeSpanSystem<_>, _>::new(fs, IgnoreDiagnostics);
+        session.import_object(object1);
+        session.import_object(object2);
+        assert_eq!(
+            session.content.symbols,
+            vec![Symbol::Exported {
+                ident,
+                def: SymbolDefRecord {
+                    def_ident_span: (),
+                    meaning: SymbolMeaning::Closure(Closure {
+                        expr: Expr::from_atom(Atom::Location, ()),
+                        location: VarId(2),
                     }),
                 }
             }]
