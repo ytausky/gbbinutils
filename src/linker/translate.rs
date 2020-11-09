@@ -237,6 +237,7 @@ mod tests {
                 fragments: vec![Fragment::Byte(0x00)],
             }],
             symbols: vec![],
+            vars: 2,
         };
         let mut vars = VarTable(vec![addr.into(), 1.into()]);
 
@@ -269,6 +270,7 @@ mod tests {
                 ],
             }],
             symbols: vec![],
+            vars: 2,
         };
         let mut vars = VarTable(vec![0.into(), 2.into()]);
 
@@ -305,6 +307,7 @@ mod tests {
                 )],
             }],
             symbols: vec![],
+            vars: 2,
         };
         let mut vars = VarTable(vec![addr.into(), 2.into()]);
 

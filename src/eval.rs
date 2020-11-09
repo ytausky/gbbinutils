@@ -344,6 +344,7 @@ mod tests {
                     }),
                 },
             }],
+            vars: 1,
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -375,6 +376,7 @@ mod tests {
                     }),
                 },
             }],
+            vars: 1,
         };
         let vars = &VarTable(Vec::new());
         let context = &LinkageContext {
@@ -484,6 +486,7 @@ mod tests {
         let content = &Content {
             sections: vec![],
             symbols: vec![Symbol::Unknown { ident: "f" }],
+            vars: 0,
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -553,6 +556,7 @@ mod tests {
                     }),
                 },
             }],
+            vars: 1,
         };
         let vars = &VarTable(vec![]);
         let context = LinkageContext {
@@ -609,6 +613,7 @@ mod tests {
                     meaning: SymbolMeaning::Section(SectionId(0)),
                 },
             }],
+            vars: 2,
         }
     }
 
@@ -619,6 +624,7 @@ mod tests {
         let content = &Content::<&str, _> {
             sections: vec![],
             symbols: vec![],
+            vars: 0,
         };
         let vars = &VarTable(vec![]);
         let context = &LinkageContext {

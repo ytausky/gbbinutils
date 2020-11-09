@@ -106,6 +106,7 @@ impl<S> ObjectBuilder<S> {
                     },
                 })
                 .collect(),
+            vars: self.vars.0.len(),
         }
     }
 }

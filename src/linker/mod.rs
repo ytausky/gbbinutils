@@ -7,7 +7,9 @@ use crate::span::SpanSource;
 use crate::{Config, DiagnosticsConfig, InputConfig};
 
 use std::borrow::Borrow;
+use std::collections::HashMap;
 
+mod import;
 mod translate;
 
 pub struct Linker<'a> {
@@ -61,8 +63,9 @@ struct Session<'a, D, M: SpanSource, I> {
     codebase: Codebase<'a>,
     content: Content<I, M::Span>,
     diagnostics: D,
+    idents: HashMap<I, SymbolId>,
     metadata: M,
-    var_count: u32,
+    source_file_count: usize,
 }
 
 impl<'a, D, M: Default + SpanSource, I> Session<'a, D, M, I> {
@@ -71,47 +74,17 @@ impl<'a, D, M: Default + SpanSource, I> Session<'a, D, M, I> {
             codebase: Codebase::new(fs),
             content: Content::new(),
             diagnostics,
+            idents: HashMap::new(),
             metadata: M::default(),
-            var_count: 0,
+            source_file_count: 0,
         }
-    }
-
-    fn import_object<N>(&mut self, object: ObjectData<N, I>)
-    where
-        N: SpanSource<Span = M::Span>,
-        Self: ImportMetadata<N>,
-        <Self as ImportMetadata<N>>::SpanPatcher: PatchSpan<M::Span>,
-    {
-        let patcher = self.import_metadata(object.metadata);
-        self.import_content(object.content, patcher);
-    }
-
-    fn import_content<P: PatchSpan<M::Span>>(&mut self, content: Content<I, M::Span>, _patcher: P) {
-        let base_var = self.var_count;
-        let mut max_local_var_id = 0;
-        self.content.sections.reserve(content.sections.len());
-        for mut section in content.sections {
-            max_local_var_id = std::cmp::max(max_local_var_id, section.addr.0);
-            section.addr.0 += base_var;
-            max_local_var_id = std::cmp::max(max_local_var_id, section.size.0);
-            section.size.0 += base_var;
-            for fragment in &mut section.fragments {
-                if let Fragment::Reloc(VarId(id)) = fragment {
-                    max_local_var_id = std::cmp::max(max_local_var_id, *id);
-                    *id += base_var;
-                }
-            }
-            self.content.sections.push(section)
-        }
-        self.content.symbols.extend(content.symbols);
-        self.var_count += max_local_var_id + 1;
     }
 
     fn link(mut self) -> Program
     where
         for<'r> DiagnosticsContext<'r, 'a, M, D>: Diagnostics<M::Span>,
     {
-        let mut vars = VarTable(vec![Var::Unknown; self.var_count as usize]);
+        let mut vars = VarTable(vec![Var::Unknown; self.content.vars]);
         vars.resolve(&self.content);
         let mut context = LinkageContext {
             content: &self.content,
@@ -130,35 +103,6 @@ impl<'a, D, M: Default + SpanSource, I> Session<'a, D, M, I> {
                 .flat_map(|section| section.translate(&mut context, &mut diagnostics))
                 .collect(),
         }
-    }
-}
-
-trait ImportMetadata<M: SpanSource> {
-    type SpanPatcher: PatchSpan<M::Span>;
-    fn import_metadata(&mut self, metadata: M) -> Self::SpanPatcher;
-}
-
-trait PatchSpan<S> {
-    fn patch_span(&self, span: &mut S);
-}
-
-impl<'a, D, I> ImportMetadata<Metadata> for Session<'a, D, SpanData, I> {
-    type SpanPatcher = SpanPatcher;
-
-    fn import_metadata(&mut self, metadata: Metadata) -> Self::SpanPatcher {
-        for path in Vec::from(metadata.source_files) {
-            self.codebase.open(&path).unwrap();
-        }
-        self.metadata = metadata.span_data;
-        SpanPatcher
-    }
-}
-
-struct SpanPatcher;
-
-impl PatchSpan<Span> for SpanPatcher {
-    fn patch_span(&self, _: &mut Span) {
-        todo!()
     }
 }
 
@@ -247,6 +191,7 @@ impl Width {
 
 #[cfg(test)]
 mod tests {
+    use super::import::FakeMetadata;
     use super::*;
 
     use crate::codebase::fake::MockFileSystem;
@@ -255,34 +200,6 @@ mod tests {
     use crate::expr::*;
     use crate::span::fake::FakeSpanSystem;
     use crate::span::WithSpan;
-
-    use std::marker::PhantomData;
-
-    struct FakeMetadata<S>(PhantomData<S>);
-
-    impl<S> FakeMetadata<S> {
-        fn new() -> Self {
-            Self(PhantomData)
-        }
-    }
-
-    impl<S: Clone> SpanSource for FakeMetadata<S> {
-        type Span = S;
-    }
-
-    impl<'a, D, S: Clone, I> ImportMetadata<FakeMetadata<S>> for Session<'a, D, FakeSpanSystem<S>, I> {
-        type SpanPatcher = FakeSpanPatcher;
-
-        fn import_metadata(&mut self, _: FakeMetadata<S>) -> Self::SpanPatcher {
-            FakeSpanPatcher
-        }
-    }
-
-    struct FakeSpanPatcher;
-
-    impl<S> PatchSpan<S> for FakeSpanPatcher {
-        fn patch_span(&self, _: &mut S) {}
-    }
 
     #[test]
     fn section_with_immediate_byte_fragment() {
@@ -298,6 +215,7 @@ mod tests {
                     )],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -324,6 +242,7 @@ mod tests {
                     ],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -359,6 +278,7 @@ mod tests {
                     )],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -397,6 +317,7 @@ mod tests {
                     )],
                 }],
                 symbols: vec![Symbol::Unknown { ident: "name" }],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -440,6 +361,7 @@ mod tests {
                     Symbol::Unknown { ident: "name1" },
                     Symbol::Unknown { ident: "name2" },
                 ],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -493,6 +415,7 @@ mod tests {
                         }),
                     },
                 }],
+                vars: 3,
             },
             metadata: FakeMetadata::new(),
         };
@@ -532,6 +455,7 @@ mod tests {
                         }),
                     },
                 }],
+                vars: 3,
             },
             metadata: FakeMetadata::new(),
         };
@@ -578,6 +502,7 @@ mod tests {
                     },
                 ],
                 symbols: vec![],
+                vars: 4,
             },
             metadata: FakeMetadata::new(),
         };
@@ -619,6 +544,7 @@ mod tests {
                     }),
                 },
             }],
+            vars: 3,
         };
         let mut vars = VarTable(vec![addr.into(), 0.into(), addr.into()]);
 
@@ -638,6 +564,7 @@ mod tests {
                     fragments: vec![],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             VarTable(vec![0x0000.into(), 0.into()]),
         )
@@ -655,6 +582,7 @@ mod tests {
                     fragments: vec![Fragment::Byte(0x00)],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             VarTable(vec![0x0000.into(), 1.into()]),
         );
@@ -681,6 +609,7 @@ mod tests {
                     fragments: vec![Fragment::LdInlineAddr(0xf0, addr.into())],
                 }],
                 symbols: vec![],
+                vars: 2,
             },
             VarTable(vec![0x0000.into(), Var::Unknown]),
         );
@@ -710,6 +639,7 @@ mod tests {
                         }),
                     },
                 }],
+                vars: 3,
             },
             VarTable(vec![
                 0x0000.into(),
@@ -744,6 +674,7 @@ mod tests {
                         meaning: SymbolMeaning::Section(SectionId(0)),
                     },
                 }],
+                vars: 2,
             },
             metadata: FakeMetadata::new(),
         };
@@ -792,6 +723,7 @@ mod tests {
                     }),
                 },
             }],
+            vars: 3,
         };
         let mut vars = VarTable(vec![addr.into(), (bytes + 2).into(), (addr + bytes).into()]);
 

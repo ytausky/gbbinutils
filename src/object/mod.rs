@@ -17,6 +17,7 @@ pub(crate) struct ObjectData<M: SpanSource, I> {
 pub struct Content<I, S> {
     pub sections: Vec<Section<S>>,
     pub symbols: Vec<Symbol<I, S>>,
+    pub vars: usize,
 }
 
 pub struct Section<S> {
@@ -47,7 +48,7 @@ pub enum BuiltinId {
 pub struct SymbolId(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct VarId(pub u32);
+pub struct VarId(pub usize);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fragment<E> {
@@ -176,6 +177,7 @@ impl<I, S> Content<I, S> {
         Content {
             sections: Vec::new(),
             symbols: Vec::new(),
+            vars: 0,
         }
     }
 
@@ -196,7 +198,7 @@ impl VarTable {
     }
 
     pub fn alloc(&mut self) -> VarId {
-        let id = VarId(self.0.len() as u32);
+        let id = VarId(self.0.len());
         self.0.push(Default::default());
         id
     }
